@@ -107,14 +107,15 @@ function serveStatic(req, res, urlPath) {
 const routes = {
   'GET /api/sales': async (req, res) => {
     const rows = await sbFetch('GET', 'sales', { query: 'order=id.desc' });
-    send(res, 200, rows || []);
+    const mapped = (rows || []).map(r => ({ ...r, desc: r.description }));
+    send(res, 200, mapped);
   },
   'POST /api/sales': async (req, res) => {
     const b = await readBody(req);
     if (!b.date || !b.desc || !b.amount) return send(res, 400, { error: 'date, desc, amount required' });
     const id = await getNextId();
     const row = {
-      id, date: b.date, desc: b.desc, amount: Number(b.amount),
+      id, date: b.date, description: b.desc, amount: Number(b.amount),
       product_id: b.product_id || null, quantity: b.quantity || null,
       unit_price: b.unit_price != null ? Number(b.unit_price) : null,
       cost_price: b.cost_price != null ? Number(b.cost_price) : null
@@ -132,13 +133,14 @@ const routes = {
 
   'GET /api/expenses': async (req, res) => {
     const rows = await sbFetch('GET', 'expenses', { query: 'order=id.desc' });
-    send(res, 200, rows || []);
+    const mapped = (rows || []).map(r => ({ ...r, desc: r.description }));
+    send(res, 200, mapped);
   },
   'POST /api/expenses': async (req, res) => {
     const b = await readBody(req);
     if (!b.date || !b.desc || !b.amount) return send(res, 400, { error: 'date, desc, amount required' });
     const id = await getNextId();
-    await sbFetch('POST', 'expenses', { body: { id, date: b.date, desc: b.desc, amount: Number(b.amount) } });
+    await sbFetch('POST', 'expenses', { body: { id, date: b.date, description: b.desc, amount: Number(b.amount) } });
     send(res, 200, { id });
   },
 
