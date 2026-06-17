@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Business Manager</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/2.47.0/iconfont/tabler-icons.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar">
+    <div class="brand"><i class="ti ti-building-store"></i> <span>Business Manager</span></div>
+    <button class="menu-toggle" id="menuToggle" aria-label="Open menu"><i class="ti ti-menu-2"></i></button>
+  </header>
+
+  <nav id="nav">
+    <button class="active" data-page="dashboard"><i class="ti ti-layout-dashboard"></i> Dashboard</button>
+    <button data-page="sales"><i class="ti ti-chart-line"></i> Sales</button>
+    <button data-page="expenses"><i class="ti ti-receipt"></i> Expenses</button>
+    <button data-page="dues"><i class="ti ti-clock"></i> Dues</button>
+    <button data-page="products"><i class="ti ti-package"></i> Products</button>
+  </nav>
+
+  <main id="main">
+
+    <!-- DASHBOARD -->
+    <section id="page-dashboard" class="page active">
+      <h1 class="page-title"><i class="ti ti-layout-dashboard"></i> Dashboard</h1>
+      <div class="metric-row" id="dash-metrics"></div>
+      <div class="chart-card">
+        <h3>Sales vs expenses vs due (recent entries)</h3>
+        <div class="chart-legend">
+          <span><span class="dot" style="background:#3b82f6"></span>Sales</span>
+          <span><span class="dot" style="background:#ef4444"></span>Expenses</span>
+          <span><span class="dot" style="background:#f59e0b"></span>Due</span>
+        </div>
+        <div class="chart-wrap" style="height:240px"><canvas id="dashChart" role="img" aria-label="Bar chart comparing sales, expenses and dues over recent days"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Financial summary breakdown</h3>
+        <div class="chart-wrap" style="height:220px"><canvas id="donutChart" role="img" aria-label="Donut chart of financial summary"></canvas></div>
+      </div>
+    </section>
+
+    <!-- SALES -->
+    <section id="page-sales" class="page">
+      <h1 class="page-title"><i class="ti ti-chart-line"></i> Sales</h1>
+
+      <div class="entry-section" style="margin-bottom:18px">
+        <h3><i class="ti ti-plus" style="color:var(--ok)"></i> Add sale</h3>
+        <div class="form-row"><label>Date</label><input type="date" id="sale-date" /></div>
+        <div class="form-row"><label>Product (optional)</label>
+          <select id="sale-product"><option value="">— No product / custom sale —</option></select>
+        </div>
+        <div class="form-row"><label>Description</label><input type="text" id="sale-desc" placeholder="Product / service name" /></div>
+        <div class="form-row"><label>Quantity</label><input type="number" id="sale-qty" placeholder="1" min="0" /></div>
+        <div class="form-row"><label>Unit price (Tk)</label><input type="number" id="sale-unit-price" placeholder="0.00" min="0" /></div>
+        <div class="form-row"><label>Amount (Tk)</label><input type="number" id="sale-amount" placeholder="0.00" min="0" /></div>
+        <button class="btn-save" onclick="addSale()">Save sale</button>
+      </div>
+
+      <div class="filter-bar">
+        <input type="date" id="sale-filter-from" />
+        <span class="filter-to">to</span>
+        <input type="date" id="sale-filter-to" />
+        <button class="btn-filter" onclick="renderSalesPage()">Filter</button>
+        <button class="btn-clear" onclick="clearFilter('sales')">Clear</button>
+      </div>
+      <div class="list-card">
+        <div class="list-header"><i class="ti ti-chart-line"></i> Sales list</div>
+        <div class="table-scroll">
+        <table>
+          <thead><tr><th>Date</th><th>Description</th><th class="num">Qty</th><th class="num">Amount (Tk)</th><th></th></tr></thead>
+          <tbody id="sales-tbody"></tbody>
+        </table>
+        </div>
+        <div class="total-row"><span>Total</span><span id="sales-total-val">Tk 0</span></div>
+      </div>
+    </section>
+
+    <!-- EXPENSES -->
+    <section id="page-expenses" class="page">
+      <h1 class="page-title"><i class="ti ti-receipt"></i> Expenses</h1>
+
+      <div class="entry-section" style="margin-bottom:18px">
+        <h3><i class="ti ti-plus" style="color:var(--danger)"></i> Add expense</h3>
+        <div class="form-row"><label>Date</label><input type="date" id="exp-date" /></div>
+        <div class="form-row"><label>Description</label><input type="text" id="exp-desc" placeholder="Item / cost name" /></div>
+        <div class="form-row"><label>Amount (Tk)</label><input type="number" id="exp-amount" placeholder="0.00" min="0" /></div>
+        <button class="btn-save" onclick="addExpense()">Save expense</button>
+      </div>
+
+      <div class="filter-bar">
+        <input type="date" id="exp-filter-from" />
+        <span class="filter-to">to</span>
+        <input type="date" id="exp-filter-to" />
+        <button class="btn-filter" onclick="renderExpensePage()">Filter</button>
+        <button class="btn-clear" onclick="clearFilter('expenses')">Clear</button>
+      </div>
+      <div class="list-card">
+        <div class="list-header"><i class="ti ti-receipt"></i> Expenses list</div>
+        <div class="table-scroll">
+        <table>
+          <thead><tr><th>Date</th><th>Description</th><th class="num">Amount (Tk)</th><th></th></tr></thead>
+          <tbody id="exp-tbody"></tbody>
+        </table>
+        </div>
+        <div class="total-row"><span>Total</span><span id="exp-total-val">Tk 0</span></div>
+      </div>
+    </section>
+
+    <!-- DUES -->
+    <section id="page-dues" class="page">
+      <h1 class="page-title"><i class="ti ti-clock"></i> Dues</h1>
+
+      <div class="entry-grid" style="margin-bottom:18px">
+        <div class="entry-section">
+          <h3><i class="ti ti-plus" style="color:var(--warn)"></i> Add due</h3>
+          <div class="form-row"><label>Date</label><input type="date" id="due-date" /></div>
+          <div class="form-row"><label>Person / party</label><input type="text" id="due-party" placeholder="Customer or vendor name" /></div>
+          <div class="form-row"><label>Amount (Tk)</label><input type="number" id="due-amount" placeholder="0.00" min="0" /></div>
+          <div class="form-row"><label>Note</label><input type="text" id="due-note" placeholder="Optional note" /></div>
+          <button class="btn-save" onclick="addDue()">Save due</button>
+        </div>
+        <div class="entry-section">
+          <h3><i class="ti ti-circle-check" style="color:var(--info)"></i> Record due paid</h3>
+          <div class="form-row"><label>Date</label><input type="date" id="dpaid-date" /></div>
+          <div class="form-row"><label>Person / party</label><input type="text" id="dpaid-party" placeholder="Who paid?" /></div>
+          <div class="form-row"><label>Amount (Tk)</label><input type="number" id="dpaid-amount" placeholder="0.00" min="0" /></div>
+          <div class="form-row"><label>Note</label><input type="text" id="dpaid-note" placeholder="Optional note" /></div>
+          <button class="btn-save" onclick="addDuePaid()">Record payment</button>
+        </div>
+      </div>
+
+      <div class="dues-grid">
+        <div class="list-card">
+          <div class="list-header"><i class="ti ti-alert-circle" style="color:var(--warn)"></i> Outstanding dues</div>
+          <div class="table-scroll">
+          <table>
+            <thead><tr><th>Date</th><th>Party</th><th>Note</th><th class="num">Amount</th><th></th></tr></thead>
+            <tbody id="dues-tbody"></tbody>
+          </table>
+          </div>
+          <div class="total-row"><span>Total outstanding</span><span id="dues-total-val">Tk 0</span></div>
+        </div>
+        <div class="list-card">
+          <div class="list-header"><i class="ti ti-circle-check" style="color:var(--ok)"></i> Paid dues</div>
+          <div class="table-scroll">
+          <table>
+            <thead><tr><th>Date</th><th>Party</th><th>Note</th><th class="num">Amount</th><th></th></tr></thead>
+            <tbody id="paid-tbody"></tbody>
+          </table>
+          </div>
+          <div class="total-row"><span>Total paid</span><span id="paid-total-val">Tk 0</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRODUCTS -->
+    <section id="page-products" class="page">
+      <h1 class="page-title"><i class="ti ti-package"></i> Products</h1>
+
+      <div class="entry-section" style="margin-bottom:20px">
+        <h3><i class="ti ti-plus" style="color:var(--ok)"></i> Add new product</h3>
+        <div class="product-form-grid">
+          <div class="form-row"><label>Product name</label><input type="text" id="prod-name" placeholder="e.g. Rice 5kg" /></div>
+          <div class="form-row"><label>Quantity</label><input type="number" id="prod-qty" placeholder="0" min="0" /></div>
+          <div class="form-row"><label>Purchase price (Tk)</label><input type="number" id="prod-purchase" placeholder="0.00" min="0" /></div>
+          <div class="form-row"><label>Sell price (Tk)</label><input type="number" id="prod-sell" placeholder="0.00" min="0" /></div>
+        </div>
+        <button class="btn-save" onclick="addProduct()">Save product &amp; generate barcode</button>
+      </div>
+
+      <div class="filter-bar">
+        <input type="text" id="prod-search" placeholder="Search by name or barcode..." oninput="renderProductsPage()" style="flex:1;min-width:160px" />
+      </div>
+
+      <div id="products-grid" class="products-grid"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Barcode print modal -->
+<div id="barcodeModal" class="modal-overlay" style="display:none">
+  <div class="modal-box modal-box-wide">
+    <button class="modal-close" onclick="closeBarcodeModal()" aria-label="Close"><i class="ti ti-x"></i></button>
+    <div class="label-editor">
+      <div class="label-preview-wrap">
+        <div id="modal-barcode-content"></div>
+      </div>
+      <div class="label-controls">
+        <div class="form-row"><label>Name font size (px)</label><input type="number" id="ctl-name-size" min="8" max="40" value="14" oninput="updateBarcodePreview()" /></div>
+        <div class="form-row"><label>Price font size (px)</label><input type="number" id="ctl-price-size" min="8" max="40" value="13" oninput="updateBarcodePreview()" /></div>
+        <div class="form-row"><label>Barcode width (bar thickness)</label><input type="number" id="ctl-bc-width" min="1" max="5" step="0.1" value="2" oninput="updateBarcodePreview()" /></div>
+        <div class="form-row"><label>Barcode height (px)</label><input type="number" id="ctl-bc-height" min="20" max="150" value="56" oninput="updateBarcodePreview()" /></div>
+        <div class="form-row"><label><input type="checkbox" id="ctl-show-price" checked onchange="updateBarcodePreview()" style="width:auto;margin-right:6px;vertical-align:middle" />Show price on label</label></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeBarcodeModal()"><i class="ti ti-arrow-left"></i> Exit</button>
+      <button class="btn-save" style="width:auto;flex:1" onclick="printBarcode()"><i class="ti ti-printer"></i> Print label</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

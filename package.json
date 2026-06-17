@@ -1,0 +1,10 @@
+{
+  "name": "business-manager",
+  "version": "1.0.0",
+  "description": "Self-hosted business manager: sales, expenses, dues, and products with auto barcode generation.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT"
+}

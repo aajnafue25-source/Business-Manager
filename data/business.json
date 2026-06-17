@@ -1,0 +1,58 @@
+{
+  "sales": [
+    {
+      "id": 2,
+      "date": "2026-06-17",
+      "desc": "American eagle",
+      "amount": 1150,
+      "product_id": "1",
+      "quantity": 3
+    },
+    {
+      "id": 6,
+      "date": "2026-06-17",
+      "desc": "T-shirt",
+      "amount": 350,
+      "product_id": null,
+      "quantity": 1
+    }
+  ],
+  "expenses": [
+    {
+      "id": 3,
+      "date": "2026-06-17",
+      "desc": "Van vara",
+      "amount": 20
+    }
+  ],
+  "dues": [
+    {
+      "id": 4,
+      "date": "2026-06-17",
+      "party": "Nafue",
+      "amount": 1200,
+      "note": ""
+    }
+  ],
+  "duePaid": [
+    {
+      "id": 5,
+      "date": "2026-06-17",
+      "party": "Nafue",
+      "amount": 500,
+      "note": ""
+    }
+  ],
+  "products": [
+    {
+      "id": 1,
+      "name": "American eagle",
+      "barcode": "AME-1001",
+      "quantity": 7,
+      "purchase_price": 750,
+      "sell_price": 1150
+    }
+  ],
+  "nextId": 7,
+  "barcodeSeq": 1001
+}
