@@ -43,6 +43,7 @@
     <button data-page="products"><i class="ti ti-package"></i> Products</button>
     <button data-page="customers"><i class="ti ti-users"></i> Customers</button>
     <button data-page="settings"><i class="ti ti-settings"></i> Settings</button>
+    <button data-page="admin" id="nav-admin" style="display:none"><i class="ti ti-shield"></i> Admin</button>
   </nav>
 
   <main id="main">
@@ -298,6 +299,19 @@
       <button class="btn-save" style="max-width:240px" onclick="saveSettings()"><i class="ti ti-device-floppy"></i> Save settings</button>
     </section>
 
+      <!-- ADMIN -->
+    <section id="page-admin" class="page">
+      <h1 class="page-title"><i class="ti ti-shield"></i> Admin Panel</h1>
+      <div class="list-card">
+        <div class="list-header"><i class="ti ti-users"></i> Registered Users</div>
+        <div class="table-scroll">
+        <table>
+          <thead><tr><th>Username</th><th>Status</th><th>Admin</th><th>Actions</th></tr></thead>
+          <tbody id="admin-users-tbody"></tbody>
+        </table>
+        </div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -349,4 +363,3 @@
 <script src="app.js"></script>
 </body>
 </html>
- 

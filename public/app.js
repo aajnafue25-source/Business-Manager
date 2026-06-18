@@ -7,10 +7,11 @@ function showAuthScreen() {
   document.getElementById('logout-btn').style.display = 'none';
 }
 
-function hideAuthScreen(username) {
+function hideAuthScreen(username, isAdmin) {
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('logout-btn').style.display = 'inline-flex';
+  if (isAdmin) { const adminNav = document.getElementById('nav-admin'); if (adminNav) adminNav.style.display = 'block'; }
   document.getElementById('topbar-user').textContent = '👤 ' + username;
 }
 
@@ -44,8 +45,8 @@ async function submitAuth() {
     const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/signup';
     const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
     const data = await res.json();
-    if (!res.ok) { errEl.textContent = data.error || 'Something went wrong.'; errEl.style.display = 'block'; return; }
-    hideAuthScreen(data.username);
+    if (!res.ok || data.status === 'pending') { errEl.style.background = data.status === 'pending' ? 'var(--warn-bg,#2d2000)' : ''; errEl.style.color = data.status === 'pending' ? 'var(--warn)' : ''; errEl.textContent = data.status === 'pending' ? '⏳ Account created! Waiting for admin approval.' : (data.message || data.error || 'Something went wrong.'); errEl.style.display = 'block'; return; }
+    hideAuthScreen(data.username, data.isAdmin);
     initApp();
   } catch (e) {
     errEl.textContent = 'Network error. Please try again.';
@@ -81,7 +82,7 @@ function initApp() {
     const res = await fetch('/api/auth/me');
     if (res.ok) {
       const data = await res.json();
-      hideAuthScreen(data.username);
+      hideAuthScreen(data.username, data.isAdmin);
       initApp();
     } else {
       showAuthScreen();
@@ -110,6 +111,7 @@ document.querySelectorAll('nav button').forEach(btn => {
     document.getElementById('page-' + btn.dataset.page).classList.add('active');
     document.getElementById('nav').classList.remove('open');
     if (btn.dataset.page === 'dashboard') renderDashboard();
+    if (btn.dataset.page === 'admin') renderAdminPage();
     if (btn.dataset.page === 'sales') { loadProductOptions(); loadCustomerOptions(); renderSalesPage(); }
     if (btn.dataset.page === 'expenses') renderExpensePage();
     if (btn.dataset.page === 'dues') renderDuesPage();
@@ -831,3 +833,47 @@ document.addEventListener('keydown', (e) => {
   if (document.getElementById('posModal').style.display === 'flex') closePosModal();
   if (document.getElementById('customerModal').style.display === 'flex') closeCustomerModal();
 });
+
+// ───────── Admin Panel ─────────
+async function renderAdminPage() {
+  const rows = await apiGet('/admin/users');
+  const tb = document.getElementById('admin-users-tbody');
+  if (!rows || !rows.length) {
+    tb.innerHTML = '<tr><td colspan="4" class="empty-state">No users found.</td></tr>';
+    return;
+  }
+  tb.innerHTML = rows.map(u => {
+    const statusColor = u.status === 'approved' ? 'var(--ok)' : u.status === 'rejected' ? 'var(--danger)' : 'var(--warn)';
+    const statusLabel = u.status === 'approved' ? '✅ Approved' : u.status === 'rejected' ? '❌ Rejected' : '⏳ Pending';
+    return `<tr>
+      <td style="font-weight:600">${u.username}</td>
+      <td><span style="color:${statusColor};font-weight:600">${statusLabel}</span></td>
+      <td>${u.is_admin ? '👑 Admin' : '👤 User'}</td>
+      <td style="white-space:nowrap">
+        ${u.status !== 'approved' ? `<button class="edit-btn" onclick="adminApprove(${u.id})" title="Approve" style="color:var(--ok)"><i class="ti ti-check"></i> Approve</button>` : ''}
+        ${u.status !== 'rejected' && !u.is_admin ? `<button class="edit-btn" onclick="adminReject(${u.id})" title="Reject" style="color:var(--warn)"><i class="ti ti-x"></i> Reject</button>` : ''}
+        ${!u.is_admin ? `<button class="del-btn" onclick="adminDelete(${u.id})" title="Delete"><i class="ti ti-trash"></i></button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function adminApprove(userId) {
+  await apiPost('/admin/approve', { userId });
+  toast('User approved ✅');
+  renderAdminPage();
+}
+
+async function adminReject(userId) {
+  if (!confirm('Reject this user?')) return;
+  await apiPost('/admin/reject', { userId });
+  toast('User rejected');
+  renderAdminPage();
+}
+
+async function adminDelete(userId) {
+  if (!confirm('Delete this user permanently?')) return;
+  await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
+  toast('User deleted');
+  renderAdminPage();
+}
