@@ -828,3 +828,6 @@ async function renderDashboard() {
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (document.getElementById('barcodeModal').style.display === 'flex') closeBarcodeModal();
+  if (document.getElementById('posModal').style.display === 'flex') closePosModal();
+  if (document.getElementById('customerModal').style.display === 'flex') closeCustomerModal();
+});
