@@ -165,6 +165,8 @@ td.num { font-weight: 600; }
 
 .del-btn { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 16px; padding: 3px 5px; opacity: 0.65; }
 .del-btn:hover { opacity: 1; }
+.edit-btn { background: none; border: none; color: var(--text-2); cursor: pointer; font-size: 13.5px; padding: 3px 7px; opacity: 0.8; white-space: nowrap; }
+.edit-btn:hover { opacity: 1; color: var(--text); }
 
 .dues-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .dues-grid .list-card { margin-top: 0; }
@@ -187,11 +189,11 @@ td.num { font-weight: 600; }
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
 .modal-box { background: var(--surface); border-radius: var(--radius-lg); padding: 24px; max-width: 360px; width: 100%; position: relative; text-align: center; max-height: 90vh; overflow-y: auto; }
 .modal-box-wide { max-width: 520px; text-align: left; }
-.modal-box-pos { max-width: 380px; text-align: left; }
+.modal-box-pos { max-width: 340px; text-align: left; padding: 16px; }
 .modal-close { position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 18px; color: var(--text-2); cursor: pointer; }
-#modal-barcode-content { background: #fff; border-radius: var(--radius-md); padding: 16px; text-align: center; }
-#modal-barcode-content .mp-name { color: #111; font-weight: 600; margin-bottom: 8px; }
-#modal-barcode-content .mp-price { color: #111; margin-top: 6px; }
+#modal-barcode-content { background: #fff; border-radius: var(--radius-md); padding: 16px; text-align: center; font-family: 'Roboto', 'Segoe UI', sans-serif; }
+#modal-barcode-content .mp-name { color: #111; font-weight: 600; margin-bottom: 8px; font-family: 'Roboto', 'Segoe UI', sans-serif; }
+#modal-barcode-content .mp-price { color: #111; margin-top: 6px; font-weight: 700; font-family: 'Roboto', 'Segoe UI', sans-serif; }
 .label-editor { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 8px 0 18px; }
 .label-preview-wrap { display: flex; align-items: center; justify-content: center; background: var(--surface-2); border-radius: var(--radius-md); padding: 10px; }
 .label-controls .form-row { margin-bottom: 10px; }
@@ -233,22 +235,26 @@ td.num { font-weight: 600; }
 .pay-btn.active { background: var(--text); color: var(--surface); border-color: var(--text); }
 
 /* POS bill preview / print */
-.pos-preview-wrap { background: var(--surface-2); border-radius: var(--radius-md); padding: 14px; display: flex; justify-content: center; margin-bottom: 16px; }
-.pos-bill { background: #fff; color: #111; font-family: 'Courier New', monospace; padding: 14px 12px; width: 100%; }
+.pos-preview-wrap { background: var(--surface-2); border-radius: var(--radius-md); padding: 14px; display: flex; justify-content: center; margin-bottom: 16px; overflow-x: auto; }
+.pos-bill { background: #fff; color: #111; font-family: 'Courier New', monospace; padding: 14px 12px; box-sizing: border-box; }
 .pos-bill .pb-center { text-align: center; }
-.pos-bill .pb-name { font-weight: 700; }
-.pos-bill .pb-sub { font-size: 12px; margin: 2px 0; }
+.pos-bill .pb-name { font-weight: 700; word-break: break-word; }
+.pos-bill .pb-sub { font-size: 12px; margin: 2px 0; word-break: break-word; }
 .pos-bill .pb-title { font-weight: 700; text-decoration: underline; margin: 10px 0; }
-.pos-bill .pb-meta { font-size: 12px; margin: 2px 0; }
+.pos-bill .pb-meta { font-size: 12px; margin: 2px 0; word-break: break-word; }
 .pos-bill .pb-rule { border-top: 1px dashed #000; margin: 8px 0; }
-.pos-bill table.pb-items { width: 100%; font-size: 12px; border-collapse: collapse; }
-.pos-bill table.pb-items th { text-align: left; padding: 3px 2px; font-weight: 700; white-space: nowrap; }
+.pos-bill table.pb-items { width: 100%; font-size: 12px; border-collapse: collapse; table-layout: fixed; }
+.pos-bill table.pb-items th { text-align: left; padding: 3px 2px; font-weight: 700; white-space: nowrap; overflow: hidden; }
 .pos-bill table.pb-items th.num, .pos-bill table.pb-items td.num { text-align: right; white-space: nowrap; }
 .pos-bill table.pb-items td { padding: 3px 2px; vertical-align: top; }
-.pos-bill table.pb-items td:first-child { word-break: break-word; }
-.pos-bill .pb-totals div { display: flex; justify-content: space-between; font-size: 12.5px; padding: 2px 0; }
-.pos-bill .pb-total-line { font-weight: 700; font-size: 15px; display: flex; justify-content: space-between; padding: 4px 0; }
-.pos-bill .pb-footer { text-align: center; font-weight: 700; margin-top: 12px; font-size: 12.5px; }
+.pos-bill table.pb-items td:first-child { word-break: break-word; overflow-wrap: break-word; }
+.pos-bill table.pb-items th:nth-child(1) { width: 40%; }
+.pos-bill table.pb-items th:nth-child(2) { width: 15%; }
+.pos-bill table.pb-items th:nth-child(3) { width: 20%; }
+.pos-bill table.pb-items th:nth-child(4) { width: 25%; }
+.pos-bill .pb-totals div { display: flex; justify-content: space-between; font-size: 12.5px; padding: 2px 0; gap: 8px; }
+.pos-bill .pb-total-line { font-weight: 700; font-size: 15px; display: flex; justify-content: space-between; padding: 4px 0; gap: 8px; }
+.pos-bill .pb-footer { text-align: center; font-weight: 700; margin-top: 12px; font-size: 12.5px; word-break: break-word; }
 .pos-bill .pb-paid-line { font-size: 12px; }
 
 /* Customer cards / detail */
