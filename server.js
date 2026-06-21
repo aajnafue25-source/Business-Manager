@@ -1,4 +1,4 @@
-/* Business Manager v4 — Roles, Staff login, Expiry, Admin controls
+/* Business Manager v5 — Full ERP: Purchases, Suppliers, Returns, Search APIs
    Run with: node server.js
 */
 
@@ -44,6 +44,13 @@ async function getNextBillNo() {
   await sb('PATCH', 'meta', { query: 'key=eq.nextBillNo', body: { value: String(current + 1) } });
   return current;
 }
+async function getNextPurchaseNo() {
+  const rows = await sb('GET', 'meta', { query: 'key=eq.nextPurchaseNo' });
+  if (!rows || !rows.length) return 1;
+  const current = parseInt(rows[0].value);
+  await sb('PATCH', 'meta', { query: 'key=eq.nextPurchaseNo', body: { value: String(current + 1) } });
+  return current;
+}
 async function getNextBarcode(name) {
   const prefix = (name || 'PRD').replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase().padEnd(3, 'X');
   const rows = await sb('GET', 'meta', { query: 'key=eq.barcodeSeq' });
@@ -53,7 +60,6 @@ async function getNextBarcode(name) {
 }
 
 // ---------- Sessions ----------
-// session = { businessId, role: 'manager'|'sales', username/staffName, isAdmin }
 const sessions = new Map();
 function createSession(data) {
   const token = crypto.randomBytes(32).toString('hex');
@@ -112,7 +118,6 @@ function isExpired(user) {
 
 // ---------- Auth ----------
 async function handleAuth(method, pathname, req, res) {
-  // ----- Business (manager) signup -----
   if (method === 'POST' && pathname === '/api/auth/signup') {
     const b = await readBody(req);
     if (!b.username || !b.password || !b.phone) return send(res, 400, { error: 'Username, phone and password required' });
@@ -123,8 +128,7 @@ async function handleAuth(method, pathname, req, res) {
     const isAdmin = b.username === ADMIN_USERNAME;
     const status = isAdmin ? 'approved' : 'pending';
     const approvedAt = isAdmin ? new Date().toISOString() : null;
-    const expiresAt = isAdmin ? null : null; // set on approval
-    await sb('POST', 'users', { body: { id, username: b.username, phone: b.phone, password_hash: hashPassword(b.password), status, is_admin: isAdmin, approved_at: approvedAt, expires_at: expiresAt } });
+    await sb('POST', 'users', { body: { id, username: b.username, phone: b.phone, password_hash: hashPassword(b.password), status, is_admin: isAdmin, approved_at: approvedAt, expires_at: null } });
     if (isAdmin) {
       const token = createSession({ businessId: id, role: 'manager', username: b.username, isAdmin: true });
       return send(res, 200, { ok: true, username: b.username, status: 'approved', isAdmin: true }, { 'Set-Cookie': `session=${token}; Path=/; HttpOnly; Max-Age=604800` });
@@ -132,7 +136,6 @@ async function handleAuth(method, pathname, req, res) {
     return send(res, 200, { ok: true, status: 'pending' });
   }
 
-  // ----- Business (manager) login -----
   if (method === 'POST' && pathname === '/api/auth/login') {
     const b = await readBody(req);
     if (!b.username || !b.password) return send(res, 400, { error: 'Username and password required' });
@@ -142,14 +145,11 @@ async function handleAuth(method, pathname, req, res) {
     if (user.password_hash !== hashPassword(b.password)) return send(res, 401, { error: 'Invalid username or password' });
     if (user.status === 'pending') return send(res, 403, { error: 'pending', message: 'Your account is waiting for admin approval.' });
     if (user.status === 'rejected') return send(res, 403, { error: 'rejected', message: 'Your account was not approved. Contact the admin.' });
-    if (user.blocked || isExpired(user)) {
-      return send(res, 403, { error: 'expired' });
-    }
+    if (user.blocked || isExpired(user)) return send(res, 403, { error: 'expired' });
     const token = createSession({ businessId: user.id, role: 'manager', username: user.username, isAdmin: user.is_admin });
     return send(res, 200, { ok: true, username: user.username, isAdmin: user.is_admin, role: 'manager' }, { 'Set-Cookie': `session=${token}; Path=/; HttpOnly; Max-Age=604800` });
   }
 
-  // ----- Staff (sales/manager-role) login by phone -----
   if (method === 'POST' && pathname === '/api/auth/staff-login') {
     const b = await readBody(req);
     if (!b.phone || !b.password) return send(res, 400, { error: 'Phone and password required' });
@@ -157,7 +157,6 @@ async function handleAuth(method, pathname, req, res) {
     if (!staffRows || !staffRows.length) return send(res, 401, { error: 'Invalid phone or password' });
     const staffUser = staffRows[0];
     if (staffUser.password_hash !== hashPassword(b.password)) return send(res, 401, { error: 'Invalid phone or password' });
-    // Check the parent business is active
     const bizRows = await sb('GET', 'users', { query: `id=eq.${staffUser.business_user_id}` });
     const biz = bizRows && bizRows[0];
     if (!biz) return send(res, 401, { error: 'Business not found' });
@@ -176,18 +175,13 @@ async function handleAuth(method, pathname, req, res) {
     const token = getToken(req);
     const session = getSession(token);
     if (!session) return send(res, 401, { error: 'Not logged in' });
-    // Re-check expiry every time
     const bizRows = await sb('GET', 'users', { query: `id=eq.${session.businessId}` });
     const biz = bizRows && bizRows[0];
     if (!biz) return send(res, 401, { error: 'Not logged in' });
-    if (biz.blocked || isExpired(biz)) {
-      sessions.delete(token);
-      return send(res, 403, { error: 'expired' });
-    }
+    if (biz.blocked || isExpired(biz)) { sessions.delete(token); return send(res, 403, { error: 'expired' }); }
     return send(res, 200, { username: session.username, isAdmin: session.isAdmin, role: session.role, businessId: session.businessId, daysLeft: biz.expires_at ? Math.max(0, Math.ceil((new Date(biz.expires_at).getTime() - Date.now()) / 86400000)) : null });
   }
 
-  // ----- Change password (manager or staff) -----
   if (method === 'POST' && pathname === '/api/auth/change-password') {
     const token = getToken(req);
     const session = getSession(token);
@@ -214,7 +208,7 @@ async function handleAuth(method, pathname, req, res) {
   return null;
 }
 
-// ---------- Admin routes (super-admin nafue) ----------
+// ---------- Admin routes ----------
 async function handleAdmin(method, pathname, req, res, session) {
   if (!session.isAdmin) return send(res, 403, { error: 'Admin only' });
 
@@ -252,10 +246,11 @@ async function handleAdmin(method, pathname, req, res, session) {
 
   if (method === 'DELETE' && pathname.startsWith('/api/admin/users/')) {
     const userId = pathname.split('/').pop();
-    // Cascade delete all business data
-    for (const table of ['sales', 'expenses', 'dues', 'due_paid', 'products', 'customers', 'settings', 'staff']) {
-      try { await sb('DELETE', table, { query: `${table === 'staff' ? 'business_user_id' : 'user_id'}=eq.${userId}` }); } catch (e) {}
+    const bizTables = ['sales', 'expenses', 'dues', 'due_paid', 'products', 'customers', 'settings', 'suppliers', 'purchases', 'purchase_items', 'purchase_returns', 'sales_returns', 'supplier_dues', 'supplier_due_paid'];
+    for (const table of bizTables) {
+      try { await sb('DELETE', table, { query: `user_id=eq.${userId}` }); } catch (e) {}
     }
+    try { await sb('DELETE', 'staff', { query: `business_user_id=eq.${userId}` }); } catch (e) {}
     await sb('DELETE', 'users', { query: `id=eq.${userId}` });
     return send(res, 200, { ok: true });
   }
@@ -305,12 +300,13 @@ function canEdit(session) {
   return session.role === 'manager';
 }
 
-// ---------- Data routes (multi-tenant, scoped by businessId) ----------
 function bizQuery(session, extra = '') {
   return `user_id=eq.${session.businessId}${extra ? '&' + extra : ''}`;
 }
 
+// ---------- Data routes ----------
 const routes = {
+  // ----- Sales -----
   'GET /api/sales': async (req, res, session) => {
     const rows = await sb('GET', 'sales', { query: bizQuery(session, 'order=id.desc') });
     send(res, 200, (rows || []).map(r => ({ ...r, desc: r.description })));
@@ -327,6 +323,7 @@ const routes = {
     }
     send(res, 200, { id });
   },
+  'PUT /api/sales/:id': null, // handled in dynamic matcher
 
   'POST /api/checkout': async (req, res, session) => {
     const b = await readBody(req);
@@ -336,6 +333,11 @@ const routes = {
     const billNo = await getNextBillNo();
     let total = 0;
     const saleRows = [];
+    let customerPhone = null;
+    if (b.customer_id) {
+      const custs = await sb('GET', 'customers', { query: `id=eq.${b.customer_id}&user_id=eq.${session.businessId}` });
+      if (custs && custs[0]) customerPhone = custs[0].phone;
+    }
     for (const it of items) {
       const qty = Number(it.quantity) || 0;
       const unitPrice = Number(it.unit_price) || 0;
@@ -350,7 +352,7 @@ const routes = {
         }
       }
       const rowId = await getNextId();
-      const row = { id: rowId, user_id: session.businessId, date: b.date, description: it.desc, amount, product_id: it.product_id || null, quantity: qty, unit_price: unitPrice, cost_price: costPrice, bill_id: billId, bill_no: billNo, customer_id: b.customer_id || null };
+      const row = { id: rowId, user_id: session.businessId, date: b.date, description: it.desc, amount, product_id: it.product_id || null, quantity: qty, unit_price: unitPrice, cost_price: costPrice, bill_id: billId, bill_no: billNo, customer_id: b.customer_id || null, customer_phone: customerPhone };
       await sb('POST', 'sales', { body: row });
       saleRows.push({ ...row, desc: row.description });
       total += amount;
@@ -370,6 +372,25 @@ const routes = {
     send(res, 200, { billId, billNo, total, amountPaid, dueAmount, items: saleRows, date: b.date, customer: customer || (b.customerName ? { name: b.customerName } : null) });
   },
 
+  // ----- Sales returns -----
+  'GET /api/sales-returns': async (req, res, session) => {
+    send(res, 200, (await sb('GET', 'sales_returns', { query: bizQuery(session, 'order=id.desc') })) || []);
+  },
+  'POST /api/sales-returns': async (req, res, session) => {
+    if (!canEdit(session)) return send(res, 403, { error: 'Manager only' });
+    const b = await readBody(req);
+    if (!b.date || !b.desc || !b.quantity || !b.amount) return send(res, 400, { error: 'date, desc, quantity, amount required' });
+    const id = await getNextId();
+    const row = { id, user_id: session.businessId, sale_id: b.sale_id || null, bill_id: b.bill_id || null, bill_no: b.bill_no || null, product_id: b.product_id || null, customer_id: b.customer_id || null, description: b.desc, date: b.date, quantity: Number(b.quantity), unit_price: b.unit_price != null ? Number(b.unit_price) : null, amount: Number(b.amount), note: b.note || '' };
+    await sb('POST', 'sales_returns', { body: row });
+    if (b.product_id) {
+      const prods = await sb('GET', 'products', { query: `id=eq.${b.product_id}&user_id=eq.${session.businessId}` });
+      if (prods && prods[0]) await sb('PATCH', 'products', { query: `id=eq.${b.product_id}`, body: { quantity: (prods[0].quantity || 0) + Number(b.quantity) } });
+    }
+    send(res, 200, { id });
+  },
+
+  // ----- Expenses -----
   'GET /api/expenses': async (req, res, session) => {
     const rows = await sb('GET', 'expenses', { query: bizQuery(session, 'order=id.desc') });
     send(res, 200, (rows || []).map(r => ({ ...r, desc: r.description })));
@@ -382,8 +403,9 @@ const routes = {
     send(res, 200, { id });
   },
 
+  // ----- Dues (customer) -----
   'GET /api/dues': async (req, res, session) => {
-    send(res, 200, await sb('GET', 'dues', { query: bizQuery(session, 'order=id.desc') }) || []);
+    send(res, 200, (await sb('GET', 'dues', { query: bizQuery(session, 'order=id.desc') })) || []);
   },
   'POST /api/dues': async (req, res, session) => {
     const b = await readBody(req);
@@ -394,7 +416,7 @@ const routes = {
   },
 
   'GET /api/due-paid': async (req, res, session) => {
-    send(res, 200, await sb('GET', 'due_paid', { query: bizQuery(session, 'order=id.desc') }) || []);
+    send(res, 200, (await sb('GET', 'due_paid', { query: bizQuery(session, 'order=id.desc') })) || []);
   },
   'POST /api/due-paid': async (req, res, session) => {
     const b = await readBody(req);
@@ -404,20 +426,40 @@ const routes = {
     send(res, 200, { id });
   },
 
+  // ----- Products -----
   'GET /api/products': async (req, res, session) => {
-    send(res, 200, await sb('GET', 'products', { query: bizQuery(session, 'order=id.desc') }) || []);
+    send(res, 200, (await sb('GET', 'products', { query: bizQuery(session, 'order=id.desc') })) || []);
+  },
+  'GET /api/products/search': async (req, res, session, query) => {
+    const q = (query.get('q') || '').toLowerCase();
+    const all = (await sb('GET', 'products', { query: bizQuery(session, 'order=id.desc') })) || [];
+    const filtered = q ? all.filter(p => p.name.toLowerCase().includes(q) || (p.barcode || '').toLowerCase().includes(q)) : all;
+    send(res, 200, filtered.slice(0, 20));
   },
   'POST /api/products': async (req, res, session) => {
     const b = await readBody(req);
     if (!b.name) return send(res, 400, { error: 'name required' });
     const id = await getNextId();
-    const barcode = await getNextBarcode(b.name);
-    await sb('POST', 'products', { body: { id, user_id: session.businessId, name: b.name, barcode, quantity: Number(b.quantity) || 0, purchase_price: Number(b.purchase_price) || 0, sell_price: Number(b.sell_price) || 0 } });
+    let barcode = (b.barcode || '').trim();
+    if (barcode) {
+      const existing = await sb('GET', 'products', { query: `barcode=eq.${encodeURIComponent(barcode)}&user_id=eq.${session.businessId}` });
+      if (existing && existing.length) return send(res, 400, { error: 'A product with this barcode already exists' });
+    } else {
+      barcode = await getNextBarcode(b.name);
+    }
+    await sb('POST', 'products', { body: { id, user_id: session.businessId, name: b.name, barcode, quantity: Number(b.quantity) || 0, purchase_price: Number(b.purchase_price) || 0, sell_price: Number(b.sell_price) || 0, unit: b.unit || 'pcs' } });
     send(res, 200, { id, barcode });
   },
 
+  // ----- Customers -----
   'GET /api/customers': async (req, res, session) => {
-    send(res, 200, await sb('GET', 'customers', { query: bizQuery(session, 'order=id.desc') }) || []);
+    send(res, 200, (await sb('GET', 'customers', { query: bizQuery(session, 'order=id.desc') })) || []);
+  },
+  'GET /api/customers/search': async (req, res, session, query) => {
+    const q = (query.get('q') || '').toLowerCase();
+    const all = (await sb('GET', 'customers', { query: bizQuery(session, 'order=id.desc') })) || [];
+    const filtered = q ? all.filter(c => c.name.toLowerCase().includes(q) || (c.phone || '').toLowerCase().includes(q)) : all;
+    send(res, 200, filtered.slice(0, 20));
   },
   'POST /api/customers': async (req, res, session) => {
     const b = await readBody(req);
@@ -441,6 +483,140 @@ const routes = {
     send(res, 200, list);
   },
 
+  // ----- Suppliers -----
+  'GET /api/suppliers': async (req, res, session) => {
+    send(res, 200, (await sb('GET', 'suppliers', { query: bizQuery(session, 'order=id.desc') })) || []);
+  },
+  'GET /api/suppliers/search': async (req, res, session, query) => {
+    const q = (query.get('q') || '').toLowerCase();
+    const all = (await sb('GET', 'suppliers', { query: bizQuery(session, 'order=id.desc') })) || [];
+    const filtered = q ? all.filter(s => s.name.toLowerCase().includes(q) || (s.phone || '').toLowerCase().includes(q)) : all;
+    send(res, 200, filtered.slice(0, 20));
+  },
+  'POST /api/suppliers': async (req, res, session) => {
+    if (!canEdit(session)) return send(res, 403, { error: 'Manager only' });
+    const b = await readBody(req);
+    if (!b.name) return send(res, 400, { error: 'name required' });
+    const id = await getNextId();
+    await sb('POST', 'suppliers', { body: { id, user_id: session.businessId, name: b.name, phone: b.phone || '', address: b.address || '' } });
+    send(res, 200, { id });
+  },
+  'GET /api/suppliers-summary': async (req, res, session) => {
+    const [suppliers, purchases, sDues] = await Promise.all([
+      sb('GET', 'suppliers', { query: bizQuery(session) }),
+      sb('GET', 'purchases', { query: bizQuery(session) }),
+      sb('GET', 'supplier_dues', { query: bizQuery(session) })
+    ]);
+    const list = (suppliers || []).map(s => {
+      const theirPurchases = (purchases || []).filter(p => String(p.supplier_id) === String(s.id));
+      const theirDues = (sDues || []).filter(d => String(d.supplier_id) === String(s.id));
+      return { ...s, totalPurchased: theirPurchases.reduce((sum, r) => sum + Number(r.total), 0), totalDue: theirDues.reduce((sum, r) => sum + Number(r.amount), 0), purchaseCount: theirPurchases.length };
+    });
+    send(res, 200, list);
+  },
+
+  // ----- Purchases -----
+  'GET /api/purchases': async (req, res, session) => {
+    send(res, 200, (await sb('GET', 'purchases', { query: bizQuery(session, 'order=id.desc') })) || []);
+  },
+  'POST /api/purchases': async (req, res, session) => {
+    if (!canEdit(session)) return send(res, 403, { error: 'Manager only' });
+    const b = await readBody(req);
+    const items = Array.isArray(b.items) ? b.items : [];
+    if (!b.date || !items.length) return send(res, 400, { error: 'date and items required' });
+    const purchaseId = await getNextId();
+    const purchaseNo = await getNextPurchaseNo();
+    let total = 0;
+    const itemRows = [];
+    let supplierName = b.supplierName || '';
+    if (b.supplier_id) {
+      const sup = await sb('GET', 'suppliers', { query: `id=eq.${b.supplier_id}&user_id=eq.${session.businessId}` });
+      if (sup && sup[0]) supplierName = sup[0].name;
+    }
+    for (const it of items) {
+      const qty = Number(it.quantity) || 0;
+      const unitCost = Number(it.unit_cost) || 0;
+      const amount = Number(it.amount != null ? it.amount : unitCost * qty);
+      if (!it.desc || qty <= 0) continue;
+      const itemId = await getNextId();
+      const row = { id: itemId, user_id: session.businessId, purchase_id: purchaseId, product_id: it.product_id || null, description: it.desc, quantity: qty, unit_cost: unitCost, amount };
+      await sb('POST', 'purchase_items', { body: row });
+      itemRows.push(row);
+      total += amount;
+      if (it.product_id) {
+        const prods = await sb('GET', 'products', { query: `id=eq.${it.product_id}&user_id=eq.${session.businessId}` });
+        if (prods && prods[0]) {
+          const patch = { quantity: (prods[0].quantity || 0) + qty };
+          if (it.updatePurchasePrice) patch.purchase_price = unitCost;
+          await sb('PATCH', 'products', { query: `id=eq.${it.product_id}`, body: patch });
+        }
+      }
+    }
+    if (!itemRows.length) return send(res, 400, { error: 'no valid items' });
+    const amountPaid = Math.min(Number(b.amountPaid) || 0, total);
+    const dueAmount = Math.max(0, total - amountPaid);
+    await sb('POST', 'purchases', { body: { id: purchaseId, user_id: session.businessId, supplier_id: b.supplier_id || null, supplier_name: supplierName, date: b.date, purchase_no: purchaseNo, total, amount_paid: amountPaid, due_amount: dueAmount, note: b.note || '' } });
+    if (dueAmount > 0) {
+      const dueId = await getNextId();
+      await sb('POST', 'supplier_dues', { body: { id: dueId, user_id: session.businessId, supplier_id: b.supplier_id || null, party: supplierName || 'Supplier', date: b.date, amount: dueAmount, note: `Purchase #${purchaseNo}` } });
+    }
+    send(res, 200, { purchaseId, purchaseNo, total, amountPaid, dueAmount, items: itemRows, date: b.date, supplierName });
+  },
+  'GET /api/purchases/:id/items': null,
+
+  // ----- Purchase returns -----
+  'GET /api/purchase-returns': async (req, res, session) => {
+    send(res, 200, (await sb('GET', 'purchase_returns', { query: bizQuery(session, 'order=id.desc') })) || []);
+  },
+  'POST /api/purchase-returns': async (req, res, session) => {
+    if (!canEdit(session)) return send(res, 403, { error: 'Manager only' });
+    const b = await readBody(req);
+    if (!b.date || !b.desc || !b.quantity || !b.amount) return send(res, 400, { error: 'date, desc, quantity, amount required' });
+    const id = await getNextId();
+    const row = { id, user_id: session.businessId, purchase_id: b.purchase_id || null, supplier_id: b.supplier_id || null, supplier_name: b.supplierName || '', product_id: b.product_id || null, description: b.desc, date: b.date, quantity: Number(b.quantity), unit_cost: b.unit_cost != null ? Number(b.unit_cost) : null, amount: Number(b.amount), note: b.note || '' };
+    await sb('POST', 'purchase_returns', { body: row });
+    if (b.product_id) {
+      const prods = await sb('GET', 'products', { query: `id=eq.${b.product_id}&user_id=eq.${session.businessId}` });
+      if (prods && prods[0]) await sb('PATCH', 'products', { query: `id=eq.${b.product_id}`, body: { quantity: Math.max(0, (prods[0].quantity || 0) - Number(b.quantity)) } });
+    }
+    // Reduce what we owe the supplier
+    if (b.supplier_id) {
+      let remaining = Number(b.amount);
+      const sDues = await sb('GET', 'supplier_dues', { query: `supplier_id=eq.${b.supplier_id}&user_id=eq.${session.businessId}&order=id.asc` });
+      for (const d of (sDues || [])) {
+        if (remaining <= 0) break;
+        if (d.amount <= remaining) { remaining -= d.amount; await sb('DELETE', 'supplier_dues', { query: `id=eq.${d.id}` }); }
+        else { await sb('PATCH', 'supplier_dues', { query: `id=eq.${d.id}`, body: { amount: d.amount - remaining } }); remaining = 0; }
+      }
+    }
+    send(res, 200, { id });
+  },
+
+  // ----- Supplier dues -----
+  'GET /api/supplier-dues': async (req, res, session) => {
+    send(res, 200, (await sb('GET', 'supplier_dues', { query: bizQuery(session, 'order=id.desc') })) || []);
+  },
+  'GET /api/supplier-due-paid': async (req, res, session) => {
+    send(res, 200, (await sb('GET', 'supplier_due_paid', { query: bizQuery(session, 'order=id.desc') })) || []);
+  },
+  'POST /api/supplier-due-paid': async (req, res, session) => {
+    if (!canEdit(session)) return send(res, 403, { error: 'Manager only' });
+    const b = await readBody(req);
+    if (!b.date || !b.party || !b.amount) return send(res, 400, { error: 'required' });
+    const id = await getNextId();
+    await sb('POST', 'supplier_due_paid', { body: { id, user_id: session.businessId, date: b.date, party: b.party, amount: Number(b.amount), note: b.note || '', supplier_id: b.supplier_id || null } });
+    let remaining = Number(b.amount);
+    const query = b.supplier_id ? `supplier_id=eq.${b.supplier_id}&user_id=eq.${session.businessId}&order=id.asc` : `party=eq.${encodeURIComponent(b.party)}&user_id=eq.${session.businessId}&order=id.asc`;
+    const sDues = await sb('GET', 'supplier_dues', { query });
+    for (const d of (sDues || [])) {
+      if (remaining <= 0) break;
+      if (d.amount <= remaining) { remaining -= d.amount; await sb('DELETE', 'supplier_dues', { query: `id=eq.${d.id}` }); }
+      else { await sb('PATCH', 'supplier_dues', { query: `id=eq.${d.id}`, body: { amount: d.amount - remaining } }); remaining = 0; }
+    }
+    send(res, 200, { id });
+  },
+
+  // ----- Settings -----
   'GET /api/settings': async (req, res, session) => {
     const rows = await sb('GET', 'settings', { query: `user_id=eq.${session.businessId}` });
     send(res, 200, rows && rows[0] ? rows[0] : {});
@@ -454,32 +630,45 @@ const routes = {
     send(res, 200, b);
   },
 
+  // ----- Summary -----
   'GET /api/summary': async (req, res, session) => {
-    const [sales, expenses, dues, duePaid, products] = await Promise.all([
+    const [sales, expenses, dues, duePaid, products, salesReturns] = await Promise.all([
       sb('GET', 'sales', { query: bizQuery(session) }), sb('GET', 'expenses', { query: bizQuery(session) }),
       sb('GET', 'dues', { query: bizQuery(session) }), sb('GET', 'due_paid', { query: bizQuery(session) }),
-      sb('GET', 'products', { query: bizQuery(session) })
+      sb('GET', 'products', { query: bizQuery(session) }), sb('GET', 'sales_returns', { query: bizQuery(session) })
     ]);
     const sum = (arr) => (arr || []).reduce((s, r) => s + Number(r.amount), 0);
     const totalSales = sum(sales);
+    const totalReturns = sum(salesReturns);
     const totalExpenses = sum(expenses);
     const cogs = (sales || []).reduce((s, r) => {
       if (r.cost_price != null && r.quantity) return s + Number(r.cost_price) * Number(r.quantity);
       if (r.product_id) { const p = (products || []).find(x => String(x.id) === String(r.product_id)); if (p && r.quantity) return s + Number(p.purchase_price || 0) * Number(r.quantity); }
       return s;
     }, 0);
-    send(res, 200, { totalSales, totalExpenses, totalCOGS: cogs, grossProfit: totalSales - cogs, netProfit: totalSales - cogs - totalExpenses, totalDues: sum(dues), totalDuePaid: sum(duePaid), productCount: (products || []).length, lowStockCount: (products || []).filter(p => p.quantity <= 5).length });
+    const netSales = totalSales - totalReturns;
+    send(res, 200, { totalSales: netSales, totalExpenses, totalCOGS: cogs, totalReturns, grossProfit: netSales - cogs, netProfit: netSales - cogs - totalExpenses, totalDues: sum(dues), totalDuePaid: sum(duePaid), productCount: (products || []).length, lowStockCount: (products || []).filter(p => p.quantity <= 5).length });
   }
 };
 
-function matchDynamic(method, pathname, session) {
+function parseDynamic(method, pathname) {
   const segs = pathname.split('/').filter(Boolean);
-  if (segs.length === 3 && segs[0] === 'api') {
-    const [, resource, id] = segs;
-    const tableMap = { sales: 'sales', expenses: 'expenses', dues: 'dues', 'due-paid': 'due_paid', products: 'products', customers: 'customers' };
+  // /api/customers/:id/bills
+  if (segs.length === 4 && segs[0] === 'api' && segs[1] === 'customers' && segs[3] === 'bills' && method === 'GET') {
+    return { type: 'customer-bills', id: segs[2] };
+  }
+  // /api/purchases/:id/items
+  if (segs.length === 4 && segs[0] === 'api' && segs[1] === 'purchases' && segs[3] === 'items' && method === 'GET') {
+    return { type: 'purchase-items', id: segs[2] };
+  }
+  // /api/<resource>/:id  (PUT or DELETE) — "search" is reserved for GET search endpoints, never an id
+  if (segs.length === 3 && segs[0] === 'api' && segs[2] !== 'search') {
+    const resource = segs[1];
+    const id = segs[2];
+    const tableMap = { sales: 'sales', expenses: 'expenses', dues: 'dues', 'due-paid': 'due_paid', products: 'products', customers: 'customers', suppliers: 'suppliers', 'supplier-due-paid': 'supplier_due_paid', 'supplier-dues': 'supplier_dues', 'sales-returns': 'sales_returns', 'purchase-returns': 'purchase_returns' };
     const table = tableMap[resource];
     if (table && method === 'DELETE') return { type: 'delete', table, id };
-    if ((table === 'products' || table === 'customers') && method === 'PUT') return { type: 'put', table, id };
+    if (table && method === 'PUT') return { type: 'put', table, id };
   }
   return null;
 }
@@ -510,37 +699,68 @@ const server = http.createServer(async (req, res) => {
         if (handled !== null) return;
       }
 
-      // Block writes from sales role (only manager can edit/delete/create most things)
+      // Permission gate for non-managers (sales role)
       const isWrite = ['POST', 'PUT', 'DELETE'].includes(req.method);
-      const isCheckoutOrSale = pathname === '/api/checkout' || pathname === '/api/sales' || pathname === '/api/customers' || pathname === '/api/expenses' || pathname === '/api/dues' || pathname === '/api/due-paid';
-      // Sales role CAN create sales/checkout/customers/expenses/dues, but CANNOT edit/delete or manage products/settings
       if (isWrite && !canEdit(session)) {
         const isDelete = req.method === 'DELETE';
         const isPut = req.method === 'PUT';
-        const isProductOrSettingsCreate = pathname === '/api/products';
-        if (isDelete || isPut || isProductOrSettingsCreate) {
+        const managerOnlyCreatePaths = ['/api/products', '/api/suppliers', '/api/purchases', '/api/purchase-returns', '/api/sales-returns', '/api/supplier-due-paid'];
+        if (isDelete || isPut || managerOnlyCreatePaths.includes(pathname)) {
           return send(res, 403, { error: 'Only the manager can do this.' });
         }
       }
 
-      const key = `${req.method} ${pathname}`;
-      if (routes[key]) return await routes[key](req, res, session);
+      const routeKey = `${req.method} ${pathname}`;
+      if (routes[routeKey]) return await routes[routeKey](req, res, session, urlObj.searchParams);
 
-      const dyn = matchDynamic(req.method, pathname, session);
+      const dyn = parseDynamic(req.method, pathname);
+
       if (dyn) {
-        if (dyn.type === 'put' && dyn.table === 'products') {
-          if (!canEdit(session)) return send(res, 403, { error: 'Manager only' });
-          const b = await readBody(req);
-          await sb('PATCH', 'products', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}`, body: { name: b.name, quantity: Number(b.quantity), purchase_price: Number(b.purchase_price), sell_price: Number(b.sell_price) } });
-          return send(res, 200, { ok: true });
+        if (dyn.type === 'customer-bills') {
+          const sales = await sb('GET', 'sales', { query: `customer_id=eq.${dyn.id}&user_id=eq.${session.businessId}&order=id.desc` });
+          const billsMap = new Map();
+          for (const s of (sales || [])) {
+            const k = s.bill_id || ('single-' + s.id);
+            if (!billsMap.has(k)) billsMap.set(k, { bill_id: s.bill_id, bill_no: s.bill_no, date: s.date, items: [], total: 0 });
+            const bill = billsMap.get(k);
+            bill.items.push({ ...s, desc: s.description });
+            bill.total += Number(s.amount);
+          }
+          return send(res, 200, Array.from(billsMap.values()));
         }
-        if (dyn.type === 'put' && dyn.table === 'customers') {
+        if (dyn.type === 'purchase-items') {
+          const items = await sb('GET', 'purchase_items', { query: `purchase_id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
+          return send(res, 200, (items || []).map(i => ({ ...i, desc: i.description })));
+        }
+        if (dyn.type === 'put') {
           const b = await readBody(req);
-          await sb('PATCH', 'customers', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}`, body: { name: b.name, phone: b.phone, address: b.address } });
-          return send(res, 200, { ok: true });
+          if (dyn.table === 'products') {
+            await sb('PATCH', 'products', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}`, body: { name: b.name, quantity: Number(b.quantity), purchase_price: Number(b.purchase_price), sell_price: Number(b.sell_price), unit: b.unit || 'pcs' } });
+            return send(res, 200, { ok: true });
+          }
+          if (dyn.table === 'customers') {
+            await sb('PATCH', 'customers', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}`, body: { name: b.name, phone: b.phone, address: b.address } });
+            return send(res, 200, { ok: true });
+          }
+          if (dyn.table === 'suppliers') {
+            await sb('PATCH', 'suppliers', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}`, body: { name: b.name, phone: b.phone, address: b.address } });
+            return send(res, 200, { ok: true });
+          }
+          if (dyn.table === 'sales') {
+            await sb('PATCH', 'sales', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}`, body: { date: b.date, description: b.desc, amount: Number(b.amount), quantity: b.quantity != null ? Number(b.quantity) : null, unit_price: b.unit_price != null ? Number(b.unit_price) : null } });
+            return send(res, 200, { ok: true });
+          }
+          if (dyn.table === 'expenses') {
+            await sb('PATCH', 'expenses', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}`, body: { date: b.date, description: b.desc, amount: Number(b.amount) } });
+            return send(res, 200, { ok: true });
+          }
+          if (dyn.table === 'dues' || dyn.table === 'due_paid' || dyn.table === 'supplier_dues' || dyn.table === 'supplier_due_paid') {
+            await sb('PATCH', dyn.table, { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}`, body: { date: b.date, party: b.party, amount: Number(b.amount), note: b.note || '' } });
+            return send(res, 200, { ok: true });
+          }
+          return send(res, 400, { error: 'Cannot edit this record type' });
         }
         if (dyn.type === 'delete') {
-          if (!canEdit(session)) return send(res, 403, { error: 'Manager only' });
           await sb('DELETE', dyn.table, { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
           return send(res, 200, { ok: true });
         }
@@ -561,7 +781,7 @@ function localIPs() {
 }
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log('\n✅ Business Manager v4 (Roles + Expiry) is running!\n');
+  console.log('\n✅ Business Manager v5 (Full ERP) is running!\n');
   console.log(`   Local:   http://localhost:${PORT}`);
   localIPs().forEach(ip => console.log(`   Network: http://${ip}:${PORT}`));
   console.log('\n👑 Admin:', ADMIN_USERNAME, '\n');

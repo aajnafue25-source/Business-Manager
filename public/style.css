@@ -168,6 +168,23 @@ td.num { font-weight: 600; }
 .edit-btn { background: none; border: none; color: var(--text-2); cursor: pointer; font-size: 13.5px; padding: 3px 7px; opacity: 0.8; white-space: nowrap; }
 .edit-btn:hover { opacity: 1; color: var(--text); }
 
+/* Search-as-you-type picker (customer / product / supplier / barcode) */
+.search-pick-wrap { position: relative; }
+.search-pick-input { width: 100%; }
+.search-pick-results { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-md); max-height: 260px; overflow-y: auto; z-index: 50; box-shadow: 0 8px 24px rgba(0,0,0,0.18); display: none; }
+.search-pick-results.open { display: block; }
+.search-pick-item { padding: 10px 14px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+.search-pick-item:last-child { border-bottom: none; }
+.search-pick-item:hover, .search-pick-item.active { background: var(--surface-2); }
+.search-pick-item .spi-main { font-weight: 600; }
+.search-pick-item .spi-sub { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+.search-pick-item .spi-stock { float: right; font-size: 11.5px; color: var(--text-3); }
+.search-pick-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 12px; font-size: 13.5px; font-weight: 600; margin-top: 6px; }
+.search-pick-chip button { background: none; border: none; color: var(--text-2); cursor: pointer; font-size: 14px; display: flex; }
+.search-pick-empty { padding: 14px; text-align: center; color: var(--text-2); font-size: 13px; }
+.metric-card-btn { cursor: pointer; border: 1px solid transparent; font-family: inherit; text-align: left; transition: border-color 0.15s; }
+.metric-card-btn:hover { border-color: var(--border-strong); }
+
 .dues-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .dues-grid .list-card { margin-top: 0; }
 

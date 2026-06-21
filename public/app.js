@@ -334,44 +334,166 @@ function viewDueEntry(r, kind) {
   ]);
 }
 
-// ───────── Product & customer option loaders (used by the sale cart) ─────────
+// ───────── Generic search-as-you-type picker ─────────
+// Wires an <input id="{inputId}"> + results <div id="{resultsId}"> to a search API,
+// calling onPick(item) when the user clicks a result or presses Enter on the highlighted one.
+function wireSearchPicker(inputId, resultsId, searchFn, renderItemFn, onPick, opts) {
+  opts = opts || {};
+  const input = document.getElementById(inputId);
+  const results = document.getElementById(resultsId);
+  if (!input || !results) return;
+  let items = [];
+  let activeIndex = -1;
+  let debounceTimer = null;
+
+  function closeResults() {
+    results.classList.remove('open');
+    results.innerHTML = '';
+    activeIndex = -1;
+  }
+
+  function renderResults(list) {
+    items = list;
+    activeIndex = -1;
+    if (!list.length) {
+      results.innerHTML = '<div class="search-pick-empty">' + (opts.emptyText || 'No matches found') + '</div>';
+      results.classList.add('open');
+      return;
+    }
+    results.innerHTML = list.map(function (item, i) {
+      return '<div class="search-pick-item" data-idx="' + i + '">' + renderItemFn(item) + '</div>';
+    }).join('');
+    results.classList.add('open');
+    Array.prototype.forEach.call(results.querySelectorAll('.search-pick-item'), function (el) {
+      el.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        const idx = parseInt(el.dataset.idx, 10);
+        pick(items[idx]);
+      });
+    });
+  }
+
+  function pick(item) {
+    onPick(item);
+    closeResults();
+  }
+
+  input.addEventListener('input', function () {
+    const q = input.value.trim();
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (!q && !opts.showOnEmpty) { closeResults(); return; }
+    debounceTimer = setTimeout(async function () {
+      const list = await searchFn(q);
+      renderResults(list);
+    }, 180);
+  });
+
+  input.addEventListener('focus', function () {
+    if (opts.showOnEmpty && !input.value.trim()) {
+      searchFn('').then(renderResults);
+    } else if (input.value.trim()) {
+      searchFn(input.value.trim()).then(renderResults);
+    }
+  });
+
+  input.addEventListener('keydown', function (e) {
+    if (!results.classList.contains('open')) return;
+    const els = results.querySelectorAll('.search-pick-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIndex = Math.min(activeIndex + 1, els.length - 1);
+      els.forEach(function (el, i) { el.classList.toggle('active', i === activeIndex); });
+      if (els[activeIndex]) els[activeIndex].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIndex = Math.max(activeIndex - 1, 0);
+      els.forEach(function (el, i) { el.classList.toggle('active', i === activeIndex); });
+      if (els[activeIndex]) els[activeIndex].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (activeIndex >= 0 && items[activeIndex]) pick(items[activeIndex]);
+      else if (items.length === 1) pick(items[0]);
+    } else if (e.key === 'Escape') {
+      closeResults();
+    }
+  });
+
+  document.addEventListener('click', function (e) {
+    if (e.target !== input && !results.contains(e.target)) closeResults();
+  });
+
+  return { close: closeResults };
+}
+
+async function searchCustomersApi(q) {
+  return await apiGet('/customers/search?q=' + encodeURIComponent(q));
+}
+async function searchProductsApi(q) {
+  return await apiGet('/products/search?q=' + encodeURIComponent(q));
+}
+async function searchSuppliersApi(q) {
+  return await apiGet('/suppliers/search?q=' + encodeURIComponent(q));
+}
+
+let selectedCartCustomer = null;
+
+function renderCustomerSearchItem(c) {
+  return '<div class="spi-main">' + esc(c.name) + '</div><div class="spi-sub">' + (esc(c.phone) || 'No phone') + '</div>';
+}
+function renderProductSearchItem(p) {
+  return '<div class="spi-main">' + esc(p.name) + '<span class="spi-stock">stock ' + p.quantity + ' ' + esc(p.unit || 'pcs') + '</span></div><div class="spi-sub">' + esc(p.barcode) + ' · ' + fmt(p.sell_price) + '</div>';
+}
+function renderSupplierSearchItem(s) {
+  return '<div class="spi-main">' + esc(s.name) + '</div><div class="spi-sub">' + (esc(s.phone) || 'No phone') + '</div>';
+}
+
+function setupCartCustomerPicker() {
+  wireSearchPicker('cart-customer-search', 'cart-customer-results', searchCustomersApi, renderCustomerSearchItem, function (c) {
+    selectedCartCustomer = c;
+    document.getElementById('cart-customer').value = c.id;
+    document.getElementById('cart-customer-search').value = c.name + (c.phone ? ' — ' + c.phone : '');
+    document.getElementById('cart-customer-name-row').style.display = 'none';
+  }, { showOnEmpty: true, emptyText: 'No customers yet — use "Add new customer" below' });
+
+  const input = document.getElementById('cart-customer-search');
+  if (input) {
+    input.addEventListener('input', function () {
+      if (!input.value.trim()) {
+        selectedCartCustomer = null;
+        document.getElementById('cart-customer').value = '';
+        document.getElementById('cart-customer-name-row').style.display = 'flex';
+      }
+    });
+  }
+}
+
+function setupCartProductPicker() {
+  wireSearchPicker('cart-product-search', 'cart-product-results', searchProductsApi, renderProductSearchItem, function (p) {
+    // One click = auto add to cart (item qty 1 by default, editable before adding more)
+    addProductDirectlyToCart(p);
+    document.getElementById('cart-product-search').value = '';
+  }, { showOnEmpty: true, emptyText: 'No products found — you can still type a custom item below' });
+}
+
+function addProductDirectlyToCart(p) {
+  const costPrice = Number(p.purchase_price) || 0;
+  cart.push({
+    product_id: p.id, desc: p.name, quantity: 1, unit_price: Number(p.sell_price) || 0,
+    amount: Number(p.sell_price) || 0, cost_price: costPrice, unit: p.unit || 'pcs'
+  });
+  renderCart();
+  toast(p.name + ' added to cart');
+}
+
 async function loadProductOptions() {
   products = await apiGet('/products');
-  const sel = document.getElementById('cart-product');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">— Select product / custom item —</option>' +
-    products.map(function (p) {
-      return '<option value="' + p.id + '" data-price="' + p.sell_price + '" data-cost="' + p.purchase_price + '" data-name="' + esc(p.name) + '">' + esc(p.name) + ' (' + esc(p.barcode) + ') — stock ' + p.quantity + '</option>';
-    }).join('');
+  setupCartProductPicker();
 }
 
 async function loadCustomerOptions() {
   customers = await apiGet('/customers');
-  const sel = document.getElementById('cart-customer');
-  if (!sel) return;
-  const prevVal = sel.value;
-  sel.innerHTML = '<option value="">— Walk-in customer —</option>' +
-    customers.map(function (c) {
-      return '<option value="' + c.id + '">' + esc(c.name) + (c.phone ? ' — ' + esc(c.phone) : '') + '</option>';
-    }).join('');
-  if (prevVal) sel.value = prevVal;
+  setupCartCustomerPicker();
 }
-
-document.addEventListener('change', function (e) {
-  if (e.target && e.target.id === 'cart-customer') {
-    const nameRow = document.getElementById('cart-customer-name-row');
-    nameRow.style.display = e.target.value ? 'none' : 'flex';
-  }
-  if (e.target && e.target.id === 'cart-product') {
-    const opt = e.target.selectedOptions[0];
-    const descEl = document.getElementById('cart-desc');
-    const priceEl = document.getElementById('cart-unit-price');
-    if (opt && opt.value) {
-      descEl.value = opt.dataset.name;
-      priceEl.value = parseFloat(opt.dataset.price).toFixed(2);
-    }
-  }
-});
 
 // ───────── Quick add customer (from Sales page) ─────────
 function openQuickAddCustomer() {
@@ -389,10 +511,11 @@ async function submitQuickAddCustomer() {
   const address = document.getElementById('qc-address').value.trim();
   if (!name) return alert('Please enter a customer name.');
   const res = await apiPost('/customers', { name: name, phone: phone, address: address });
-  await loadCustomerOptions();
-  const sel = document.getElementById('cart-customer');
-  if (sel && res.id) {
-    sel.value = res.id;
+  selectedCartCustomer = { id: res.id, name: name, phone: phone };
+  const customerSearchEl = document.getElementById('cart-customer-search');
+  if (customerSearchEl) {
+    document.getElementById('cart-customer').value = res.id;
+    customerSearchEl.value = name + (phone ? ' — ' + phone : '');
     document.getElementById('cart-customer-name-row').style.display = 'none';
   }
   closeQuickAddCustomer();
@@ -406,7 +529,7 @@ function addCartItem() {
   const qty = parseFloat(document.getElementById('cart-qty').value);
   const unitPrice = parseFloat(document.getElementById('cart-unit-price').value);
 
-  if (!desc) return alert('Please enter or select an item.');
+  if (!desc) return alert('Please enter a custom item description (or search and click a product above to add it instantly).');
   if (isNaN(qty) || qty <= 0) return alert('Please enter a valid quantity.');
   if (isNaN(unitPrice) || unitPrice < 0) return alert('Please enter a valid unit price.');
 
@@ -505,7 +628,9 @@ async function checkout() {
   lastBillForPrint = res;
   cart = [];
   renderCart();
+  selectedCartCustomer = null;
   document.getElementById('cart-customer').value = '';
+  document.getElementById('cart-customer-search').value = '';
   document.getElementById('cart-customer-name').value = '';
   document.getElementById('cart-customer-name-row').style.display = 'flex';
   document.getElementById('cart-amount-paid').value = '';
@@ -585,9 +710,31 @@ async function renderSalesPage() {
   window.__salesRows = rows;
   tb.innerHTML = rows.map(function (r, i) {
     return '<tr><td>' + r.date + '</td><td>' + (r.bill_no ? '#' + r.bill_no : '—') + '</td><td>' + esc(r.desc) + '</td><td class="num">' + (r.quantity || '—') + '</td><td class="num" style="color:var(--ok)">' + fmt(r.amount) + '</td>' +
-      actionCell('viewSaleEntry(window.__salesRows[' + i + '])', null, "deleteRow('sales', " + r.id + ', renderSalesPage)') + '</tr>';
+      actionCell('viewSaleEntry(window.__salesRows[' + i + '])', 'editSaleEntry(window.__salesRows[' + i + '])', "deleteRow('sales', " + r.id + ', renderSalesPage)') + '</tr>';
   }).join('');
   document.getElementById('sales-total-val').textContent = fmt(rows.reduce(function (s, r) { return s + r.amount; }, 0));
+}
+
+function editSaleEntry(r) {
+  openEditModal('Edit Sale', [
+    { key: 'date', label: 'Date', type: 'date', value: r.date },
+    { key: 'desc', label: 'Description', type: 'text', value: r.desc },
+    { key: 'quantity', label: 'Quantity', type: 'number', value: r.quantity },
+    { key: 'unit_price', label: 'Unit price (Tk)', type: 'number', value: r.unit_price },
+    { key: 'amount', label: 'Amount (Tk)', type: 'number', value: r.amount }
+  ], async function () {
+    const date = document.getElementById('edit-date').value;
+    const desc = document.getElementById('edit-desc').value.trim();
+    const quantity = document.getElementById('edit-quantity').value;
+    const unit_price = document.getElementById('edit-unit_price').value;
+    const amount = parseFloat(document.getElementById('edit-amount').value);
+    if (!desc || isNaN(amount)) return alert('Please fill in description and amount.');
+    const res = await apiPut('/sales/' + r.id, { date: date, desc: desc, amount: amount, quantity: quantity ? parseFloat(quantity) : null, unit_price: unit_price ? parseFloat(unit_price) : null });
+    if (res && res.error) { alert(res.error); return; }
+    closeEditModal();
+    renderSalesPage();
+    toast('Sale updated');
+  });
 }
 
 async function renderExpensePage() {
@@ -609,9 +756,27 @@ async function renderExpensePage() {
   window.__expRows = rows;
   tb.innerHTML = rows.map(function (r, i) {
     return '<tr><td>' + r.date + '</td><td>' + esc(r.desc) + '</td><td class="num" style="color:var(--danger)">' + fmt(r.amount) + '</td>' +
-      actionCell('viewExpenseEntry(window.__expRows[' + i + '])', null, "deleteRow('expenses', " + r.id + ', renderExpensePage)') + '</tr>';
+      actionCell('viewExpenseEntry(window.__expRows[' + i + '])', 'editExpenseEntry(window.__expRows[' + i + '])', "deleteRow('expenses', " + r.id + ', renderExpensePage)') + '</tr>';
   }).join('');
   document.getElementById('exp-total-val').textContent = fmt(rows.reduce(function (s, r) { return s + r.amount; }, 0));
+}
+
+function editExpenseEntry(r) {
+  openEditModal('Edit Expense', [
+    { key: 'date', label: 'Date', type: 'date', value: r.date },
+    { key: 'desc', label: 'Description', type: 'text', value: r.desc },
+    { key: 'amount', label: 'Amount (Tk)', type: 'number', value: r.amount }
+  ], async function () {
+    const date = document.getElementById('edit-date').value;
+    const desc = document.getElementById('edit-desc').value.trim();
+    const amount = parseFloat(document.getElementById('edit-amount').value);
+    if (!desc || isNaN(amount)) return alert('Please fill in description and amount.');
+    const res = await apiPut('/expenses/' + r.id, { date: date, desc: desc, amount: amount });
+    if (res && res.error) { alert(res.error); return; }
+    closeEditModal();
+    renderExpensePage();
+    toast('Expense updated');
+  });
 }
 
 async function renderDuesPage() {
@@ -630,16 +795,36 @@ async function renderDuesPage() {
   const dtb = document.getElementById('dues-tbody');
   dtb.innerHTML = outstanding.length ? outstanding.map(function (r, i) {
     return '<tr><td>' + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + '</td><td class="num" style="color:var(--warn)">' + fmt(r.amount) + '</td>' +
-      actionCell("viewDueEntry(window.__duesRows[" + i + "],'due')", null, "deleteRow('dues', " + r.id + ', renderDuesPage)') + '</tr>';
+      actionCell("viewDueEntry(window.__duesRows[" + i + "],'due')", "editDueEntry(window.__duesRows[" + i + "],'dues')", "deleteRow('dues', " + r.id + ', renderDuesPage)') + '</tr>';
   }).join('') : '<tr><td colspan="5" class="empty-state">No outstanding dues.</td></tr>';
   document.getElementById('dues-total-val').textContent = fmt(outstanding.reduce(function (s, r) { return s + r.amount; }, 0));
 
   const ptb = document.getElementById('paid-tbody');
   ptb.innerHTML = paid.length ? paid.map(function (r, i) {
     return '<tr><td>' + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + '</td><td class="num" style="color:var(--ok)">' + fmt(r.amount) + '</td>' +
-      actionCell("viewDueEntry(window.__paidRows[" + i + "],'paid')", null, "deleteRow('due-paid', " + r.id + ', renderDuesPage)') + '</tr>';
+      actionCell("viewDueEntry(window.__paidRows[" + i + "],'paid')", "editDueEntry(window.__paidRows[" + i + "],'due-paid')", "deleteRow('due-paid', " + r.id + ', renderDuesPage)') + '</tr>';
   }).join('') : '<tr><td colspan="5" class="empty-state">No payments recorded.</td></tr>';
   document.getElementById('paid-total-val').textContent = fmt(paid.reduce(function (s, r) { return s + r.amount; }, 0));
+}
+
+function editDueEntry(r, table) {
+  openEditModal(table === 'due-paid' ? 'Edit Payment' : 'Edit Due', [
+    { key: 'date', label: 'Date', type: 'date', value: r.date },
+    { key: 'party', label: 'Party', type: 'text', value: r.party },
+    { key: 'amount', label: 'Amount (Tk)', type: 'number', value: r.amount },
+    { key: 'note', label: 'Note', type: 'text', value: r.note }
+  ], async function () {
+    const date = document.getElementById('edit-date').value;
+    const party = document.getElementById('edit-party').value.trim();
+    const amount = parseFloat(document.getElementById('edit-amount').value);
+    const note = document.getElementById('edit-note').value.trim();
+    if (!party || isNaN(amount)) return alert('Please fill in party and amount.');
+    const res = await apiPut('/' + table + '/' + r.id, { date: date, party: party, amount: amount, note: note });
+    if (res && res.error) { alert(res.error); return; }
+    closeEditModal();
+    renderDuesPage();
+    toast('Entry updated');
+  });
 }
 
 // ───────── Products ─────────
@@ -648,12 +833,16 @@ async function addProduct() {
   const quantity = parseFloat(document.getElementById('prod-qty').value) || 0;
   const purchase_price = parseFloat(document.getElementById('prod-purchase').value) || 0;
   const sell_price = parseFloat(document.getElementById('prod-sell').value) || 0;
+  const unit = document.getElementById('prod-unit').value || 'pcs';
+  const barcode = document.getElementById('prod-barcode').value.trim();
   if (!name) return alert('Please enter a product name.');
-  const res = await apiPost('/products', { name: name, quantity: quantity, purchase_price: purchase_price, sell_price: sell_price });
+  const res = await apiPost('/products', { name: name, quantity: quantity, purchase_price: purchase_price, sell_price: sell_price, unit: unit, barcode: barcode });
+  if (res && res.error) { alert(res.error); return; }
   document.getElementById('prod-name').value = '';
   document.getElementById('prod-qty').value = '';
   document.getElementById('prod-purchase').value = '';
   document.getElementById('prod-sell').value = '';
+  document.getElementById('prod-barcode').value = '';
   toast('Product saved — barcode ' + res.barcode);
   renderProductsPage();
 }
@@ -679,7 +868,7 @@ async function renderProductsPage() {
     const lowStock = p.quantity <= 5;
     return '<div class="product-card">' +
       '<div class="pname">' + esc(p.name) + '</div>' +
-      '<div class="pmeta"><span>' + esc(p.barcode) + '</span><span class="' + (lowStock ? 'stock-low' : '') + '">' + p.quantity + ' in stock</span></div>' +
+      '<div class="pmeta"><span>' + esc(p.barcode) + '</span><span class="' + (lowStock ? 'stock-low' : '') + '">' + p.quantity + ' ' + esc(p.unit || 'pcs') + ' in stock</span></div>' +
       '<svg class="pbarcode-svg" data-barcode="' + esc(p.barcode) + '" style="background:#fff;border-radius:6px"></svg>' +
       '<div class="price-row"><span>Purchase</span><span class="v">' + fmt(p.purchase_price) + '</span></div>' +
       '<div class="price-row"><span>Sell</span><span class="v">' + fmt(p.sell_price) + '</span></div>' +
@@ -702,15 +891,17 @@ function editProduct(id) {
   openEditModal('Edit Product', [
     { key: 'name', label: 'Product Name', type: 'text', value: p.name },
     { key: 'quantity', label: 'Quantity', type: 'number', value: p.quantity },
+    { key: 'unit', label: 'Unit (pcs, kg, l, etc.)', type: 'text', value: p.unit || 'pcs' },
     { key: 'purchase_price', label: 'Purchase Price (Tk)', type: 'number', value: p.purchase_price },
     { key: 'sell_price', label: 'Sell Price (Tk)', type: 'number', value: p.sell_price }
   ], async function () {
     const name = document.getElementById('edit-name').value.trim();
     const quantity = parseFloat(document.getElementById('edit-quantity').value) || 0;
+    const unit = document.getElementById('edit-unit').value.trim() || 'pcs';
     const purchase_price = parseFloat(document.getElementById('edit-purchase_price').value) || 0;
     const sell_price = parseFloat(document.getElementById('edit-sell_price').value) || 0;
     if (!name) return alert('Please enter a product name.');
-    const res = await apiPut('/products/' + id, { name: name, quantity: quantity, purchase_price: purchase_price, sell_price: sell_price });
+    const res = await apiPut('/products/' + id, { name: name, quantity: quantity, purchase_price: purchase_price, sell_price: sell_price, unit: unit });
     if (res && res.error) { alert(res.error); return; }
     closeEditModal();
     renderProductsPage();
@@ -797,21 +988,25 @@ function printViaIframe(innerHtml, title) {
 
   const doc = frame.contentWindow.document;
   doc.open();
-  doc.write('<html><head><title>' + esc(title) + '</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap"></head><body style="margin:0;font-family:\'Roboto\',sans-serif">' + innerHtml + '</body></html>');
+  doc.write('<html><head><title>' + esc(title) + '</title><meta charset="utf-8"><style>*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>' + innerHtml + '</body></html>');
   doc.close();
 
   const cleanup = function () { if (frame && frame.parentNode) frame.remove(); };
   frame.contentWindow.onafterprint = cleanup;
-  setTimeout(cleanup, 5000);
+  setTimeout(cleanup, 8000);
 
-  frame.contentWindow.focus();
-  frame.contentWindow.print();
+  // Small delay lets the iframe finish laying out the content before the print dialog opens,
+  // which avoids garbled/misaligned text on the printed page.
+  setTimeout(function () {
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+  }, 150);
 }
 
 function printBarcode() {
   if (!currentBarcodeProduct) return;
   const labelHtml = document.getElementById('modal-barcode-content').innerHTML;
-  printViaIframe('<div style="text-align:center;font-family:\'Roboto\',sans-serif;padding:30px">' + labelHtml + '</div>', 'Print label');
+  printViaIframe('<div style="text-align:center;font-family:Arial,Helvetica,sans-serif;padding:30px">' + labelHtml + '</div>', 'Print label');
 }
 
 // ───────── Customers ─────────
@@ -854,6 +1049,7 @@ async function openCustomerModal(id) {
   const c = summary.find(function (x) { return x.id === id; });
   if (!c) return;
   currentCustomerForModal = c;
+  window.__currentCustomerBills = bills;
 
   const content = document.getElementById('customer-modal-content');
   let billsHtml = '<div class="empty-state">No purchases yet.</div>';
@@ -864,10 +1060,40 @@ async function openCustomerModal(id) {
     }).join('');
   }
   content.innerHTML = '<div class="cust-detail-head"><div><div class="cd-name">' + esc(c.name) + '</div><div class="cd-meta">' + (esc(c.phone) || 'No phone') + (c.address ? ' · ' + esc(c.address) : '') + '</div></div></div>' +
-    '<div class="cust-metric-row"><div class="metric-card"><div class="label">Total purchased</div><div class="value green">' + fmt(c.totalPurchased) + '</div></div><div class="metric-card"><div class="label">Outstanding due</div><div class="value ' + (c.totalDue > 0 ? 'amber' : '') + '">' + fmt(c.totalDue) + '</div></div><div class="metric-card"><div class="label">Bills</div><div class="value">' + c.billCount + '</div></div></div>' +
+    '<div class="cust-metric-row"><button type="button" class="metric-card metric-card-btn" onclick="openCustomerHistoryModal()"><div class="label">Total purchased <i class="ti ti-chevron-right" style="font-size:11px"></i></div><div class="value green">' + fmt(c.totalPurchased) + '</div></button><div class="metric-card"><div class="label">Outstanding due</div><div class="value ' + (c.totalDue > 0 ? 'amber' : '') + '">' + fmt(c.totalDue) + '</div></div><div class="metric-card"><div class="label">Bills</div><div class="value">' + c.billCount + '</div></div></div>' +
     '<div class="list-header" style="padding:0 0 10px"><i class="ti ti-history"></i> Purchase history</div>' +
     '<div id="cust-bill-history">' + billsHtml + '</div>';
   document.getElementById('customerModal').style.display = 'flex';
+}
+
+function openCustomerHistoryModal() {
+  const c = currentCustomerForModal;
+  const bills = window.__currentCustomerBills || [];
+  if (!c) return;
+  // Flatten every item across every bill, newest first
+  const rows = [];
+  bills.forEach(function (b) {
+    b.items.forEach(function (it) {
+      rows.push({ date: b.date, bill_no: b.bill_no, desc: it.desc, quantity: it.quantity, unit_price: it.unit_price, amount: it.amount, id: it.id || 0 });
+    });
+  });
+  rows.sort(function (a, b2) { return b2.date.localeCompare(a.date) || (b2.id - a.id); });
+
+  const content = document.getElementById('customer-history-content');
+  let rowsHtml = '<div class="empty-state">No purchases yet.</div>';
+  if (rows.length) {
+    rowsHtml = '<div class="table-scroll"><table><thead><tr><th>Date</th><th>Bill</th><th>Item</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Amount</th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        return '<tr><td>' + esc(r.date) + '</td><td>' + (r.bill_no ? '#' + r.bill_no : '—') + '</td><td>' + esc(r.desc) + '</td><td class="num">' + (r.quantity != null ? r.quantity : '—') + '</td><td class="num">' + (r.unit_price != null ? fmt(r.unit_price) : '—') + '</td><td class="num" style="color:var(--ok)">' + fmt(r.amount) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  content.innerHTML = '<h3 style="margin:0 0 4px;font-size:16px">' + esc(c.name) + ' — full purchase history</h3>' +
+    '<div style="font-size:12.5px;color:var(--text-2);margin-bottom:16px">Every item purchased, sorted by most recent first</div>' + rowsHtml;
+  document.getElementById('customerHistoryModal').style.display = 'flex';
+}
+
+function closeCustomerHistoryModal() {
+  document.getElementById('customerHistoryModal').style.display = 'none';
 }
 
 function closeCustomerModal() {
@@ -1013,32 +1239,47 @@ function buildPosBillHtml(bill, widthMm) {
   const s = settings;
   const dt = new Date(bill.date + 'T00:00:00');
   const dateStr = isNaN(dt.getTime()) ? bill.date : dt.toLocaleDateString('en-GB') + ' ' + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const billNoStr = bill.billNo != null ? String(bill.billNo).padStart(6, '0') : '—';
   const itemsHtml = bill.items.map(function (it) {
-    return '<tr><td>' + esc(it.desc) + '</td><td class="num">' + it.quantity + '</td><td class="num">' + fmt(it.unit_price != null ? it.unit_price : (it.amount / (it.quantity || 1))) + '</td><td class="num">' + fmt(it.amount) + '</td></tr>';
+    return '<tr><td style="padding:3px 2px;vertical-align:top;word-break:break-word;width:40%">' + esc(it.desc) + '</td>' +
+      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:15%">' + it.quantity + '</td>' +
+      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:20%">' + fmt(it.unit_price != null ? it.unit_price : (it.amount / (it.quantity || 1))) + '</td>' +
+      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:25%">' + fmt(it.amount) + '</td></tr>';
   }).join('');
   const totalQty = bill.items.reduce(function (s2, it) { return s2 + Number(it.quantity || 0); }, 0);
   const widthPx = Math.round(widthMm * 3.7795);
+  const baseFont = widthMm <= 58 ? '11px' : '12px';
+  const customerPhone = (bill.customer && bill.customer.phone) ? bill.customer.phone : '';
 
-  return '<div class="pos-bill" style="width:' + widthPx + 'px;max-width:100%;font-family:\'Roboto\',sans-serif;font-size:' + (widthMm <= 58 ? '11px' : '12px') + '">' +
-    '<div class="pb-center"><div class="pb-name" style="font-size:' + (s.nameFontSize || 14) + 'px">' + esc(s.businessName || 'My Business') + '</div>' +
-    '<div class="pb-sub">' + esc(s.address || '') + '</div>' +
-    (s.phone ? '<div class="pb-sub">' + esc(s.phone) + '</div>' : '') +
-    (s.gst ? '<div class="pb-sub">GST# ' + esc(s.gst) + '</div>' : '') +
-    '<div class="pb-title">Retail Invoice</div></div>' +
-    '<div class="pb-meta">Bill# ' + (bill.billNo != null ? bill.billNo : '—') + '</div>' +
-    '<div class="pb-meta">Date  ' + dateStr + '</div>' +
-    (bill.customer && bill.customer.name ? '<div class="pb-meta">Customer  ' + esc(bill.customer.name) + '</div>' : '') +
-    '<div class="pb-rule"></div>' +
-    '<table class="pb-items"><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead></table>' +
-    '<div class="pb-rule"></div>' +
-    '<table class="pb-items"><tbody>' + itemsHtml + '</tbody></table>' +
-    '<div class="pb-rule"></div>' +
-    '<div class="pb-total-line" style="font-size:' + (s.priceFontSize ? s.priceFontSize + 4 : 17) + 'px;font-weight:700"><span>TOTAL</span><span>' + fmt(bill.total) + '</span></div>' +
-    '<div class="pb-totals" style="font-size:' + (s.priceFontSize || 13) + 'px;font-weight:700"><div class="pb-paid-line"><span>Paid</span><span>' + fmt(bill.amountPaid) + '</span></div>' +
-    (bill.dueAmount > 0 ? '<div class="pb-paid-line" style="font-weight:700"><span>Due</span><span>' + fmt(bill.dueAmount) + '</span></div>' : '') + '</div>' +
-    '<div class="pb-rule"></div>' +
-    '<div class="pb-meta">No of items: ' + bill.items.length + ', Total quantity: ' + totalQty + '</div>' +
-    '<div class="pb-footer">' + esc(s.note || 'Thank you for your visit!') + '</div></div>';
+  return '<div style="width:' + widthPx + 'px;max-width:100%;background:#fff;color:#111;font-family:Roboto,Arial,sans-serif;font-size:' + baseFont + ';padding:14px 12px;box-sizing:border-box">' +
+    '<div style="text-align:center">' +
+    '<div style="font-weight:700;word-break:break-word;font-size:' + (s.nameFontSize || 14) + 'px">' + esc(s.businessName || 'My Business') + '</div>' +
+    '<div style="font-size:12px;margin:2px 0;word-break:break-word">' + esc(s.address || '') + '</div>' +
+    (s.phone ? '<div style="font-size:12px;margin:2px 0">' + esc(s.phone) + '</div>' : '') +
+    (s.gst ? '<div style="font-size:12px;margin:2px 0">GST# ' + esc(s.gst) + '</div>' : '') +
+    '<div style="font-weight:700;text-decoration:underline;margin:10px 0">Retail Invoice</div></div>' +
+    '<div style="font-size:12px;margin:2px 0">Bill# ' + billNoStr + '</div>' +
+    '<div style="font-size:12px;margin:2px 0">Date  ' + dateStr + '</div>' +
+    (bill.customer && bill.customer.name ? '<div style="font-size:12px;margin:2px 0">Customer  ' + esc(bill.customer.name) + '</div>' : '') +
+    (customerPhone ? '<div style="font-size:12px;margin:2px 0">Phone  ' + esc(customerPhone) + '</div>' : '') +
+    '<div style="border-top:1px dashed #000;margin:8px 0"></div>' +
+    '<table style="width:100%;font-size:' + baseFont + ';border-collapse:collapse;table-layout:fixed">' +
+    '<thead><tr>' +
+    '<th style="text-align:left;padding:3px 2px;font-weight:700;width:40%">Item</th>' +
+    '<th style="text-align:right;padding:3px 2px;font-weight:700;width:15%">Qty</th>' +
+    '<th style="text-align:right;padding:3px 2px;font-weight:700;width:20%">Rate</th>' +
+    '<th style="text-align:right;padding:3px 2px;font-weight:700;width:25%">Amount</th>' +
+    '</tr></thead><tbody>' + itemsHtml + '</tbody></table>' +
+    '<div style="border-top:1px dashed #000;margin:8px 0"></div>' +
+    '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:' + (s.priceFontSize ? s.priceFontSize + 4 : 17) + 'px;padding:4px 0"><span>TOTAL</span><span>' + fmt(bill.total) + '</span></div>' +
+    '<div style="font-size:' + (s.priceFontSize || 13) + 'px;font-weight:700">' +
+    '<div style="display:flex;justify-content:space-between;padding:2px 0"><span>Paid</span><span>' + fmt(bill.amountPaid) + '</span></div>' +
+    (bill.dueAmount > 0 ? '<div style="display:flex;justify-content:space-between;padding:2px 0"><span>Due</span><span>' + fmt(bill.dueAmount) + '</span></div>' : '') +
+    '</div>' +
+    '<div style="border-top:1px dashed #000;margin:8px 0"></div>' +
+    '<div style="font-size:12px;margin:2px 0">No of items: ' + bill.items.length + ', Total quantity: ' + totalQty + '</div>' +
+    '<div style="text-align:center;font-weight:700;margin-top:12px;font-size:12.5px;word-break:break-word">' + esc(s.note || 'Thank you for your visit!') + '</div>' +
+    '</div>';
 }
 
 async function openPosModal(bill) {
@@ -1057,7 +1298,7 @@ function printPosBill() {
   if (!lastBillForPrint) return;
   const widthMm = settings.posWidthMm || 80;
   const billHtml = buildPosBillHtml(lastBillForPrint, widthMm);
-  printViaIframe('<div style="display:flex;justify-content:center;padding:6px 0">' + billHtml + '</div>', 'Print bill');
+  printViaIframe('<div style="display:flex;justify-content:center;padding:6px 0;background:#fff">' + billHtml + '</div>', 'Print bill');
 }
 
 // ───────── Dashboard ─────────
@@ -1177,6 +1418,8 @@ document.addEventListener('keydown', function (e) {
   if (document.getElementById('barcodeModal').style.display === 'flex') closeBarcodeModal();
   if (document.getElementById('posModal').style.display === 'flex') closePosModal();
   if (document.getElementById('customerModal').style.display === 'flex') closeCustomerModal();
+  const histModal = document.getElementById('customerHistoryModal');
+  if (histModal && histModal.style.display === 'flex') closeCustomerHistoryModal();
   const quickCust = document.getElementById('quickCustomerModal');
   if (quickCust && quickCust.style.display === 'flex') closeQuickAddCustomer();
   const viewModal = document.getElementById('viewEntryModal');

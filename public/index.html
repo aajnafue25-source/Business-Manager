@@ -110,8 +110,12 @@
 
         <div class="form-row"><label>Date</label><input type="date" id="cart-date" /></div>
 
-        <div class="form-row"><label>Customer (optional)</label>
-          <select id="cart-customer"><option value="">— Walk-in customer —</option></select>
+        <div class="form-row"><label>Customer</label>
+          <div class="search-pick-wrap">
+            <input type="text" id="cart-customer-search" class="search-pick-input" placeholder="🔍 Walk-in customer — type name or phone to search" autocomplete="off" />
+            <input type="hidden" id="cart-customer" value="" />
+            <div id="cart-customer-results" class="search-pick-results"></div>
+          </div>
         </div>
         <div class="form-row" id="cart-customer-name-row" style="display:none">
           <label>Customer name</label><input type="text" id="cart-customer-name" placeholder="Name for this sale" />
@@ -119,9 +123,15 @@
         <button type="button" class="btn-secondary" style="margin-bottom:14px;font-size:12.5px;padding:8px 14px" onclick="openQuickAddCustomer()"><i class="ti ti-user-plus"></i> Add new customer</button>
 
         <div class="cart-add-row">
-          <div class="form-row" style="flex:2"><label>Product</label>
-            <select id="cart-product"><option value="">— Select product / custom item —</option></select>
+          <div class="form-row" style="flex:2"><label>Search product (or type a custom item below)</label>
+            <div class="search-pick-wrap">
+              <input type="text" id="cart-product-search" class="search-pick-input" placeholder="🔍 Type product name or scan/type barcode..." autocomplete="off" />
+              <input type="hidden" id="cart-product" value="" />
+              <div id="cart-product-results" class="search-pick-results"></div>
+            </div>
           </div>
+        </div>
+        <div class="cart-add-row">
           <div class="form-row" style="flex:2"><label>Description</label><input type="text" id="cart-desc" placeholder="Item name" /></div>
           <div class="form-row" style="flex:1"><label>Qty</label><input type="number" id="cart-qty" placeholder="1" min="0" value="1" /></div>
           <div class="form-row" style="flex:1"><label>Unit price</label><input type="number" id="cart-unit-price" placeholder="0.00" min="0" /></div>
@@ -258,8 +268,21 @@
         <div class="product-form-grid">
           <div class="form-row"><label>Product name</label><input type="text" id="prod-name" placeholder="e.g. Rice 5kg" /></div>
           <div class="form-row"><label>Quantity</label><input type="number" id="prod-qty" placeholder="0" min="0" /></div>
+          <div class="form-row"><label>Unit</label>
+            <select id="prod-unit">
+              <option value="pcs">pcs (pieces)</option>
+              <option value="kg">kg</option>
+              <option value="g">gram</option>
+              <option value="l">liter</option>
+              <option value="ml">ml</option>
+              <option value="box">box</option>
+              <option value="pack">pack</option>
+              <option value="dozen">dozen</option>
+            </select>
+          </div>
           <div class="form-row"><label>Purchase price (Tk)</label><input type="number" id="prod-purchase" placeholder="0.00" min="0" /></div>
           <div class="form-row"><label>Sell price (Tk)</label><input type="number" id="prod-sell" placeholder="0.00" min="0" /></div>
+          <div class="form-row"><label>Barcode (leave empty to auto-generate)</label><input type="text" id="prod-barcode" placeholder="Scan or type existing barcode" /></div>
         </div>
         <button class="btn-save" onclick="addProduct()">Save product &amp; generate barcode</button>
       </div>
@@ -392,7 +415,7 @@
 </div>
 
 <!-- POS bill print modal -->
-<div id="posModal" class="modal-overlay" style="display:none">
+<div id="posModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closePosModal()">
   <div class="modal-box modal-box-pos">
     <button class="modal-close" onclick="closePosModal()" aria-label="Close"><i class="ti ti-x"></i></button>
     <div class="pos-preview-wrap">
@@ -406,15 +429,29 @@
 </div>
 
 <!-- Customer detail modal -->
-<div id="customerModal" class="modal-overlay" style="display:none">
+<div id="customerModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeCustomerModal()">
   <div class="modal-box modal-box-wide" style="text-align:left">
     <button class="modal-close" onclick="closeCustomerModal()" aria-label="Close"><i class="ti ti-x"></i></button>
     <div id="customer-modal-content"></div>
+    <div class="modal-actions" style="margin-top:18px">
+      <button class="btn-secondary" style="width:100%" onclick="closeCustomerModal()"><i class="ti ti-arrow-left"></i> Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Customer purchase history (drill-down from "Total purchased") -->
+<div id="customerHistoryModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeCustomerHistoryModal()">
+  <div class="modal-box modal-box-wide" style="text-align:left">
+    <button class="modal-close" onclick="closeCustomerHistoryModal()" aria-label="Close"><i class="ti ti-x"></i></button>
+    <div id="customer-history-content"></div>
+    <div class="modal-actions" style="margin-top:18px">
+      <button class="btn-secondary" style="width:100%" onclick="closeCustomerHistoryModal()"><i class="ti ti-arrow-left"></i> Close</button>
+    </div>
   </div>
 </div>
 
 <!-- Barcode print modal -->
-<div id="barcodeModal" class="modal-overlay" style="display:none">
+<div id="barcodeModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeBarcodeModal()">
   <div class="modal-box modal-box-wide">
     <button class="modal-close" onclick="closeBarcodeModal()" aria-label="Close"><i class="ti ti-x"></i></button>
     <div class="label-editor">
@@ -437,7 +474,7 @@
 </div>
 
 <!-- Quick add customer modal -->
-<div id="quickCustomerModal" class="modal-overlay" style="display:none">
+<div id="quickCustomerModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeQuickAddCustomer()">
   <div class="modal-box">
     <button class="modal-close" onclick="closeQuickAddCustomer()" aria-label="Close"><i class="ti ti-x"></i></button>
     <h3 style="margin:0 0 16px;font-size:16px">Add new customer</h3>
@@ -452,7 +489,7 @@
 </div>
 
 <!-- Entry detail view modal -->
-<div id="viewEntryModal" class="modal-overlay" style="display:none">
+<div id="viewEntryModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeViewEntryModal()">
   <div class="modal-box" style="text-align:left">
     <button class="modal-close" onclick="closeViewEntryModal()" aria-label="Close"><i class="ti ti-x"></i></button>
     <div id="view-entry-content"></div>
