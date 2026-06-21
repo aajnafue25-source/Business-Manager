@@ -9,7 +9,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://eivuhxvrnckgvkwcidpj.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpdnVoeHZybmNrZ3Zrd2NpZHBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2OTE1MjcsImV4cCI6MjA5NzI2NzUyN30.EX4AD5xcM7_I7MEZl5xUzdbM1Lk4p2VTs-3Aus3Tr0M';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || 'PASTE_YOUR_ANON_KEY_HERE';
 const ADMIN_USERNAME = 'nafue';
 const TRIAL_DAYS = 30;
 const PORT = process.env.PORT || 4000;
@@ -315,7 +315,12 @@ const routes = {
     const b = await readBody(req);
     if (!b.date || !b.desc || !b.amount) return send(res, 400, { error: 'date, desc, amount required' });
     const id = await getNextId();
-    const row = { id, user_id: session.businessId, date: b.date, description: b.desc, amount: Number(b.amount), product_id: b.product_id || null, quantity: b.quantity || null, unit_price: b.unit_price != null ? Number(b.unit_price) : null, cost_price: b.cost_price != null ? Number(b.cost_price) : null, bill_id: b.bill_id || null, bill_no: b.bill_no || null, customer_id: b.customer_id || null };
+    let customerName = b.customerName || null;
+    if (b.customer_id && !customerName) {
+      const custs = await sb('GET', 'customers', { query: `id=eq.${b.customer_id}&user_id=eq.${session.businessId}` });
+      if (custs && custs[0]) customerName = custs[0].name;
+    }
+    const row = { id, user_id: session.businessId, date: b.date, description: b.desc, amount: Number(b.amount), product_id: b.product_id || null, quantity: b.quantity || null, unit_price: b.unit_price != null ? Number(b.unit_price) : null, cost_price: b.cost_price != null ? Number(b.cost_price) : null, bill_id: b.bill_id || null, bill_no: b.bill_no || null, customer_id: b.customer_id || null, customer_name: customerName };
     await sb('POST', 'sales', { body: row });
     if (b.product_id && b.quantity) {
       const prods = await sb('GET', 'products', { query: `id=eq.${b.product_id}&user_id=eq.${session.businessId}` });
@@ -334,9 +339,11 @@ const routes = {
     let total = 0;
     const saleRows = [];
     let customerPhone = null;
+    let customerName = b.customerName || null;
+    let customer = null;
     if (b.customer_id) {
       const custs = await sb('GET', 'customers', { query: `id=eq.${b.customer_id}&user_id=eq.${session.businessId}` });
-      if (custs && custs[0]) customerPhone = custs[0].phone;
+      if (custs && custs[0]) { customer = custs[0]; customerPhone = custs[0].phone; customerName = custs[0].name; }
     }
     for (const it of items) {
       const qty = Number(it.quantity) || 0;
@@ -352,7 +359,7 @@ const routes = {
         }
       }
       const rowId = await getNextId();
-      const row = { id: rowId, user_id: session.businessId, date: b.date, description: it.desc, amount, product_id: it.product_id || null, quantity: qty, unit_price: unitPrice, cost_price: costPrice, bill_id: billId, bill_no: billNo, customer_id: b.customer_id || null, customer_phone: customerPhone };
+      const row = { id: rowId, user_id: session.businessId, date: b.date, description: it.desc, amount, product_id: it.product_id || null, quantity: qty, unit_price: unitPrice, cost_price: costPrice, bill_id: billId, bill_no: billNo, customer_id: b.customer_id || null, customer_phone: customerPhone, customer_name: customerName };
       await sb('POST', 'sales', { body: row });
       saleRows.push({ ...row, desc: row.description });
       total += amount;
@@ -360,11 +367,6 @@ const routes = {
     if (!saleRows.length) return send(res, 400, { error: 'no valid items' });
     const amountPaid = Math.min(Number(b.amountPaid) || 0, total);
     const dueAmount = Math.max(0, total - amountPaid);
-    let customer = null;
-    if (b.customer_id) {
-      const custs = await sb('GET', 'customers', { query: `id=eq.${b.customer_id}&user_id=eq.${session.businessId}` });
-      if (custs && custs[0]) customer = custs[0];
-    }
     if (dueAmount > 0) {
       const dueId = await getNextId();
       await sb('POST', 'dues', { body: { id: dueId, user_id: session.businessId, date: b.date, party: customer ? customer.name : (b.customerName || 'Walk-in'), amount: dueAmount, note: `Bill #${billNo}`, customer_id: b.customer_id || null, bill_id: billId, bill_no: billNo } });
@@ -661,6 +663,10 @@ function parseDynamic(method, pathname) {
   if (segs.length === 4 && segs[0] === 'api' && segs[1] === 'purchases' && segs[3] === 'items' && method === 'GET') {
     return { type: 'purchase-items', id: segs[2] };
   }
+  // /api/sales/bill/:billId  (all line items for one bill, any customer)
+  if (segs.length === 4 && segs[0] === 'api' && segs[1] === 'sales' && segs[2] === 'bill' && method === 'GET') {
+    return { type: 'sale-bill', id: segs[3] };
+  }
   // /api/<resource>/:id  (PUT or DELETE) — "search" is reserved for GET search endpoints, never an id
   if (segs.length === 3 && segs[0] === 'api' && segs[2] !== 'search') {
     const resource = segs[1];
@@ -731,6 +737,21 @@ const server = http.createServer(async (req, res) => {
         if (dyn.type === 'purchase-items') {
           const items = await sb('GET', 'purchase_items', { query: `purchase_id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
           return send(res, 200, (items || []).map(i => ({ ...i, desc: i.description })));
+        }
+        if (dyn.type === 'sale-bill') {
+          const sales = await sb('GET', 'sales', { query: `bill_id=eq.${dyn.id}&user_id=eq.${session.businessId}&order=id.asc` });
+          if (!sales || !sales.length) return send(res, 404, { error: 'Bill not found' });
+          const items = sales.map(s => ({ ...s, desc: s.description }));
+          const total = items.reduce((s, r) => s + Number(r.amount), 0);
+          const first = sales[0];
+          let dueForBill = 0;
+          const dues = await sb('GET', 'dues', { query: `bill_id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
+          if (dues && dues.length) dueForBill = dues.reduce((s, d) => s + Number(d.amount), 0);
+          return send(res, 200, {
+            billNo: first.bill_no, date: first.date, total,
+            amountPaid: total - dueForBill, dueAmount: dueForBill,
+            items, customer: first.customer_name ? { name: first.customer_name, phone: first.customer_phone } : null
+          });
         }
         if (dyn.type === 'put') {
           const b = await readBody(req);

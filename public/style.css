@@ -186,6 +186,21 @@ td.num { font-weight: 600; }
 .metric-card-btn { cursor: pointer; border: 1px solid transparent; font-family: inherit; text-align: left; transition: border-color 0.15s; }
 .metric-card-btn:hover { border-color: var(--border-strong); }
 
+/* Clickable table rows (open view popup) */
+tr.clickable-row { cursor: pointer; }
+tr.clickable-row:hover { background: var(--surface-2); }
+
+/* Kebab action menu */
+.row-menu-wrap { position: relative; display: inline-block; }
+.row-menu-btn { background: none; border: none; color: var(--text-2); cursor: pointer; font-size: 16px; padding: 4px 8px; border-radius: 6px; opacity: 0.8; }
+.row-menu-btn:hover { opacity: 1; background: var(--surface-2); }
+.row-menu-dropdown { display: none; position: absolute; top: calc(100% + 4px); right: 0; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-md); min-width: 150px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 60; overflow: hidden; }
+.row-menu-dropdown.open { display: block; }
+.row-menu-dropdown button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: none; padding: 10px 14px; font-size: 13px; color: var(--text); cursor: pointer; }
+.row-menu-dropdown button:hover { background: var(--surface-2); }
+.row-menu-dropdown button.danger-text { color: var(--danger); }
+.danger-text { color: var(--danger) !important; }
+
 .dues-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .dues-grid .list-card { margin-top: 0; }
 

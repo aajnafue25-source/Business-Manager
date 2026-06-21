@@ -308,30 +308,74 @@ function closeViewEntryModal() {
   document.getElementById('viewEntryModal').style.display = 'none';
 }
 
+function openViewEntryModal(title, rows, actions) {
+  const content = document.getElementById('view-entry-content');
+  let actionsHtml = '';
+  if (actions && actions.length) {
+    actionsHtml = '<div class="modal-actions" style="margin-top:18px">' +
+      actions.map(function (a) {
+        return '<button class="' + (a.danger ? 'btn-secondary danger-text' : 'btn-secondary') + '" onclick="' + a.onclick + '"><i class="ti ' + a.icon + '"></i> ' + esc(a.label) + '</button>';
+      }).join('') + '</div>';
+  }
+  content.innerHTML = '<h3 style="margin:0 0 16px;font-size:16px">' + esc(title) + '</h3>' +
+    rows.map(function (r) {
+      return '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13.5px">' +
+        '<span style="color:var(--text-2)">' + esc(r.label) + '</span><span style="font-weight:600;text-align:right">' + r.value + '</span></div>';
+    }).join('') + actionsHtml;
+  document.getElementById('viewEntryModal').style.display = 'flex';
+}
+function closeViewEntryModal() {
+  document.getElementById('viewEntryModal').style.display = 'none';
+}
+
+async function printSaleBillFromRow(r) {
+  if (!r.bill_id) { toast('This sale has no bill to print (manual entry).'); return; }
+  const bill = await apiGet('/sales/bill/' + r.bill_id);
+  if (bill && bill.error) { alert(bill.error); return; }
+  await openPosModal(bill);
+}
+
 function viewSaleEntry(r) {
+  const isManager = currentRole === 'manager';
+  const actions = [];
+  if (r.bill_id) actions.push({ label: 'Print bill', icon: 'ti-printer', onclick: 'printSaleBillFromRow(' + JSON.stringify(r).replace(/"/g, '&quot;') + ')' });
+  if (isManager) {
+    actions.push({ label: 'Edit', icon: 'ti-pencil', onclick: 'closeViewEntryModal();editSaleEntry(' + JSON.stringify(r).replace(/"/g, '&quot;') + ')' });
+    actions.push({ label: 'Delete', icon: 'ti-trash', danger: true, onclick: 'closeViewEntryModal();deleteRow(\'sales\',' + r.id + ',renderSalesPage)' });
+  }
   openViewEntryModal('Sale details', [
     { label: 'Date', value: esc(r.date) },
     { label: 'Bill #', value: r.bill_no ? '#' + r.bill_no : '—' },
+    { label: 'Customer', value: esc(r.customer_name) || 'Walk-in customer' },
     { label: 'Description', value: esc(r.desc) },
     { label: 'Quantity', value: r.quantity != null ? r.quantity : '—' },
     { label: 'Unit price', value: r.unit_price != null ? fmt(r.unit_price) : '—' },
     { label: 'Amount', value: '<span style="color:var(--ok)">' + fmt(r.amount) + '</span>' }
-  ]);
+  ], actions.length ? actions : null);
 }
 function viewExpenseEntry(r) {
+  const isManager = currentRole === 'manager';
   openViewEntryModal('Expense details', [
     { label: 'Date', value: esc(r.date) },
     { label: 'Description', value: esc(r.desc) },
     { label: 'Amount', value: '<span style="color:var(--danger)">' + fmt(r.amount) + '</span>' }
-  ]);
+  ], isManager ? [
+    { label: 'Edit', icon: 'ti-pencil', onclick: 'closeViewEntryModal();editExpenseEntry(' + JSON.stringify(r).replace(/"/g, '&quot;') + ')' },
+    { label: 'Delete', icon: 'ti-trash', danger: true, onclick: 'closeViewEntryModal();deleteRow(\'expenses\',' + r.id + ',renderExpensePage)' }
+  ] : null);
 }
 function viewDueEntry(r, kind) {
+  const isManager = currentRole === 'manager';
+  const table = kind === 'paid' ? 'due-paid' : 'dues';
   openViewEntryModal(kind === 'paid' ? 'Payment details' : 'Due details', [
     { label: 'Date', value: esc(r.date) },
     { label: 'Party', value: esc(r.party) },
     { label: 'Note', value: esc(r.note) || '—' },
     { label: 'Amount', value: '<span style="color:' + (kind === 'paid' ? 'var(--ok)' : 'var(--warn)') + '">' + fmt(r.amount) + '</span>' }
-  ]);
+  ], isManager ? [
+    { label: 'Edit', icon: 'ti-pencil', onclick: 'closeViewEntryModal();editDueEntry(' + JSON.stringify(r).replace(/"/g, '&quot;') + ',\'' + table + '\')' },
+    { label: 'Delete', icon: 'ti-trash', danger: true, onclick: 'closeViewEntryModal();deleteRow(\'' + table + '\',' + r.id + ',renderDuesPage)' }
+  ] : null);
 }
 
 // ───────── Generic search-as-you-type picker ─────────
@@ -682,14 +726,33 @@ async function addDuePaid() {
 }
 
 // ───────── Sales page ─────────
-function actionCell(viewFn, editFn, deleteFn) {
+let openDropdownId = null;
+
+function actionCell(rowUid, menuActions) {
+  // menuActions: array of {label, icon, onclick, danger, managerOnly}
   const isManager = currentRole === 'manager';
-  return '<td style="white-space:nowrap">' +
-    '<button class="edit-btn" onclick="' + viewFn + '" title="View"><i class="ti ti-eye"></i><span class="btn-fallback-text">View</span></button>' +
-    (isManager && editFn ? '<button class="edit-btn" onclick="' + editFn + '" title="Edit"><i class="ti ti-pencil"></i><span class="btn-fallback-text">Edit</span></button>' : '') +
-    (isManager ? '<button class="del-btn" onclick="' + deleteFn + '" title="Delete"><i class="ti ti-trash"></i><span class="btn-fallback-text">Del</span></button>' : '') +
-    '</td>';
+  const visible = (menuActions || []).filter(function (a) { return !a.managerOnly || isManager; });
+  if (!visible.length) return '<td style="width:1%"></td>';
+  const itemsHtml = visible.map(function (a) {
+    return '<button class="' + (a.danger ? 'danger-text' : '') + '" onclick="closeAllRowMenus();' + a.onclick + '"><i class="ti ' + a.icon + '"></i> ' + esc(a.label) + '</button>';
+  }).join('');
+  return '<td style="width:1%;white-space:nowrap" onclick="event.stopPropagation()">' +
+    '<div class="row-menu-wrap">' +
+    '<button class="row-menu-btn" onclick="toggleRowMenu(\'' + rowUid + '\',event)" title="Actions"><i class="ti ti-dots-vertical"></i><span class="btn-fallback-text">⋮</span></button>' +
+    '<div class="row-menu-dropdown" id="menu-' + rowUid + '">' + itemsHtml + '</div></div></td>';
 }
+
+function toggleRowMenu(uid, e) {
+  if (e) e.stopPropagation();
+  const el = document.getElementById('menu-' + uid);
+  const isOpen = el.classList.contains('open');
+  closeAllRowMenus();
+  if (!isOpen) el.classList.add('open');
+}
+function closeAllRowMenus() {
+  document.querySelectorAll('.row-menu-dropdown.open').forEach(function (el) { el.classList.remove('open'); });
+}
+document.addEventListener('click', function () { closeAllRowMenus(); });
 
 async function renderSalesPage() {
   const dateEl = document.getElementById('cart-date');
@@ -703,14 +766,22 @@ async function renderSalesPage() {
   if (to) rows = rows.filter(function (r) { return r.date <= to; });
   const tb = document.getElementById('sales-tbody');
   if (!rows.length) {
-    tb.innerHTML = '<tr><td colspan="6" class="empty-state">No sales found.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="7" class="empty-state">No sales found.</td></tr>';
     document.getElementById('sales-total-val').textContent = fmt(0);
     return;
   }
   window.__salesRows = rows;
   tb.innerHTML = rows.map(function (r, i) {
-    return '<tr><td>' + r.date + '</td><td>' + (r.bill_no ? '#' + r.bill_no : '—') + '</td><td>' + esc(r.desc) + '</td><td class="num">' + (r.quantity || '—') + '</td><td class="num" style="color:var(--ok)">' + fmt(r.amount) + '</td>' +
-      actionCell('viewSaleEntry(window.__salesRows[' + i + '])', 'editSaleEntry(window.__salesRows[' + i + '])', "deleteRow('sales', " + r.id + ', renderSalesPage)') + '</tr>';
+    const uid = 'sale' + r.id;
+    const rowRef = 'window.__salesRows[' + i + ']';
+    const menuActions = [
+      { label: 'View', icon: 'ti-eye', onclick: 'viewSaleEntry(' + rowRef + ')' }
+    ];
+    if (r.bill_id) menuActions.push({ label: 'Print bill', icon: 'ti-printer', onclick: 'printSaleBillFromRow(' + rowRef + ')' });
+    menuActions.push({ label: 'Edit', icon: 'ti-pencil', onclick: 'editSaleEntry(' + rowRef + ')', managerOnly: true });
+    menuActions.push({ label: 'Delete', icon: 'ti-trash', danger: true, onclick: "deleteRow('sales', " + r.id + ', renderSalesPage)', managerOnly: true });
+    return '<tr class="clickable-row" onclick="viewSaleEntry(' + rowRef + ')"><td>' + r.date + '</td><td>' + (r.bill_no ? '#' + r.bill_no : '—') + '</td><td>' + (esc(r.customer_name) || '<span style="color:var(--text-3)">Walk-in</span>') + '</td><td>' + esc(r.desc) + '</td><td class="num">' + (r.quantity || '—') + '</td><td class="num" style="color:var(--ok)">' + fmt(r.amount) + '</td>' +
+      actionCell(uid, menuActions) + '</tr>';
   }).join('');
   document.getElementById('sales-total-val').textContent = fmt(rows.reduce(function (s, r) { return s + r.amount; }, 0));
 }
@@ -755,8 +826,14 @@ async function renderExpensePage() {
   }
   window.__expRows = rows;
   tb.innerHTML = rows.map(function (r, i) {
-    return '<tr><td>' + r.date + '</td><td>' + esc(r.desc) + '</td><td class="num" style="color:var(--danger)">' + fmt(r.amount) + '</td>' +
-      actionCell('viewExpenseEntry(window.__expRows[' + i + '])', 'editExpenseEntry(window.__expRows[' + i + '])', "deleteRow('expenses', " + r.id + ', renderExpensePage)') + '</tr>';
+    const rowRef = 'window.__expRows[' + i + ']';
+    const menuActions = [
+      { label: 'View', icon: 'ti-eye', onclick: 'viewExpenseEntry(' + rowRef + ')' },
+      { label: 'Edit', icon: 'ti-pencil', onclick: 'editExpenseEntry(' + rowRef + ')', managerOnly: true },
+      { label: 'Delete', icon: 'ti-trash', danger: true, onclick: "deleteRow('expenses', " + r.id + ', renderExpensePage)', managerOnly: true }
+    ];
+    return '<tr class="clickable-row" onclick="viewExpenseEntry(' + rowRef + ')"><td>' + r.date + '</td><td>' + esc(r.desc) + '</td><td class="num" style="color:var(--danger)">' + fmt(r.amount) + '</td>' +
+      actionCell('exp' + r.id, menuActions) + '</tr>';
   }).join('');
   document.getElementById('exp-total-val').textContent = fmt(rows.reduce(function (s, r) { return s + r.amount; }, 0));
 }
@@ -794,15 +871,27 @@ async function renderDuesPage() {
 
   const dtb = document.getElementById('dues-tbody');
   dtb.innerHTML = outstanding.length ? outstanding.map(function (r, i) {
-    return '<tr><td>' + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + '</td><td class="num" style="color:var(--warn)">' + fmt(r.amount) + '</td>' +
-      actionCell("viewDueEntry(window.__duesRows[" + i + "],'due')", "editDueEntry(window.__duesRows[" + i + "],'dues')", "deleteRow('dues', " + r.id + ', renderDuesPage)') + '</tr>';
+    const rowRef = "window.__duesRows[" + i + "]";
+    const menuActions = [
+      { label: 'View', icon: 'ti-eye', onclick: "viewDueEntry(" + rowRef + ",'due')" },
+      { label: 'Edit', icon: 'ti-pencil', onclick: "editDueEntry(" + rowRef + ",'dues')", managerOnly: true },
+      { label: 'Delete', icon: 'ti-trash', danger: true, onclick: "deleteRow('dues', " + r.id + ', renderDuesPage)', managerOnly: true }
+    ];
+    return '<tr class="clickable-row" onclick="viewDueEntry(' + rowRef + ",'due')\"><td>" + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + '</td><td class="num" style="color:var(--warn)">' + fmt(r.amount) + '</td>' +
+      actionCell('due' + r.id, menuActions) + '</tr>';
   }).join('') : '<tr><td colspan="5" class="empty-state">No outstanding dues.</td></tr>';
   document.getElementById('dues-total-val').textContent = fmt(outstanding.reduce(function (s, r) { return s + r.amount; }, 0));
 
   const ptb = document.getElementById('paid-tbody');
   ptb.innerHTML = paid.length ? paid.map(function (r, i) {
-    return '<tr><td>' + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + '</td><td class="num" style="color:var(--ok)">' + fmt(r.amount) + '</td>' +
-      actionCell("viewDueEntry(window.__paidRows[" + i + "],'paid')", "editDueEntry(window.__paidRows[" + i + "],'due-paid')", "deleteRow('due-paid', " + r.id + ', renderDuesPage)') + '</tr>';
+    const rowRef = "window.__paidRows[" + i + "]";
+    const menuActions = [
+      { label: 'View', icon: 'ti-eye', onclick: "viewDueEntry(" + rowRef + ",'paid')" },
+      { label: 'Edit', icon: 'ti-pencil', onclick: "editDueEntry(" + rowRef + ",'due-paid')", managerOnly: true },
+      { label: 'Delete', icon: 'ti-trash', danger: true, onclick: "deleteRow('due-paid', " + r.id + ', renderDuesPage)', managerOnly: true }
+    ];
+    return '<tr class="clickable-row" onclick="viewDueEntry(' + rowRef + ",'paid')\"><td>" + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + '</td><td class="num" style="color:var(--ok)">' + fmt(r.amount) + '</td>' +
+      actionCell('paid' + r.id, menuActions) + '</tr>';
   }).join('') : '<tr><td colspan="5" class="empty-state">No payments recorded.</td></tr>';
   document.getElementById('paid-total-val').textContent = fmt(paid.reduce(function (s, r) { return s + r.amount; }, 0));
 }
