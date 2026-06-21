@@ -685,9 +685,9 @@ async function addDuePaid() {
 function actionCell(viewFn, editFn, deleteFn) {
   const isManager = currentRole === 'manager';
   return '<td style="white-space:nowrap">' +
-    '<button class="edit-btn" onclick="' + viewFn + '" title="View"><i class="ti ti-eye"></i></button>' +
-    (isManager && editFn ? '<button class="edit-btn" onclick="' + editFn + '" title="Edit"><i class="ti ti-pencil"></i></button>' : '') +
-    (isManager ? '<button class="del-btn" onclick="' + deleteFn + '" title="Delete"><i class="ti ti-trash"></i></button>' : '') +
+    '<button class="edit-btn" onclick="' + viewFn + '" title="View"><i class="ti ti-eye"></i><span class="btn-fallback-text">View</span></button>' +
+    (isManager && editFn ? '<button class="edit-btn" onclick="' + editFn + '" title="Edit"><i class="ti ti-pencil"></i><span class="btn-fallback-text">Edit</span></button>' : '') +
+    (isManager ? '<button class="del-btn" onclick="' + deleteFn + '" title="Delete"><i class="ti ti-trash"></i><span class="btn-fallback-text">Del</span></button>' : '') +
     '</td>';
 }
 
