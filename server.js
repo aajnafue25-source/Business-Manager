@@ -9,7 +9,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://eivuhxvrnckgvkwcidpj.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_KEY || 'PASTE_YOUR_ANON_KEY_HERE';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpdnVoeHZybmNrZ3Zrd2NpZHBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2OTE1MjcsImV4cCI6MjA5NzI2NzUyN30.EX4AD5xcM7_I7MEZl5xUzdbM1Lk4p2VTs-3Aus3Tr0M';
 const ADMIN_USERNAME = 'nafue';
 const TRIAL_DAYS = 30;
 const PORT = process.env.PORT || 4000;
@@ -671,7 +671,7 @@ function parseDynamic(method, pathname) {
   if (segs.length === 3 && segs[0] === 'api' && segs[2] !== 'search') {
     const resource = segs[1];
     const id = segs[2];
-    const tableMap = { sales: 'sales', expenses: 'expenses', dues: 'dues', 'due-paid': 'due_paid', products: 'products', customers: 'customers', suppliers: 'suppliers', 'supplier-due-paid': 'supplier_due_paid', 'supplier-dues': 'supplier_dues', 'sales-returns': 'sales_returns', 'purchase-returns': 'purchase_returns' };
+    const tableMap = { sales: 'sales', expenses: 'expenses', dues: 'dues', 'due-paid': 'due_paid', products: 'products', customers: 'customers', suppliers: 'suppliers', 'supplier-due-paid': 'supplier_due_paid', 'supplier-dues': 'supplier_dues', 'sales-returns': 'sales_returns', 'purchase-returns': 'purchase_returns', purchases: 'purchases' };
     const table = tableMap[resource];
     if (table && method === 'DELETE') return { type: 'delete', table, id };
     if (table && method === 'PUT') return { type: 'put', table, id };

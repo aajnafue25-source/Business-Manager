@@ -70,11 +70,38 @@
 
   <nav id="nav">
     <button class="active" data-page="dashboard"><i class="ti ti-layout-dashboard"></i> Dashboard</button>
-    <button data-page="sales"><i class="ti ti-chart-line"></i> Sales</button>
+
+    <div class="nav-group">
+      <button class="nav-group-btn" data-page="sales"><i class="ti ti-chart-line"></i> Sales <i class="ti ti-chevron-down nav-caret"></i></button>
+      <div class="nav-dropdown">
+        <button data-page="sales"><i class="ti ti-shopping-cart"></i> New Sale</button>
+        <button data-page="saleslist"><i class="ti ti-list"></i> Sales List</button>
+        <button data-page="salesreturns"><i class="ti ti-arrow-back-up"></i> Sales Returns</button>
+      </div>
+    </div>
+
+    <div class="nav-group">
+      <button class="nav-group-btn" data-page="purchases"><i class="ti ti-truck-delivery"></i> Purchases <i class="ti ti-chevron-down nav-caret"></i></button>
+      <div class="nav-dropdown">
+        <button data-page="purchases"><i class="ti ti-plus"></i> New Purchase</button>
+        <button data-page="purchaselist"><i class="ti ti-list"></i> Purchase List</button>
+        <button data-page="purchasereturns"><i class="ti ti-arrow-back-up"></i> Purchase Returns</button>
+        <button data-page="suppliers"><i class="ti ti-building-warehouse"></i> Suppliers</button>
+      </div>
+    </div>
+
     <button data-page="expenses"><i class="ti ti-receipt"></i> Expenses</button>
     <button data-page="dues"><i class="ti ti-clock"></i> Dues</button>
-    <button data-page="products"><i class="ti ti-package"></i> Products</button>
-    <button data-page="customers"><i class="ti ti-users"></i> Customers</button>
+
+    <div class="nav-group">
+      <button class="nav-group-btn" data-page="products"><i class="ti ti-package"></i> Inventory <i class="ti ti-chevron-down nav-caret"></i></button>
+      <div class="nav-dropdown">
+        <button data-page="products"><i class="ti ti-package"></i> Products</button>
+        <button data-page="customers"><i class="ti ti-users"></i> Customers</button>
+      </div>
+    </div>
+
+    <button data-page="reports"><i class="ti ti-report-analytics"></i> Reports</button>
     <button data-page="settings"><i class="ti ti-settings"></i> Settings</button>
     <button data-page="staff" id="nav-staff" style="display:none"><i class="ti ti-users-group"></i> Staff</button>
     <button data-page="admin" id="nav-admin" style="display:none"><i class="ti ti-shield"></i> Admin</button>
@@ -162,23 +189,227 @@
         </div>
       </div>
 
-      <div class="filter-bar">
-        <input type="date" id="sale-filter-from" />
-        <span class="filter-to">to</span>
-        <input type="date" id="sale-filter-to" />
-        <button class="btn-filter" onclick="renderSalesPage()">Filter</button>
-        <button class="btn-clear" onclick="clearFilter('sales')">Clear</button>
-      </div>
       <div class="list-card">
-        <div class="list-header"><i class="ti ti-chart-line"></i> Sales list</div>
+        <div class="list-header"><i class="ti ti-chart-line"></i> Recent sales (last 10)</div>
         <div class="table-scroll">
         <table>
-          <thead><tr><th>Date</th><th>Bill</th><th>Customer</th><th>Description</th><th class="num">Qty</th><th class="num">Amount (Tk)</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Bill</th><th>Customer</th><th>Description</th><th class="num">Qty</th><th class="num">Amount (Tk)</th></tr></thead>
           <tbody id="sales-tbody"></tbody>
         </table>
         </div>
-        <div class="total-row"><span>Total</span><span id="sales-total-val">Tk 0</span></div>
+        <div class="total-row"><span>Total (all sales)</span><span id="sales-total-val">Tk 0</span></div>
       </div>
+    </section>
+
+    <!-- SALES LIST (full) -->
+    <section id="page-saleslist" class="page">
+      <h1 class="page-title"><i class="ti ti-list"></i> Sales List</h1>
+      <div class="filter-bar">
+        <input type="text" id="saleslist-search" placeholder="🔍 Search bill #, customer, item..." oninput="renderSalesListPage()" style="flex:1;min-width:160px" />
+        <input type="date" id="saleslist-filter-from" />
+        <span class="filter-to">to</span>
+        <input type="date" id="saleslist-filter-to" />
+        <button class="btn-filter" onclick="renderSalesListPage()">Filter</button>
+        <button class="btn-clear" onclick="clearSalesListFilter()">Clear</button>
+      </div>
+      <div class="list-card">
+        <div class="list-header"><i class="ti ti-list"></i> All sales <span id="saleslist-count" style="font-weight:400;color:var(--text-2);font-size:12.5px"></span></div>
+        <div class="table-scroll">
+        <table>
+          <thead><tr><th>Date</th><th>Bill</th><th>Customer</th><th>Description</th><th class="num">Qty</th><th class="num">Amount (Tk)</th></tr></thead>
+          <tbody id="saleslist-tbody"></tbody>
+        </table>
+        </div>
+        <div class="total-row"><span>Total</span><span id="saleslist-total-val">Tk 0</span></div>
+      </div>
+    </section>
+
+    <!-- SALES RETURNS -->
+    <section id="page-salesreturns" class="page">
+      <h1 class="page-title"><i class="ti ti-arrow-back-up"></i> Sales Returns</h1>
+      <div class="entry-section" id="salesreturn-form-section" style="margin-bottom:18px">
+        <h3><i class="ti ti-arrow-back-up" style="color:var(--warn)"></i> Record a sales return</h3>
+        <div class="form-row"><label>Date</label><input type="date" id="sr-date" /></div>
+        <div class="form-row"><label>Product (search to restock, or leave blank for custom)</label>
+          <div class="search-pick-wrap">
+            <input type="text" id="sr-product-search" class="search-pick-input" placeholder="🔍 Search product by name or barcode..." autocomplete="off" />
+            <input type="hidden" id="sr-product" value="" />
+            <div id="sr-product-results" class="search-pick-results"></div>
+          </div>
+        </div>
+        <div class="product-form-grid">
+          <div class="form-row"><label>Description</label><input type="text" id="sr-desc" placeholder="Item returned" /></div>
+          <div class="form-row"><label>Quantity</label><input type="number" id="sr-qty" min="0" placeholder="1" /></div>
+          <div class="form-row"><label>Unit price (Tk)</label><input type="number" id="sr-price" min="0" placeholder="0.00" /></div>
+          <div class="form-row"><label>Bill # (optional)</label><input type="text" id="sr-billno" placeholder="e.g. 12" /></div>
+        </div>
+        <div class="form-row"><label>Note (optional)</label><input type="text" id="sr-note" placeholder="Reason for return" /></div>
+        <button class="btn-save" onclick="addSalesReturn()">Save return &amp; restock</button>
+      </div>
+      <div class="list-card">
+        <div class="list-header"><i class="ti ti-arrow-back-up"></i> Sales returns</div>
+        <div class="table-scroll">
+        <table>
+          <thead><tr><th>Date</th><th>Bill</th><th>Item</th><th class="num">Qty</th><th class="num">Amount (Tk)</th></tr></thead>
+          <tbody id="salesreturns-tbody"></tbody>
+        </table>
+        </div>
+        <div class="total-row"><span>Total returned</span><span id="salesreturns-total-val">Tk 0</span></div>
+      </div>
+    </section>
+
+    <!-- NEW PURCHASE -->
+    <section id="page-purchases" class="page">
+      <h1 class="page-title"><i class="ti ti-truck-delivery"></i> New Purchase</h1>
+      <div class="entry-section" id="purchase-form-section" style="margin-bottom:18px">
+        <h3><i class="ti ti-plus" style="color:var(--ok)"></i> Purchase entry</h3>
+        <div class="form-row"><label>Date</label><input type="date" id="pur-date" /></div>
+        <div class="form-row"><label>Supplier</label>
+          <div class="search-pick-wrap">
+            <input type="text" id="pur-supplier-search" class="search-pick-input" placeholder="🔍 Search supplier by name or phone..." autocomplete="off" />
+            <input type="hidden" id="pur-supplier" value="" />
+            <div id="pur-supplier-results" class="search-pick-results"></div>
+          </div>
+        </div>
+        <button type="button" class="btn-secondary" style="margin-bottom:14px;font-size:12.5px;padding:8px 14px" onclick="openQuickAddSupplier()"><i class="ti ti-plus"></i> Add new supplier</button>
+
+        <div class="cart-add-row">
+          <div class="form-row" style="flex:2"><label>Search product to add to this purchase</label>
+            <div class="search-pick-wrap">
+              <input type="text" id="pur-product-search" class="search-pick-input" placeholder="🔍 Search product name or barcode..." autocomplete="off" />
+              <input type="hidden" id="pur-product" value="" />
+              <div id="pur-product-results" class="search-pick-results"></div>
+            </div>
+          </div>
+        </div>
+        <div class="cart-add-row">
+          <div class="form-row" style="flex:2"><label>Description</label><input type="text" id="pur-desc" placeholder="Item name" /></div>
+          <div class="form-row" style="flex:1"><label>Qty</label><input type="number" id="pur-qty" min="0" placeholder="1" value="1" /></div>
+          <div class="form-row" style="flex:1"><label>Unit cost</label><input type="number" id="pur-cost" min="0" placeholder="0.00" /></div>
+          <button class="btn-add-item" onclick="addPurchaseItem()"><i class="ti ti-plus"></i> Add item</button>
+        </div>
+
+        <div class="cart-table-wrap">
+          <table id="pur-table">
+            <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Cost</th><th class="num">Amount</th><th></th></tr></thead>
+            <tbody id="pur-tbody"><tr><td colspan="5" class="empty-state">No items added yet.</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="cart-summary">
+          <div class="cart-summary-row"><span>Total</span><span id="pur-total-val">Tk 0.00</span></div>
+          <div class="form-row"><label>Payment</label>
+            <div class="pay-toggle">
+              <button type="button" class="pay-btn active" id="pur-pay-full" onclick="setPurPayMode('full')"><i class="ti ti-cash"></i> Full paid</button>
+              <button type="button" class="pay-btn" id="pur-pay-partial" onclick="setPurPayMode('partial')"><i class="ti ti-coin"></i> Partial</button>
+              <button type="button" class="pay-btn" id="pur-pay-due" onclick="setPurPayMode('due')"><i class="ti ti-clock"></i> Full due</button>
+            </div>
+          </div>
+          <div class="form-row" id="pur-paid-row" style="display:none">
+            <label>Amount paid now (Tk)</label><input type="number" id="pur-amount-paid" min="0" placeholder="0.00" />
+          </div>
+          <div class="cart-summary-row due-preview" id="pur-due-preview" style="display:none"><span>Goes to supplier due</span><span id="pur-due-val">Tk 0.00</span></div>
+          <button class="btn-save" onclick="savePurchase()"><i class="ti ti-device-floppy"></i> Save purchase</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- PURCHASE LIST -->
+    <section id="page-purchaselist" class="page">
+      <h1 class="page-title"><i class="ti ti-list"></i> Purchase List</h1>
+      <div class="filter-bar">
+        <input type="text" id="purchaselist-search" placeholder="🔍 Search purchase #, supplier..." oninput="renderPurchaseListPage()" style="flex:1;min-width:160px" />
+      </div>
+      <div class="list-card">
+        <div class="list-header"><i class="ti ti-list"></i> All purchases</div>
+        <div class="table-scroll">
+        <table>
+          <thead><tr><th>Date</th><th>Purchase #</th><th>Supplier</th><th class="num">Total</th><th class="num">Due</th></tr></thead>
+          <tbody id="purchaselist-tbody"></tbody>
+        </table>
+        </div>
+        <div class="total-row"><span>Total purchased</span><span id="purchaselist-total-val">Tk 0</span></div>
+      </div>
+    </section>
+
+    <!-- PURCHASE RETURNS -->
+    <section id="page-purchasereturns" class="page">
+      <h1 class="page-title"><i class="ti ti-arrow-back-up"></i> Purchase Returns</h1>
+      <div class="entry-section" id="purchasereturn-form-section" style="margin-bottom:18px">
+        <h3><i class="ti ti-arrow-back-up" style="color:var(--warn)"></i> Record a purchase return</h3>
+        <div class="form-row"><label>Date</label><input type="date" id="pr-date" /></div>
+        <div class="form-row"><label>Supplier</label>
+          <div class="search-pick-wrap">
+            <input type="text" id="pr-supplier-search" class="search-pick-input" placeholder="🔍 Search supplier..." autocomplete="off" />
+            <input type="hidden" id="pr-supplier" value="" />
+            <div id="pr-supplier-results" class="search-pick-results"></div>
+          </div>
+        </div>
+        <div class="form-row"><label>Product (search to reduce stock)</label>
+          <div class="search-pick-wrap">
+            <input type="text" id="pr-product-search" class="search-pick-input" placeholder="🔍 Search product by name or barcode..." autocomplete="off" />
+            <input type="hidden" id="pr-product" value="" />
+            <div id="pr-product-results" class="search-pick-results"></div>
+          </div>
+        </div>
+        <div class="product-form-grid">
+          <div class="form-row"><label>Description</label><input type="text" id="pr-desc" placeholder="Item returned" /></div>
+          <div class="form-row"><label>Quantity</label><input type="number" id="pr-qty" min="0" placeholder="1" /></div>
+          <div class="form-row"><label>Unit cost (Tk)</label><input type="number" id="pr-cost" min="0" placeholder="0.00" /></div>
+        </div>
+        <div class="form-row"><label>Note (optional)</label><input type="text" id="pr-note" placeholder="Reason for return" /></div>
+        <button class="btn-save" onclick="addPurchaseReturn()">Save return &amp; reduce stock</button>
+      </div>
+      <div class="list-card">
+        <div class="list-header"><i class="ti ti-arrow-back-up"></i> Purchase returns</div>
+        <div class="table-scroll">
+        <table>
+          <thead><tr><th>Date</th><th>Supplier</th><th>Item</th><th class="num">Qty</th><th class="num">Amount (Tk)</th></tr></thead>
+          <tbody id="purchasereturns-tbody"></tbody>
+        </table>
+        </div>
+        <div class="total-row"><span>Total returned</span><span id="purchasereturns-total-val">Tk 0</span></div>
+      </div>
+    </section>
+
+    <!-- SUPPLIERS -->
+    <section id="page-suppliers" class="page">
+      <h1 class="page-title"><i class="ti ti-building-warehouse"></i> Suppliers</h1>
+      <div class="entry-section" id="supplier-form-section" style="margin-bottom:18px">
+        <h3><i class="ti ti-plus" style="color:var(--ok)"></i> Add supplier</h3>
+        <div class="product-form-grid">
+          <div class="form-row"><label>Name</label><input type="text" id="sup-name" placeholder="Supplier name" /></div>
+          <div class="form-row"><label>Phone</label><input type="text" id="sup-phone" placeholder="01XXXXXXXXX" /></div>
+          <div class="form-row"><label>Address</label><input type="text" id="sup-address" placeholder="Optional address" /></div>
+        </div>
+        <button class="btn-save" onclick="addSupplier()">Save supplier</button>
+      </div>
+      <div class="filter-bar">
+        <input type="text" id="sup-search" placeholder="🔍 Search suppliers by name or phone..." oninput="renderSuppliersPage()" style="flex:1;min-width:160px" />
+      </div>
+      <div class="list-card">
+        <div class="list-header"><i class="ti ti-building-warehouse"></i> Supplier list</div>
+        <div class="table-scroll">
+        <table>
+          <thead><tr><th>Name</th><th>Phone</th><th class="num">Total purchased</th><th class="num">You owe</th></tr></thead>
+          <tbody id="suppliers-tbody"></tbody>
+        </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- REPORTS -->
+    <section id="page-reports" class="page">
+      <h1 class="page-title"><i class="ti ti-report-analytics"></i> Reports</h1>
+      <div class="filter-bar">
+        <span style="font-size:13px;color:var(--text-2)">Date range:</span>
+        <input type="date" id="rep-from" />
+        <span class="filter-to">to</span>
+        <input type="date" id="rep-to" />
+        <button class="btn-filter" onclick="renderReportsPage()">Apply</button>
+        <button class="btn-clear" onclick="clearReportsFilter()">All time</button>
+      </div>
+      <div id="reports-content"></div>
     </section>
 
     <!-- EXPENSES -->
@@ -204,7 +435,7 @@
         <div class="list-header"><i class="ti ti-receipt"></i> Expenses list</div>
         <div class="table-scroll">
         <table>
-          <thead><tr><th>Date</th><th>Description</th><th class="num">Amount (Tk)</th><th></th></tr></thead>
+          <thead><tr><th>Date</th><th>Description</th><th class="num">Amount (Tk)</th></tr></thead>
           <tbody id="exp-tbody"></tbody>
         </table>
         </div>
@@ -240,7 +471,7 @@
           <div class="list-header"><i class="ti ti-alert-circle" style="color:var(--warn)"></i> Outstanding dues</div>
           <div class="table-scroll">
           <table>
-            <thead><tr><th>Date</th><th>Party</th><th>Note</th><th class="num">Amount</th><th></th></tr></thead>
+            <thead><tr><th>Date</th><th>Party</th><th>Note</th><th class="num">Amount</th></tr></thead>
             <tbody id="dues-tbody"></tbody>
           </table>
           </div>
@@ -250,7 +481,7 @@
           <div class="list-header"><i class="ti ti-circle-check" style="color:var(--ok)"></i> Paid dues</div>
           <div class="table-scroll">
           <table>
-            <thead><tr><th>Date</th><th>Party</th><th>Note</th><th class="num">Amount</th><th></th></tr></thead>
+            <thead><tr><th>Date</th><th>Party</th><th>Note</th><th class="num">Amount</th></tr></thead>
             <tbody id="paid-tbody"></tbody>
           </table>
           </div>
@@ -484,6 +715,21 @@
     <div class="modal-actions" style="margin-top:16px">
       <button class="btn-secondary" onclick="closeQuickAddCustomer()">Cancel</button>
       <button class="btn-save" style="width:auto;flex:1" onclick="submitQuickAddCustomer()">Save customer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Quick add supplier modal -->
+<div id="quickSupplierModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeQuickAddSupplier()">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeQuickAddSupplier()" aria-label="Close"><i class="ti ti-x"></i></button>
+    <h3 style="margin:0 0 16px;font-size:16px">Add new supplier</h3>
+    <div class="form-row"><label>Name</label><input type="text" id="qs-name" placeholder="Supplier name" /></div>
+    <div class="form-row"><label>Phone number</label><input type="text" id="qs-phone" placeholder="01XXXXXXXXX" /></div>
+    <div class="form-row"><label>Address</label><input type="text" id="qs-address" placeholder="Optional address" /></div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn-secondary" onclick="closeQuickAddSupplier()">Cancel</button>
+      <button class="btn-save" style="width:auto;flex:1" onclick="submitQuickAddSupplier()">Save supplier</button>
     </div>
   </div>
 </div>

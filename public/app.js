@@ -201,23 +201,41 @@ function initApp() {
 })();
 
 // ───────── Navigation ─────────
-document.querySelectorAll('nav button').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('page-' + btn.dataset.page).classList.add('active');
-    document.getElementById('nav').classList.remove('open');
-    if (btn.dataset.page === 'dashboard') renderDashboard();
-    if (btn.dataset.page === 'admin') renderAdminPage();
-    if (btn.dataset.page === 'sales') { loadProductOptions(); loadCustomerOptions(); renderSalesPage(); }
-    if (btn.dataset.page === 'expenses') renderExpensePage();
-    if (btn.dataset.page === 'dues') renderDuesPage();
-    if (btn.dataset.page === 'products') renderProductsPage();
-    if (btn.dataset.page === 'customers') renderCustomersPage();
-    if (btn.dataset.page === 'settings') renderSettingsPage();
-    if (btn.dataset.page === 'staff') renderStaffPage();
-  });
+const PAGE_RENDERERS = {
+  dashboard: renderDashboard,
+  admin: renderAdminPage,
+  sales: function () { loadProductOptions(); loadCustomerOptions(); renderSalesPage(); },
+  saleslist: renderSalesListPage,
+  salesreturns: renderSalesReturnsPage,
+  purchases: function () { setupPurchasePage(); renderPurchasePage(); },
+  purchaselist: renderPurchaseListPage,
+  purchasereturns: renderPurchaseReturnsPage,
+  suppliers: renderSuppliersPage,
+  expenses: renderExpensePage,
+  dues: renderDuesPage,
+  products: renderProductsPage,
+  customers: renderCustomersPage,
+  reports: renderReportsPage,
+  settings: renderSettingsPage,
+  staff: renderStaffPage
+};
+
+function navigateTo(page) {
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const pageEl = document.getElementById('page-' + page);
+  if (!pageEl) return;
+  pageEl.classList.add('active');
+  // Mark matching nav buttons active (both group button and dropdown item)
+  document.querySelectorAll('nav button[data-page="' + page + '"]').forEach(b => b.classList.add('active'));
+  document.getElementById('nav').classList.remove('open');
+  if (PAGE_RENDERERS[page]) PAGE_RENDERERS[page]();
+}
+
+document.getElementById('nav').addEventListener('click', function (e) {
+  const btn = e.target.closest('button[data-page]');
+  if (!btn) return;
+  navigateTo(btn.dataset.page);
 });
 
 document.getElementById('menuToggle').addEventListener('click', () => {
@@ -283,8 +301,10 @@ async function deleteRow(table, id, after) {
 
 function clearFilter(type) {
   if (type === 'sales') {
-    document.getElementById('sale-filter-from').value = '';
-    document.getElementById('sale-filter-to').value = '';
+    const f = document.getElementById('sale-filter-from');
+    const t = document.getElementById('sale-filter-to');
+    if (f) f.value = '';
+    if (t) t.value = '';
     renderSalesPage();
   }
   if (type === 'expenses') {
@@ -295,19 +315,6 @@ function clearFilter(type) {
 }
 
 // ───────── Entry detail "view" modal ─────────
-function openViewEntryModal(title, rows) {
-  const content = document.getElementById('view-entry-content');
-  content.innerHTML = '<h3 style="margin:0 0 16px;font-size:16px">' + esc(title) + '</h3>' +
-    rows.map(function (r) {
-      return '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13.5px">' +
-        '<span style="color:var(--text-2)">' + esc(r.label) + '</span><span style="font-weight:600;text-align:right">' + r.value + '</span></div>';
-    }).join('');
-  document.getElementById('viewEntryModal').style.display = 'flex';
-}
-function closeViewEntryModal() {
-  document.getElementById('viewEntryModal').style.display = 'none';
-}
-
 function openViewEntryModal(title, rows, actions) {
   const content = document.getElementById('view-entry-content');
   let actionsHtml = '';
@@ -726,64 +733,65 @@ async function addDuePaid() {
 }
 
 // ───────── Sales page ─────────
-let openDropdownId = null;
+// Rows are click-to-open (view popup holds Print/Edit/Delete). No inline action column.
 
-function actionCell(rowUid, menuActions) {
-  // menuActions: array of {label, icon, onclick, danger, managerOnly}
-  const isManager = currentRole === 'manager';
-  const visible = (menuActions || []).filter(function (a) { return !a.managerOnly || isManager; });
-  if (!visible.length) return '<td style="width:1%"></td>';
-  const itemsHtml = visible.map(function (a) {
-    return '<button class="' + (a.danger ? 'danger-text' : '') + '" onclick="closeAllRowMenus();' + a.onclick + '"><i class="ti ' + a.icon + '"></i> ' + esc(a.label) + '</button>';
-  }).join('');
-  return '<td style="width:1%;white-space:nowrap" onclick="event.stopPropagation()">' +
-    '<div class="row-menu-wrap">' +
-    '<button class="row-menu-btn" onclick="toggleRowMenu(\'' + rowUid + '\',event)" title="Actions"><i class="ti ti-dots-vertical"></i><span class="btn-fallback-text">⋮</span></button>' +
-    '<div class="row-menu-dropdown" id="menu-' + rowUid + '">' + itemsHtml + '</div></div></td>';
+function salesRowHtml(r, rowRef) {
+  return '<tr class="clickable-row" onclick="viewSaleEntry(' + rowRef + ')"><td>' + r.date + '</td><td>' + (r.bill_no ? '#' + r.bill_no : '—') + '</td><td>' + (esc(r.customer_name) || '<span style="color:var(--text-3)">Walk-in</span>') + '</td><td>' + esc(r.desc) + '</td><td class="num">' + (r.quantity || '—') + '</td><td class="num" style="color:var(--ok)">' + fmt(r.amount) + '</td></tr>';
 }
-
-function toggleRowMenu(uid, e) {
-  if (e) e.stopPropagation();
-  const el = document.getElementById('menu-' + uid);
-  const isOpen = el.classList.contains('open');
-  closeAllRowMenus();
-  if (!isOpen) el.classList.add('open');
-}
-function closeAllRowMenus() {
-  document.querySelectorAll('.row-menu-dropdown.open').forEach(function (el) { el.classList.remove('open'); });
-}
-document.addEventListener('click', function () { closeAllRowMenus(); });
 
 async function renderSalesPage() {
   const dateEl = document.getElementById('cart-date');
   if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
 
-  const from = document.getElementById('sale-filter-from').value;
-  const to = document.getElementById('sale-filter-to').value;
+  let rows = await apiGet('/sales');
+  rows.sort(function (a, b) { return b.date.localeCompare(a.date) || b.id - a.id; });
+  window.__salesRows = rows;
+  const recent = rows.slice(0, 10);
+  const tb = document.getElementById('sales-tbody');
+  if (!recent.length) {
+    tb.innerHTML = '<tr><td colspan="6" class="empty-state">No sales yet. Make your first sale above.</td></tr>';
+    document.getElementById('sales-total-val').textContent = fmt(0);
+    return;
+  }
+  tb.innerHTML = recent.map(function (r, i) {
+    return salesRowHtml(r, 'window.__salesRows[' + i + ']');
+  }).join('');
+  document.getElementById('sales-total-val').textContent = fmt(rows.reduce(function (s, r) { return s + r.amount; }, 0));
+}
+
+async function renderSalesListPage() {
+  const from = document.getElementById('saleslist-filter-from').value;
+  const to = document.getElementById('saleslist-filter-to').value;
+  const search = (document.getElementById('saleslist-search').value || '').toLowerCase();
   let rows = await apiGet('/sales');
   rows.sort(function (a, b) { return b.date.localeCompare(a.date) || b.id - a.id; });
   if (from) rows = rows.filter(function (r) { return r.date >= from; });
   if (to) rows = rows.filter(function (r) { return r.date <= to; });
-  const tb = document.getElementById('sales-tbody');
+  if (search) rows = rows.filter(function (r) {
+    return (r.desc || '').toLowerCase().includes(search) ||
+      (r.customer_name || '').toLowerCase().includes(search) ||
+      (r.bill_no ? String(r.bill_no) : '').includes(search);
+  });
+  window.__salesListRows = rows;
+  const tb = document.getElementById('saleslist-tbody');
   if (!rows.length) {
-    tb.innerHTML = '<tr><td colspan="7" class="empty-state">No sales found.</td></tr>';
-    document.getElementById('sales-total-val').textContent = fmt(0);
+    tb.innerHTML = '<tr><td colspan="6" class="empty-state">No sales found.</td></tr>';
+    document.getElementById('saleslist-total-val').textContent = fmt(0);
+    document.getElementById('saleslist-count').textContent = '0 sales';
     return;
   }
-  window.__salesRows = rows;
   tb.innerHTML = rows.map(function (r, i) {
-    const uid = 'sale' + r.id;
-    const rowRef = 'window.__salesRows[' + i + ']';
-    const menuActions = [
-      { label: 'View', icon: 'ti-eye', onclick: 'viewSaleEntry(' + rowRef + ')' }
-    ];
-    if (r.bill_id) menuActions.push({ label: 'Print bill', icon: 'ti-printer', onclick: 'printSaleBillFromRow(' + rowRef + ')' });
-    menuActions.push({ label: 'Edit', icon: 'ti-pencil', onclick: 'editSaleEntry(' + rowRef + ')', managerOnly: true });
-    menuActions.push({ label: 'Delete', icon: 'ti-trash', danger: true, onclick: "deleteRow('sales', " + r.id + ', renderSalesPage)', managerOnly: true });
-    return '<tr class="clickable-row" onclick="viewSaleEntry(' + rowRef + ')"><td>' + r.date + '</td><td>' + (r.bill_no ? '#' + r.bill_no : '—') + '</td><td>' + (esc(r.customer_name) || '<span style="color:var(--text-3)">Walk-in</span>') + '</td><td>' + esc(r.desc) + '</td><td class="num">' + (r.quantity || '—') + '</td><td class="num" style="color:var(--ok)">' + fmt(r.amount) + '</td>' +
-      actionCell(uid, menuActions) + '</tr>';
+    return salesRowHtml(r, 'window.__salesListRows[' + i + ']');
   }).join('');
-  document.getElementById('sales-total-val').textContent = fmt(rows.reduce(function (s, r) { return s + r.amount; }, 0));
+  document.getElementById('saleslist-total-val').textContent = fmt(rows.reduce(function (s, r) { return s + r.amount; }, 0));
+  document.getElementById('saleslist-count').textContent = rows.length + ' sale' + (rows.length === 1 ? '' : 's');
+}
+
+function clearSalesListFilter() {
+  document.getElementById('saleslist-filter-from').value = '';
+  document.getElementById('saleslist-filter-to').value = '';
+  document.getElementById('saleslist-search').value = '';
+  renderSalesListPage();
 }
 
 function editSaleEntry(r) {
@@ -827,13 +835,7 @@ async function renderExpensePage() {
   window.__expRows = rows;
   tb.innerHTML = rows.map(function (r, i) {
     const rowRef = 'window.__expRows[' + i + ']';
-    const menuActions = [
-      { label: 'View', icon: 'ti-eye', onclick: 'viewExpenseEntry(' + rowRef + ')' },
-      { label: 'Edit', icon: 'ti-pencil', onclick: 'editExpenseEntry(' + rowRef + ')', managerOnly: true },
-      { label: 'Delete', icon: 'ti-trash', danger: true, onclick: "deleteRow('expenses', " + r.id + ', renderExpensePage)', managerOnly: true }
-    ];
-    return '<tr class="clickable-row" onclick="viewExpenseEntry(' + rowRef + ')"><td>' + r.date + '</td><td>' + esc(r.desc) + '</td><td class="num" style="color:var(--danger)">' + fmt(r.amount) + '</td>' +
-      actionCell('exp' + r.id, menuActions) + '</tr>';
+    return '<tr class="clickable-row" onclick="viewExpenseEntry(' + rowRef + ')"><td>' + r.date + '</td><td>' + esc(r.desc) + '</td><td class="num" style="color:var(--danger)">' + fmt(r.amount) + '</td></tr>';
   }).join('');
   document.getElementById('exp-total-val').textContent = fmt(rows.reduce(function (s, r) { return s + r.amount; }, 0));
 }
@@ -872,27 +874,15 @@ async function renderDuesPage() {
   const dtb = document.getElementById('dues-tbody');
   dtb.innerHTML = outstanding.length ? outstanding.map(function (r, i) {
     const rowRef = "window.__duesRows[" + i + "]";
-    const menuActions = [
-      { label: 'View', icon: 'ti-eye', onclick: "viewDueEntry(" + rowRef + ",'due')" },
-      { label: 'Edit', icon: 'ti-pencil', onclick: "editDueEntry(" + rowRef + ",'dues')", managerOnly: true },
-      { label: 'Delete', icon: 'ti-trash', danger: true, onclick: "deleteRow('dues', " + r.id + ', renderDuesPage)', managerOnly: true }
-    ];
-    return '<tr class="clickable-row" onclick="viewDueEntry(' + rowRef + ",'due')\"><td>" + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + '</td><td class="num" style="color:var(--warn)">' + fmt(r.amount) + '</td>' +
-      actionCell('due' + r.id, menuActions) + '</tr>';
-  }).join('') : '<tr><td colspan="5" class="empty-state">No outstanding dues.</td></tr>';
+    return '<tr class="clickable-row" onclick="viewDueEntry(' + rowRef + ",'due')\"><td>" + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + '</td><td class="num" style="color:var(--warn)">' + fmt(r.amount) + '</td></tr>';
+  }).join('') : '<tr><td colspan="4" class="empty-state">No outstanding dues.</td></tr>';
   document.getElementById('dues-total-val').textContent = fmt(outstanding.reduce(function (s, r) { return s + r.amount; }, 0));
 
   const ptb = document.getElementById('paid-tbody');
   ptb.innerHTML = paid.length ? paid.map(function (r, i) {
     const rowRef = "window.__paidRows[" + i + "]";
-    const menuActions = [
-      { label: 'View', icon: 'ti-eye', onclick: "viewDueEntry(" + rowRef + ",'paid')" },
-      { label: 'Edit', icon: 'ti-pencil', onclick: "editDueEntry(" + rowRef + ",'due-paid')", managerOnly: true },
-      { label: 'Delete', icon: 'ti-trash', danger: true, onclick: "deleteRow('due-paid', " + r.id + ', renderDuesPage)', managerOnly: true }
-    ];
-    return '<tr class="clickable-row" onclick="viewDueEntry(' + rowRef + ",'paid')\"><td>" + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + '</td><td class="num" style="color:var(--ok)">' + fmt(r.amount) + '</td>' +
-      actionCell('paid' + r.id, menuActions) + '</tr>';
-  }).join('') : '<tr><td colspan="5" class="empty-state">No payments recorded.</td></tr>';
+    return '<tr class="clickable-row" onclick="viewDueEntry(' + rowRef + ",'paid')\"><td>" + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + '</td><td class="num" style="color:var(--ok)">' + fmt(r.amount) + '</td></tr>';
+  }).join('') : '<tr><td colspan="4" class="empty-state">No payments recorded.</td></tr>';
   document.getElementById('paid-total-val').textContent = fmt(paid.reduce(function (s, r) { return s + r.amount; }, 0));
 }
 
@@ -1501,6 +1491,539 @@ async function adminDelete(userId) {
   renderAdminPage();
 }
 
+// ═══════════════════════════════════════════════════════
+//  STAGE 2 — FULL ERP MODULES
+// ═══════════════════════════════════════════════════════
+
+// ───────── Suppliers ─────────
+async function addSupplier() {
+  const name = document.getElementById('sup-name').value.trim();
+  const phone = document.getElementById('sup-phone').value.trim();
+  const address = document.getElementById('sup-address').value.trim();
+  if (!name) return alert('Please enter a supplier name.');
+  const res = await apiPost('/suppliers', { name: name, phone: phone, address: address });
+  if (res && res.error) { alert(res.error); return; }
+  document.getElementById('sup-name').value = '';
+  document.getElementById('sup-phone').value = '';
+  document.getElementById('sup-address').value = '';
+  toast('Supplier saved');
+  renderSuppliersPage();
+}
+
+async function renderSuppliersPage() {
+  const isManager = currentRole === 'manager';
+  const formSection = document.getElementById('supplier-form-section');
+  if (formSection) formSection.style.display = isManager ? 'block' : 'none';
+  const list = await apiGet('/suppliers-summary');
+  const search = (document.getElementById('sup-search').value || '').toLowerCase();
+  let filtered = list;
+  if (search) filtered = list.filter(function (s) { return s.name.toLowerCase().includes(search) || (s.phone || '').toLowerCase().includes(search); });
+  filtered.sort(function (a, b) { return b.id - a.id; });
+  const tb = document.getElementById('suppliers-tbody');
+  if (!filtered.length) {
+    tb.innerHTML = '<tr><td colspan="4" class="empty-state">No suppliers found.</td></tr>';
+    return;
+  }
+  window.__suppliersRows = filtered;
+  tb.innerHTML = filtered.map(function (s) {
+    return '<tr class="clickable-row" onclick="viewSupplier(' + s.id + ')"><td style="font-weight:600">' + esc(s.name) + '</td><td>' + (esc(s.phone) || '—') + '</td><td class="num">' + fmt(s.totalPurchased) + '</td><td class="num" style="color:' + (s.totalDue > 0 ? 'var(--warn)' : 'var(--text-3)') + '">' + (s.totalDue > 0 ? fmt(s.totalDue) : '—') + '</td></tr>';
+  }).join('');
+}
+
+function viewSupplier(id) {
+  const s = (window.__suppliersRows || []).find(function (x) { return x.id === id; });
+  if (!s) return;
+  const isManager = currentRole === 'manager';
+  const actions = [];
+  if (isManager && s.totalDue > 0) actions.push({ label: 'Pay due', icon: 'ti-cash', onclick: 'closeViewEntryModal();paySupplierDue(' + s.id + ',"' + esc(s.name).replace(/"/g, '&quot;') + '",' + s.totalDue + ')' });
+  if (isManager) actions.push({ label: 'Edit', icon: 'ti-pencil', onclick: 'closeViewEntryModal();editSupplier(' + s.id + ')' });
+  if (isManager) actions.push({ label: 'Delete', icon: 'ti-trash', danger: true, onclick: 'closeViewEntryModal();deleteRow(\'suppliers\',' + s.id + ',renderSuppliersPage)' });
+  openViewEntryModal('Supplier — ' + esc(s.name), [
+    { label: 'Phone', value: esc(s.phone) || '—' },
+    { label: 'Address', value: esc(s.address) || '—' },
+    { label: 'Total purchased', value: fmt(s.totalPurchased) },
+    { label: 'Purchases', value: s.purchaseCount },
+    { label: 'You owe (due)', value: '<span style="color:' + (s.totalDue > 0 ? 'var(--warn)' : 'var(--ok)') + '">' + fmt(s.totalDue) + '</span>' }
+  ], actions.length ? actions : null);
+}
+
+function editSupplier(id) {
+  const s = (window.__suppliersRows || []).find(function (x) { return x.id === id; });
+  if (!s) return;
+  openEditModal('Edit Supplier', [
+    { key: 'name', label: 'Name', type: 'text', value: s.name },
+    { key: 'phone', label: 'Phone', type: 'text', value: s.phone },
+    { key: 'address', label: 'Address', type: 'text', value: s.address }
+  ], async function () {
+    const name = document.getElementById('edit-name').value.trim();
+    const phone = document.getElementById('edit-phone').value.trim();
+    const address = document.getElementById('edit-address').value.trim();
+    if (!name) return alert('Please enter a name.');
+    const res = await apiPut('/suppliers/' + id, { name: name, phone: phone, address: address });
+    if (res && res.error) { alert(res.error); return; }
+    closeEditModal();
+    renderSuppliersPage();
+    toast('Supplier updated');
+  });
+}
+
+async function paySupplierDue(id, name, maxDue) {
+  openEditModal('Pay supplier due — ' + name, [
+    { key: 'date', label: 'Date', type: 'date', value: new Date().toISOString().slice(0, 10) },
+    { key: 'amount', label: 'Amount paying (Tk)', type: 'number', value: maxDue },
+    { key: 'note', label: 'Note', type: 'text', value: '' }
+  ], async function () {
+    const date = document.getElementById('edit-date').value;
+    const amount = parseFloat(document.getElementById('edit-amount').value);
+    const note = document.getElementById('edit-note').value.trim();
+    if (isNaN(amount) || amount <= 0) return alert('Please enter a valid amount.');
+    const res = await apiPost('/supplier-due-paid', { date: date, party: name, supplier_id: id, amount: amount, note: note });
+    if (res && res.error) { alert(res.error); return; }
+    closeEditModal();
+    renderSuppliersPage();
+    toast('Payment recorded');
+  });
+}
+
+function openQuickAddSupplier() {
+  document.getElementById('qs-name').value = '';
+  document.getElementById('qs-phone').value = '';
+  document.getElementById('qs-address').value = '';
+  document.getElementById('quickSupplierModal').style.display = 'flex';
+}
+function closeQuickAddSupplier() {
+  document.getElementById('quickSupplierModal').style.display = 'none';
+}
+async function submitQuickAddSupplier() {
+  const name = document.getElementById('qs-name').value.trim();
+  const phone = document.getElementById('qs-phone').value.trim();
+  const address = document.getElementById('qs-address').value.trim();
+  if (!name) return alert('Please enter a supplier name.');
+  const res = await apiPost('/suppliers', { name: name, phone: phone, address: address });
+  if (res && res.error) { alert(res.error); return; }
+  selectedPurchaseSupplier = { id: res.id, name: name, phone: phone };
+  const searchEl = document.getElementById('pur-supplier-search');
+  if (searchEl) {
+    document.getElementById('pur-supplier').value = res.id;
+    searchEl.value = name + (phone ? ' — ' + phone : '');
+  }
+  closeQuickAddSupplier();
+  toast('Supplier added');
+}
+
+// ───────── Purchases ─────────
+let purchaseCart = [];
+let purPayMode = 'full';
+let selectedPurchaseSupplier = null;
+
+function setupPurchasePage() {
+  const dateEl = document.getElementById('pur-date');
+  if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+
+  wireSearchPicker('pur-supplier-search', 'pur-supplier-results', searchSuppliersApi, renderSupplierSearchItem, function (s) {
+    selectedPurchaseSupplier = s;
+    document.getElementById('pur-supplier').value = s.id;
+    document.getElementById('pur-supplier-search').value = s.name + (s.phone ? ' — ' + s.phone : '');
+  }, { showOnEmpty: true, emptyText: 'No suppliers yet — use "Add new supplier"' });
+
+  const supInput = document.getElementById('pur-supplier-search');
+  if (supInput) supInput.addEventListener('input', function () {
+    if (!supInput.value.trim()) { selectedPurchaseSupplier = null; document.getElementById('pur-supplier').value = ''; }
+  });
+
+  wireSearchPicker('pur-product-search', 'pur-product-results', searchProductsApi, renderProductSearchItem, function (p) {
+    document.getElementById('pur-product').value = p.id;
+    document.getElementById('pur-desc').value = p.name;
+    document.getElementById('pur-cost').value = (Number(p.purchase_price) || 0).toFixed(2);
+    document.getElementById('pur-product-search').value = '';
+    document.getElementById('pur-qty').focus();
+  }, { showOnEmpty: true, emptyText: 'No products found — you can type a custom item' });
+}
+
+function renderPurchasePage() {
+  renderPurchaseCart();
+}
+
+function addPurchaseItem() {
+  const productId = document.getElementById('pur-product').value || null;
+  const desc = document.getElementById('pur-desc').value.trim();
+  const qty = parseFloat(document.getElementById('pur-qty').value);
+  const unitCost = parseFloat(document.getElementById('pur-cost').value);
+  if (!desc) return alert('Please enter or search for a product.');
+  if (isNaN(qty) || qty <= 0) return alert('Please enter a valid quantity.');
+  if (isNaN(unitCost) || unitCost < 0) return alert('Please enter a valid unit cost.');
+  purchaseCart.push({ product_id: productId, desc: desc, quantity: qty, unit_cost: unitCost, amount: qty * unitCost, updatePurchasePrice: true });
+  document.getElementById('pur-product').value = '';
+  document.getElementById('pur-desc').value = '';
+  document.getElementById('pur-qty').value = '1';
+  document.getElementById('pur-cost').value = '';
+  renderPurchaseCart();
+}
+
+function removePurchaseItem(idx) {
+  purchaseCart.splice(idx, 1);
+  renderPurchaseCart();
+}
+
+function renderPurchaseCart() {
+  const tb = document.getElementById('pur-tbody');
+  if (!purchaseCart.length) {
+    tb.innerHTML = '<tr><td colspan="5" class="empty-state">No items added yet.</td></tr>';
+  } else {
+    tb.innerHTML = purchaseCart.map(function (it, i) {
+      return '<tr><td>' + esc(it.desc) + '</td><td class="num">' + it.quantity + '</td><td class="num">' + fmtPlain(it.unit_cost) + '</td><td class="num" style="font-weight:600">' + fmtPlain(it.amount) + '</td><td><button class="cart-row-remove" onclick="removePurchaseItem(' + i + ')"><i class="ti ti-trash"></i></button></td></tr>';
+    }).join('');
+  }
+  const total = purchaseCart.reduce(function (s, it) { return s + it.amount; }, 0);
+  document.getElementById('pur-total-val').textContent = fmt(total);
+  updatePurPayPreview();
+}
+
+function setPurPayMode(mode) {
+  purPayMode = mode;
+  ['full', 'partial', 'due'].forEach(function (m) {
+    document.getElementById('pur-pay-' + m).classList.toggle('active', m === mode);
+  });
+  document.getElementById('pur-paid-row').style.display = mode === 'partial' ? 'flex' : 'none';
+  updatePurPayPreview();
+}
+
+function updatePurPayPreview() {
+  const total = purchaseCart.reduce(function (s, it) { return s + it.amount; }, 0);
+  let amountPaid = 0;
+  if (purPayMode === 'full') amountPaid = total;
+  if (purPayMode === 'due') amountPaid = 0;
+  if (purPayMode === 'partial') amountPaid = parseFloat(document.getElementById('pur-amount-paid').value) || 0;
+  const due = Math.max(0, total - amountPaid);
+  const preview = document.getElementById('pur-due-preview');
+  if (due > 0) { preview.style.display = 'flex'; document.getElementById('pur-due-val').textContent = fmt(due); }
+  else preview.style.display = 'none';
+}
+
+document.addEventListener('input', function (e) {
+  if (e.target && e.target.id === 'pur-amount-paid') updatePurPayPreview();
+});
+
+async function savePurchase() {
+  if (!purchaseCart.length) return alert('Add at least one item to the purchase.');
+  const total = purchaseCart.reduce(function (s, it) { return s + it.amount; }, 0);
+  let amountPaid = total;
+  if (purPayMode === 'due') amountPaid = 0;
+  if (purPayMode === 'partial') {
+    amountPaid = parseFloat(document.getElementById('pur-amount-paid').value);
+    if (isNaN(amountPaid) || amountPaid < 0) return alert('Please enter a valid amount paid.');
+    if (amountPaid > total) amountPaid = total;
+  }
+  const supplierId = document.getElementById('pur-supplier').value || null;
+  const date = document.getElementById('pur-date').value || new Date().toISOString().slice(0, 10);
+  const res = await apiPost('/purchases', {
+    date: date, supplier_id: supplierId, supplierName: selectedPurchaseSupplier ? selectedPurchaseSupplier.name : '',
+    amountPaid: amountPaid, items: purchaseCart.map(function (it) {
+      return { product_id: it.product_id, desc: it.desc, quantity: it.quantity, unit_cost: it.unit_cost, amount: it.amount, updatePurchasePrice: it.updatePurchasePrice };
+    })
+  });
+  if (res && res.error) { alert(res.error); return; }
+  purchaseCart = [];
+  renderPurchaseCart();
+  selectedPurchaseSupplier = null;
+  document.getElementById('pur-supplier').value = '';
+  document.getElementById('pur-supplier-search').value = '';
+  document.getElementById('pur-amount-paid').value = '';
+  setPurPayMode('full');
+  toast('Purchase #' + res.purchaseNo + ' saved · stock updated');
+}
+
+async function renderPurchaseListPage() {
+  const search = (document.getElementById('purchaselist-search').value || '').toLowerCase();
+  let rows = await apiGet('/purchases');
+  rows.sort(function (a, b) { return b.id - a.id; });
+  if (search) rows = rows.filter(function (r) {
+    return (r.supplier_name || '').toLowerCase().includes(search) || (r.purchase_no ? String(r.purchase_no) : '').includes(search);
+  });
+  window.__purchaseRows = rows;
+  const tb = document.getElementById('purchaselist-tbody');
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="5" class="empty-state">No purchases found.</td></tr>';
+    document.getElementById('purchaselist-total-val').textContent = fmt(0);
+    return;
+  }
+  tb.innerHTML = rows.map(function (r, i) {
+    return '<tr class="clickable-row" onclick="viewPurchase(' + i + ')"><td>' + r.date + '</td><td>#' + String(r.purchase_no || 0).padStart(5, '0') + '</td><td>' + (esc(r.supplier_name) || '<span style="color:var(--text-3)">—</span>') + '</td><td class="num">' + fmt(r.total) + '</td><td class="num" style="color:' + (r.due_amount > 0 ? 'var(--warn)' : 'var(--text-3)') + '">' + (r.due_amount > 0 ? fmt(r.due_amount) : '—') + '</td></tr>';
+  }).join('');
+  document.getElementById('purchaselist-total-val').textContent = fmt(rows.reduce(function (s, r) { return s + Number(r.total); }, 0));
+}
+
+async function viewPurchase(idx) {
+  const r = (window.__purchaseRows || [])[idx];
+  if (!r) return;
+  const items = await apiGet('/purchases/' + r.id + '/items');
+  let itemsHtml = '';
+  if (items && items.length) {
+    itemsHtml = '<div class="list-header" style="padding:14px 0 8px"><i class="ti ti-package"></i> Items</div><div class="table-scroll"><table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Cost</th><th class="num">Amount</th></tr></thead><tbody>' +
+      items.map(function (it) { return '<tr><td>' + esc(it.desc) + '</td><td class="num">' + it.quantity + '</td><td class="num">' + fmt(it.unit_cost) + '</td><td class="num">' + fmt(it.amount) + '</td></tr>'; }).join('') +
+      '</tbody></table></div>';
+  }
+  const isManager = currentRole === 'manager';
+  const content = document.getElementById('view-entry-content');
+  let actionsHtml = '';
+  if (isManager) {
+    actionsHtml = '<div class="modal-actions" style="margin-top:18px"><button class="btn-secondary danger-text" onclick="closeViewEntryModal();deletePurchase(' + r.id + ')"><i class="ti ti-trash"></i> Delete purchase</button></div>';
+  }
+  content.innerHTML = '<h3 style="margin:0 0 16px;font-size:16px">Purchase #' + String(r.purchase_no || 0).padStart(5, '0') + '</h3>' +
+    [['Date', esc(r.date)], ['Supplier', esc(r.supplier_name) || '—'], ['Total', fmt(r.total)], ['Paid', fmt(r.amount_paid)], ['Due', '<span style="color:' + (r.due_amount > 0 ? 'var(--warn)' : 'var(--ok)') + '">' + fmt(r.due_amount) + '</span>']].map(function (row) {
+      return '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13.5px"><span style="color:var(--text-2)">' + row[0] + '</span><span style="font-weight:600;text-align:right">' + row[1] + '</span></div>';
+    }).join('') + itemsHtml + actionsHtml;
+  document.getElementById('viewEntryModal').style.display = 'flex';
+}
+
+async function deletePurchase(id) {
+  if (!confirm('Delete this purchase record? Note: stock already added will NOT be automatically removed.')) return;
+  const res = await apiDelete('/purchases/' + id);
+  if (res && res.error) { alert(res.error); return; }
+  toast('Purchase deleted');
+  renderPurchaseListPage();
+}
+
+// ───────── Sales Returns ─────────
+function setupSalesReturnPicker() {
+  wireSearchPicker('sr-product-search', 'sr-product-results', searchProductsApi, renderProductSearchItem, function (p) {
+    document.getElementById('sr-product').value = p.id;
+    document.getElementById('sr-desc').value = p.name;
+    document.getElementById('sr-price').value = (Number(p.sell_price) || 0).toFixed(2);
+    document.getElementById('sr-product-search').value = p.name;
+  }, { showOnEmpty: true, emptyText: 'No products found' });
+}
+
+async function addSalesReturn() {
+  const date = document.getElementById('sr-date').value || new Date().toISOString().slice(0, 10);
+  const productId = document.getElementById('sr-product').value || null;
+  const desc = document.getElementById('sr-desc').value.trim();
+  const qty = parseFloat(document.getElementById('sr-qty').value);
+  const price = parseFloat(document.getElementById('sr-price').value);
+  const billNo = document.getElementById('sr-billno').value.trim();
+  const note = document.getElementById('sr-note').value.trim();
+  if (!desc) return alert('Please enter what was returned.');
+  if (isNaN(qty) || qty <= 0) return alert('Please enter a valid quantity.');
+  if (isNaN(price) || price < 0) return alert('Please enter a valid unit price.');
+  const res = await apiPost('/sales-returns', {
+    date: date, product_id: productId, desc: desc, quantity: qty, unit_price: price,
+    amount: qty * price, bill_no: billNo || null, note: note
+  });
+  if (res && res.error) { alert(res.error); return; }
+  document.getElementById('sr-product').value = '';
+  document.getElementById('sr-product-search').value = '';
+  document.getElementById('sr-desc').value = '';
+  document.getElementById('sr-qty').value = '';
+  document.getElementById('sr-price').value = '';
+  document.getElementById('sr-billno').value = '';
+  document.getElementById('sr-note').value = '';
+  toast('Return recorded · stock restored');
+  renderSalesReturnsPage();
+}
+
+async function renderSalesReturnsPage() {
+  const dateEl = document.getElementById('sr-date');
+  if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+  setupSalesReturnPicker();
+  const isManager = currentRole === 'manager';
+  const formSection = document.getElementById('salesreturn-form-section');
+  if (formSection) formSection.style.display = isManager ? 'block' : 'none';
+  const rows = await apiGet('/sales-returns');
+  rows.sort(function (a, b) { return b.id - a.id; });
+  const tb = document.getElementById('salesreturns-tbody');
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="5" class="empty-state">No sales returns yet.</td></tr>';
+    document.getElementById('salesreturns-total-val').textContent = fmt(0);
+    return;
+  }
+  tb.innerHTML = rows.map(function (r) {
+    return '<tr><td>' + r.date + '</td><td>' + (r.bill_no ? '#' + r.bill_no : '—') + '</td><td>' + esc(r.description) + '</td><td class="num">' + r.quantity + '</td><td class="num" style="color:var(--warn)">' + fmt(r.amount) + '</td></tr>';
+  }).join('');
+  document.getElementById('salesreturns-total-val').textContent = fmt(rows.reduce(function (s, r) { return s + Number(r.amount); }, 0));
+}
+
+// ───────── Purchase Returns ─────────
+function setupPurchaseReturnPickers() {
+  wireSearchPicker('pr-supplier-search', 'pr-supplier-results', searchSuppliersApi, renderSupplierSearchItem, function (s) {
+    document.getElementById('pr-supplier').value = s.id;
+    document.getElementById('pr-supplier-search').value = s.name + (s.phone ? ' — ' + s.phone : '');
+  }, { showOnEmpty: true, emptyText: 'No suppliers found' });
+  wireSearchPicker('pr-product-search', 'pr-product-results', searchProductsApi, renderProductSearchItem, function (p) {
+    document.getElementById('pr-product').value = p.id;
+    document.getElementById('pr-desc').value = p.name;
+    document.getElementById('pr-cost').value = (Number(p.purchase_price) || 0).toFixed(2);
+    document.getElementById('pr-product-search').value = p.name;
+  }, { showOnEmpty: true, emptyText: 'No products found' });
+}
+
+async function addPurchaseReturn() {
+  const date = document.getElementById('pr-date').value || new Date().toISOString().slice(0, 10);
+  const supplierId = document.getElementById('pr-supplier').value || null;
+  const supplierName = document.getElementById('pr-supplier-search').value.split(' — ')[0].trim();
+  const productId = document.getElementById('pr-product').value || null;
+  const desc = document.getElementById('pr-desc').value.trim();
+  const qty = parseFloat(document.getElementById('pr-qty').value);
+  const cost = parseFloat(document.getElementById('pr-cost').value);
+  const note = document.getElementById('pr-note').value.trim();
+  if (!desc) return alert('Please enter what was returned.');
+  if (isNaN(qty) || qty <= 0) return alert('Please enter a valid quantity.');
+  if (isNaN(cost) || cost < 0) return alert('Please enter a valid unit cost.');
+  const res = await apiPost('/purchase-returns', {
+    date: date, supplier_id: supplierId, supplierName: supplierName, product_id: productId,
+    desc: desc, quantity: qty, unit_cost: cost, amount: qty * cost, note: note
+  });
+  if (res && res.error) { alert(res.error); return; }
+  document.getElementById('pr-supplier').value = '';
+  document.getElementById('pr-supplier-search').value = '';
+  document.getElementById('pr-product').value = '';
+  document.getElementById('pr-product-search').value = '';
+  document.getElementById('pr-desc').value = '';
+  document.getElementById('pr-qty').value = '';
+  document.getElementById('pr-cost').value = '';
+  document.getElementById('pr-note').value = '';
+  toast('Return recorded · stock & supplier due reduced');
+  renderPurchaseReturnsPage();
+}
+
+async function renderPurchaseReturnsPage() {
+  const dateEl = document.getElementById('pr-date');
+  if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+  setupPurchaseReturnPickers();
+  const isManager = currentRole === 'manager';
+  const formSection = document.getElementById('purchasereturn-form-section');
+  if (formSection) formSection.style.display = isManager ? 'block' : 'none';
+  const rows = await apiGet('/purchase-returns');
+  rows.sort(function (a, b) { return b.id - a.id; });
+  const tb = document.getElementById('purchasereturns-tbody');
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="5" class="empty-state">No purchase returns yet.</td></tr>';
+    document.getElementById('purchasereturns-total-val').textContent = fmt(0);
+    return;
+  }
+  tb.innerHTML = rows.map(function (r) {
+    return '<tr><td>' + r.date + '</td><td>' + (esc(r.supplier_name) || '—') + '</td><td>' + esc(r.description) + '</td><td class="num">' + r.quantity + '</td><td class="num" style="color:var(--warn)">' + fmt(r.amount) + '</td></tr>';
+  }).join('');
+  document.getElementById('purchasereturns-total-val').textContent = fmt(rows.reduce(function (s, r) { return s + Number(r.amount); }, 0));
+}
+
+// ───────── Reports ─────────
+function clearReportsFilter() {
+  document.getElementById('rep-from').value = '';
+  document.getElementById('rep-to').value = '';
+  renderReportsPage();
+}
+
+async function renderReportsPage() {
+  const from = document.getElementById('rep-from').value;
+  const to = document.getElementById('rep-to').value;
+  const inRange = function (d) { return (!from || d >= from) && (!to || d <= to); };
+
+  const results = await Promise.all([
+    apiGet('/sales'), apiGet('/expenses'), apiGet('/products'),
+    apiGet('/sales-returns'), apiGet('/purchases'), apiGet('/dues'),
+    apiGet('/supplier-dues'), apiGet('/customers-summary'), apiGet('/suppliers-summary')
+  ]);
+  const sales = results[0].filter(function (r) { return inRange(r.date); });
+  const expenses = results[1].filter(function (r) { return inRange(r.date); });
+  const products = results[2];
+  const salesReturns = results[3].filter(function (r) { return inRange(r.date); });
+  const purchases = results[4].filter(function (r) { return inRange(r.date); });
+  const dues = results[5];
+  const supplierDues = results[6];
+  const customers = results[7];
+  const suppliers = results[8];
+
+  const sum = function (arr, key) { return arr.reduce(function (s, r) { return s + Number(r[key] || 0); }, 0); };
+  const totalSales = sum(sales, 'amount');
+  const totalReturns = sum(salesReturns, 'amount');
+  const netSales = totalSales - totalReturns;
+  const totalExpenses = sum(expenses, 'amount');
+  const cogs = sales.reduce(function (s, r) {
+    if (r.cost_price != null && r.quantity) return s + Number(r.cost_price) * Number(r.quantity);
+    if (r.product_id) { const p = products.find(function (x) { return String(x.id) === String(r.product_id); }); if (p && r.quantity) return s + Number(p.purchase_price || 0) * Number(r.quantity); }
+    return s;
+  }, 0);
+  const grossProfit = netSales - cogs;
+  const netProfit = grossProfit - totalExpenses;
+  const totalPurchases = sum(purchases, 'total');
+
+  const stockValue = products.reduce(function (s, p) { return s + Number(p.quantity || 0) * Number(p.purchase_price || 0); }, 0);
+  const stockRetail = products.reduce(function (s, p) { return s + Number(p.quantity || 0) * Number(p.sell_price || 0); }, 0);
+  const lowStock = products.filter(function (p) { return Number(p.quantity) <= 5; });
+  const totalCustomerDue = sum(dues, 'amount');
+  const totalSupplierDue = sum(supplierDues, 'amount');
+
+  const prodSold = {};
+  sales.forEach(function (r) {
+    if (!r.product_id) return;
+    if (!prodSold[r.product_id]) prodSold[r.product_id] = { name: r.desc, qty: 0, revenue: 0 };
+    prodSold[r.product_id].qty += Number(r.quantity || 0);
+    prodSold[r.product_id].revenue += Number(r.amount || 0);
+  });
+  const topProducts = Object.keys(prodSold).map(function (k) { return prodSold[k]; }).sort(function (a, b) { return b.revenue - a.revenue; }).slice(0, 5);
+
+  const card = function (label, value, color) {
+    return '<div class="metric-card"><div class="label">' + label + '</div><div class="value ' + (color || '') + '">' + value + '</div></div>';
+  };
+
+  const pnlHtml =
+    '<div class="list-header" style="padding:6px 0 12px"><i class="ti ti-cash"></i> Profit &amp; Loss</div>' +
+    '<div class="metrics-grid" style="margin-bottom:24px">' +
+    card('Net sales', fmt(netSales), 'green') +
+    card('Cost of goods sold', fmt(cogs)) +
+    card('Gross profit', fmt(grossProfit), grossProfit >= 0 ? 'green' : 'red') +
+    card('Expenses', fmt(totalExpenses), 'red') +
+    card('Net profit', fmt(netProfit), netProfit >= 0 ? 'green' : 'red') +
+    card('Sales returns', fmt(totalReturns), 'amber') +
+    card('Total purchases', fmt(totalPurchases)) +
+    '</div>';
+
+  const stockHtml =
+    '<div class="list-header" style="padding:6px 0 12px"><i class="ti ti-package"></i> Inventory</div>' +
+    '<div class="metrics-grid" style="margin-bottom:16px">' +
+    card('Stock value (at cost)', fmt(stockValue)) +
+    card('Stock value (at retail)', fmt(stockRetail), 'green') +
+    card('Potential margin', fmt(stockRetail - stockValue), 'green') +
+    card('Products', String(products.length)) +
+    card('Low stock items', String(lowStock.length), lowStock.length ? 'red' : '') +
+    '</div>';
+
+  let lowStockHtml = '';
+  if (lowStock.length) {
+    lowStockHtml = '<div class="list-card" style="margin-bottom:24px"><div class="list-header"><i class="ti ti-alert-triangle" style="color:var(--danger)"></i> Low stock alerts (5 or fewer)</div><div class="table-scroll"><table><thead><tr><th>Product</th><th>Barcode</th><th class="num">In stock</th></tr></thead><tbody>' +
+      lowStock.map(function (p) { return '<tr><td>' + esc(p.name) + '</td><td>' + esc(p.barcode) + '</td><td class="num" style="color:var(--danger);font-weight:600">' + p.quantity + ' ' + esc(p.unit || 'pcs') + '</td></tr>'; }).join('') +
+      '</tbody></table></div></div>';
+  }
+
+  let topHtml = '';
+  if (topProducts.length) {
+    topHtml = '<div class="list-card" style="margin-bottom:24px"><div class="list-header"><i class="ti ti-trophy" style="color:var(--warn)"></i> Top products (by revenue)</div><div class="table-scroll"><table><thead><tr><th>Product</th><th class="num">Qty sold</th><th class="num">Revenue</th></tr></thead><tbody>' +
+      topProducts.map(function (p) { return '<tr><td>' + esc(p.name) + '</td><td class="num">' + p.qty + '</td><td class="num" style="color:var(--ok)">' + fmt(p.revenue) + '</td></tr>'; }).join('') +
+      '</tbody></table></div></div>';
+  }
+
+  const custWithDue = customers.filter(function (c) { return c.totalDue > 0; }).sort(function (a, b) { return b.totalDue - a.totalDue; });
+  const supWithDue = suppliers.filter(function (s) { return s.totalDue > 0; }).sort(function (a, b) { return b.totalDue - a.totalDue; });
+  const ledgerHtml =
+    '<div class="metrics-grid" style="margin-bottom:16px">' +
+    card('Customers owe you', fmt(totalCustomerDue), 'amber') +
+    card('You owe suppliers', fmt(totalSupplierDue), 'red') +
+    '</div>' +
+    '<div class="reports-2col">' +
+    '<div class="list-card"><div class="list-header"><i class="ti ti-users"></i> Customer dues</div><div class="table-scroll"><table><thead><tr><th>Customer</th><th class="num">Owes</th></tr></thead><tbody>' +
+    (custWithDue.length ? custWithDue.map(function (c) { return '<tr><td>' + esc(c.name) + '</td><td class="num" style="color:var(--warn)">' + fmt(c.totalDue) + '</td></tr>'; }).join('') : '<tr><td colspan="2" class="empty-state">No customer dues.</td></tr>') +
+    '</tbody></table></div></div>' +
+    '<div class="list-card"><div class="list-header"><i class="ti ti-building-warehouse"></i> Supplier dues</div><div class="table-scroll"><table><thead><tr><th>Supplier</th><th class="num">You owe</th></tr></thead><tbody>' +
+    (supWithDue.length ? supWithDue.map(function (s) { return '<tr><td>' + esc(s.name) + '</td><td class="num" style="color:var(--danger)">' + fmt(s.totalDue) + '</td></tr>'; }).join('') : '<tr><td colspan="2" class="empty-state">No supplier dues.</td></tr>') +
+    '</tbody></table></div></div>' +
+    '</div>';
+
+  document.getElementById('reports-content').innerHTML = pnlHtml + stockHtml + lowStockHtml + topHtml +
+    '<div class="list-header" style="padding:6px 0 12px"><i class="ti ti-book"></i> Ledgers</div>' + ledgerHtml;
+}
+
+// ═══════════════════════════════════════════════════════
+
 // ───────── Misc / modal close on Escape ─────────
 document.addEventListener('keydown', function (e) {
   if (e.key !== 'Escape') return;
@@ -1511,6 +2034,8 @@ document.addEventListener('keydown', function (e) {
   if (histModal && histModal.style.display === 'flex') closeCustomerHistoryModal();
   const quickCust = document.getElementById('quickCustomerModal');
   if (quickCust && quickCust.style.display === 'flex') closeQuickAddCustomer();
+  const quickSup = document.getElementById('quickSupplierModal');
+  if (quickSup && quickSup.style.display === 'flex') closeQuickAddSupplier();
   const viewModal = document.getElementById('viewEntryModal');
   if (viewModal && viewModal.style.display === 'flex') closeViewEntryModal();
   const genericModal = document.getElementById('genericEditModal');
