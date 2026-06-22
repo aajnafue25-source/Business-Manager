@@ -305,6 +305,15 @@ document.getElementById('menuToggle').addEventListener('click', () => {
   document.getElementById('nav').classList.toggle('open');
 });
 
+// Mobile: clicking outside the nav closes it automatically
+document.addEventListener('click', function (e) {
+  var nav = document.getElementById('nav');
+  var toggle = document.getElementById('menuToggle');
+  if (nav && nav.classList.contains('open') && !nav.contains(e.target) && toggle && !toggle.contains(e.target)) {
+    nav.classList.remove('open');
+  }
+});
+
 // Sidebar collapse (desktop)
 // ───────── Profile avatar dropdown ─────────
 function toggleProfileDrop() {
@@ -378,6 +387,32 @@ function toggleSidebar() {
   try { localStorage.setItem('bm-sidebar', document.getElementById('app').classList.contains('nav-collapsed') ? '1' : '0'); } catch (e) {}
 }
 
+// ───────── Purchase price visibility toggle ─────────
+var __showPurchasePrice = true;
+
+function togglePurchasePrice() {
+  __showPurchasePrice = !__showPurchasePrice;
+  applyPurchasePriceVisibility();
+  try { localStorage.setItem('bm-show-cost', __showPurchasePrice ? '1' : '0'); } catch (e) {}
+}
+
+function applyPurchasePriceVisibility() {
+  var btn = document.getElementById('toggle-cost-btn');
+  var icon = document.getElementById('toggle-cost-icon');
+  var label = document.getElementById('toggle-cost-label');
+  if (__showPurchasePrice) {
+    document.body.classList.remove('hide-purchase-price');
+    if (btn) btn.classList.remove('cost-hidden');
+    if (icon) icon.className = 'ti ti-eye';
+    if (label) label.textContent = 'Hide cost';
+  } else {
+    document.body.classList.add('hide-purchase-price');
+    if (btn) btn.classList.add('cost-hidden');
+    if (icon) icon.className = 'ti ti-eye-off';
+    if (label) label.textContent = 'Show cost';
+  }
+}
+
 // Theme toggle (light/dark)
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
@@ -395,12 +430,17 @@ function toggleTheme() {
   try { theme = localStorage.getItem('bm-theme') || 'light'; } catch (e) {}
   applyTheme(theme);
   try { if (localStorage.getItem('bm-sidebar') === '1') document.getElementById('app').classList.add('nav-collapsed'); } catch (e) {}
+  try { __showPurchasePrice = localStorage.getItem('bm-show-cost') !== '0'; applyPurchasePriceVisibility(); } catch (e) {}
 })();
 
 function fmt(n) {
   return 'Tk ' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function fmtPlain(n) {
+  return Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+// Bill-specific formatter: numbers only (no Tk prefix — currency shown in bill header)
+function bfmt(n) {
   return Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function dateOf(fieldId) {
@@ -465,6 +505,8 @@ function clearFilter(type) {
   if (type === 'expenses') {
     document.getElementById('exp-filter-from').value = '';
     document.getElementById('exp-filter-to').value = '';
+    const expSearch = document.getElementById('exp-search');
+    if (expSearch) expSearch.value = '';
     renderExpensePage();
   }
 }
@@ -1103,10 +1145,12 @@ async function renderExpensePage() {
 
   const from = document.getElementById('exp-filter-from').value;
   const to = document.getElementById('exp-filter-to').value;
+  const search = (document.getElementById('exp-search') ? document.getElementById('exp-search').value : '').toLowerCase();
   let rows = await apiGet('/expenses');
   rows.sort(function (a, b) { return b.date.localeCompare(a.date) || b.id - a.id; });
   if (from) rows = rows.filter(function (r) { return r.date >= from; });
   if (to) rows = rows.filter(function (r) { return r.date <= to; });
+  if (search) rows = rows.filter(function (r) { return (r.desc || r.description || '').toLowerCase().includes(search); });
   const tb = document.getElementById('exp-tbody');
   if (!rows.length) {
     tb.innerHTML = '<tr><td colspan="4" class="empty-state">No expenses found.</td></tr>';
@@ -1605,8 +1649,8 @@ function buildPosBillHtml(bill, widthMm) {
   const itemsHtml = bill.items.map(function (it) {
     return '<tr><td style="padding:3px 2px;vertical-align:top;word-break:break-word;width:40%">' + esc(it.desc) + '</td>' +
       '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:15%">' + it.quantity + '</td>' +
-      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:20%">' + fmt(it.unit_price != null ? it.unit_price : (it.amount / (it.quantity || 1))) + '</td>' +
-      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:25%">' + fmt(it.amount) + '</td></tr>';
+      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:20%">' + bfmt(it.unit_price != null ? it.unit_price : (it.amount / (it.quantity || 1))) + '</td>' +
+      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:25%">' + bfmt(it.amount) + '</td></tr>';
   }).join('');
   const totalQty = bill.items.reduce(function (s2, it) { return s2 + Number(it.quantity || 0); }, 0);
   const widthPx = Math.round(widthMm * 3.7795);
@@ -1633,10 +1677,10 @@ function buildPosBillHtml(bill, widthMm) {
     '<th style="text-align:right;padding:3px 2px;font-weight:700;width:25%">Amount</th>' +
     '</tr></thead><tbody>' + itemsHtml + '</tbody></table>' +
     '<div style="border-top:1px dashed #000;margin:8px 0"></div>' +
-    '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:' + (s.priceFontSize ? s.priceFontSize + 4 : 17) + 'px;padding:4px 0"><span>TOTAL</span><span>' + fmt(bill.total) + '</span></div>' +
+    '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:' + (s.priceFontSize ? s.priceFontSize + 4 : 17) + 'px;padding:4px 0"><span>TOTAL</span><span>' + bfmt(bill.total) + '</span></div>' +
     '<div style="font-size:' + (s.priceFontSize || 13) + 'px;font-weight:700">' +
-    '<div style="display:flex;justify-content:space-between;padding:2px 0"><span>Paid</span><span>' + fmt(bill.amountPaid) + '</span></div>' +
-    (bill.dueAmount > 0 ? '<div style="display:flex;justify-content:space-between;padding:2px 0"><span>Due</span><span>' + fmt(bill.dueAmount) + '</span></div>' : '') +
+    '<div style="display:flex;justify-content:space-between;padding:2px 0"><span>Paid</span><span>' + bfmt(bill.amountPaid) + '</span></div>' +
+    (bill.dueAmount > 0 ? '<div style="display:flex;justify-content:space-between;padding:2px 0"><span>Due</span><span>' + bfmt(bill.dueAmount) + '</span></div>' : '') +
     '</div>' +
     '<div style="border-top:1px dashed #000;margin:8px 0"></div>' +
     '<div style="font-size:12px;margin:2px 0">No of items: ' + bill.items.length + ', Total quantity: ' + totalQty + '</div>' +
@@ -1715,7 +1759,7 @@ function buildA4InvoiceHtml(bill) {
     '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e5e8ed;font-size:13px"><span style="color:#666">Subtotal</span><span>' + fmtPlain(bill.total) + '</span></div>' +
     '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e5e8ed;font-size:13px"><span style="color:#666">Amount Paid</span><span style="color:#15a07a;font-weight:600">' + fmtPlain(bill.amountPaid) + '</span></div>' +
     (bill.dueAmount > 0 ? '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e5e8ed;font-size:13px"><span style="color:#666">Balance Due</span><span style="color:#d2890c;font-weight:600">' + fmtPlain(bill.dueAmount) + '</span></div>' : '') +
-    '<div style="display:flex;justify-content:space-between;padding:10px 0;font-size:16px;font-weight:700;color:#1b3a6b"><span>TOTAL</span><span>' + fmtPlain(bill.total) + ' Tk</span></div>' +
+    '<div style="display:flex;justify-content:space-between;padding:10px 0;font-size:16px;font-weight:700;color:#1b3a6b"><span>TOTAL</span><span>' + bfmt(bill.total) + '</span></div>' +
     '</div></div>' +
     '<div style="border-top:1px solid #e5e8ed;padding-top:16px;text-align:center;color:#888;font-size:12.5px">' + (s.note || 'Thank you for your business!') + '</div>' +
     '</div>';
@@ -2507,7 +2551,7 @@ async function renderProductsPage() {
       (p.category_name ? '<div class="product-card-badge cat">' + esc(p.category_name) + '</div>' : '') +
       '<div class="product-card-bc"><i class="ti ti-barcode"></i> ' + esc(p.barcode) + '</div>' +
       '<div class="product-card-row"><span class="product-card-label">Stock</span><span class="' + (lowStock ? 'text-danger' : '') + '">' + p.quantity + ' ' + esc(p.unit || 'pcs') + '</span></div>' +
-      '<div class="product-card-row"><span class="product-card-label">Buy</span><span>' + fmt(p.purchase_price) + '</span></div>' +
+      '<div class="product-card-row product-cost-row"><span class="product-card-label">Buy</span><span>' + fmt(p.purchase_price) + '</span></div>' +
       '<div class="product-card-row"><span class="product-card-label">Sell</span><span style="color:var(--ok);font-weight:700">' + fmt(p.sell_price) + '</span></div>' +
       (isManager ? '<div class="product-card-actions"><button class="edit-btn" onclick="editProduct(' + p.id + ')"><i class="ti ti-pencil"></i></button><button class="del-btn" onclick="deleteRow(\'products\',' + p.id + ',renderProductsPage)"><i class="ti ti-trash"></i></button></div>' : '') +
       '</div>';

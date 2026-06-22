@@ -345,6 +345,13 @@ main { flex: 1; }
 .metric-card.grad-navy { background: linear-gradient(135deg, #16294d 0%, #234a86 100%); }
 
 /* Chart card */
+/* Toggle purchase price button */
+.toggle-cost-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--surface-2); font-size: 13px; font-weight: 600; color: var(--text-2); cursor: pointer; font-family: inherit; transition: all .15s; }
+.toggle-cost-btn:hover { border-color: var(--accent); color: var(--accent); }
+.toggle-cost-btn.cost-hidden { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
+/* When cost is hidden, hide purchase price rows in product cards */
+body.hide-purchase-price .product-cost-row { display: none !important; }
+
 /* ── Sale / Purchase detail full page ── */
 .detail-page-nav { margin-bottom: 18px; }
 .btn-back {

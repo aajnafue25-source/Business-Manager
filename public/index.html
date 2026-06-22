@@ -504,6 +504,7 @@
       </div>
 
       <div class="filter-bar">
+        <input type="text" id="exp-search" placeholder="🔍 Search description..." oninput="renderExpensePage()" style="flex:1;min-width:140px" />
         <input type="date" id="exp-filter-from" />
         <span class="filter-to">to</span>
         <input type="date" id="exp-filter-to" />
@@ -571,7 +572,12 @@
 
     <!-- PRODUCTS -->
     <section id="page-products" class="page">
-      <h1 class="page-title"><i class="ti ti-package"></i> Products</h1>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px">
+        <h1 class="page-title" style="margin:0"><i class="ti ti-package"></i> Products</h1>
+        <button class="toggle-cost-btn" id="toggle-cost-btn" onclick="togglePurchasePrice()" title="Show/hide purchase cost">
+          <i class="ti ti-eye" id="toggle-cost-icon"></i> <span id="toggle-cost-label">Hide cost</span>
+        </button>
+      </div>
 
       <div class="entry-section" id="add-product-section" style="margin-bottom:20px">
         <h3><i class="ti ti-plus" style="color:var(--ok)"></i> Add new product</h3>
