@@ -540,19 +540,31 @@ const routes = {
       const unitCost = Number(it.unit_cost) || 0;
       const amount = Number(it.amount != null ? it.amount : unitCost * qty);
       if (!it.desc || qty <= 0) continue;
-      const itemId = await getNextId();
-      const row = { id: itemId, user_id: session.businessId, purchase_id: purchaseId, product_id: it.product_id || null, description: it.desc, quantity: qty, unit_cost: unitCost, amount };
-      await sb('POST', 'purchase_items', { body: row });
-      itemRows.push(row);
-      total += amount;
-      if (it.product_id) {
-        const prods = await sb('GET', 'products', { query: `id=eq.${it.product_id}&user_id=eq.${session.businessId}` });
+      let productId = it.product_id || null;
+
+      // Auto-create product in inventory if this is a custom item (no product selected)
+      if (!productId && it.desc) {
+        const barcode = await getNextBarcode(it.desc);
+        const newProdId = await getNextId();
+        await sb('POST', 'products', { body: {
+          id: newProdId, user_id: session.businessId, name: it.desc, barcode,
+          quantity: qty, purchase_price: unitCost, sell_price: 0, unit: it.unit || 'pcs'
+        }});
+        productId = newProdId;
+      } else if (productId) {
+        const prods = await sb('GET', 'products', { query: `id=eq.${productId}&user_id=eq.${session.businessId}` });
         if (prods && prods[0]) {
           const patch = { quantity: (prods[0].quantity || 0) + qty };
           if (it.updatePurchasePrice) patch.purchase_price = unitCost;
-          await sb('PATCH', 'products', { query: `id=eq.${it.product_id}`, body: patch });
+          await sb('PATCH', 'products', { query: `id=eq.${productId}`, body: patch });
         }
       }
+
+      const itemId = await getNextId();
+      const row = { id: itemId, user_id: session.businessId, purchase_id: purchaseId, product_id: productId, description: it.desc, quantity: qty, unit_cost: unitCost, amount };
+      await sb('POST', 'purchase_items', { body: row });
+      itemRows.push(row);
+      total += amount;
     }
     if (!itemRows.length) return send(res, 400, { error: 'no valid items' });
     const amountPaid = Math.min(Number(b.amountPaid) || 0, total);

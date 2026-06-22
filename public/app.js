@@ -40,10 +40,10 @@ function hideAuthScreen(username, isAdmin, role, daysLeft) {
   currentIsAdmin = !!isAdmin;
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('expired-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
+  document.getElementById('app').style.display = 'flex';
   document.getElementById('logout-btn').style.display = 'inline-flex';
   if (isAdmin) { const adminNav = document.getElementById('nav-admin'); if (adminNav) adminNav.style.display = 'block'; }
-  const roleLabel = isAdmin ? '👑 Admin' : (currentRole === 'manager' ? '👤 Manager' : '🧑‍💼 Sales');
+  const roleLabel = isAdmin ? '<i class="ti ti-shield-check"></i> Admin' : (currentRole === 'manager' ? '<i class="ti ti-user-circle"></i> Manager' : '<i class="ti ti-user"></i> Sales');
   document.getElementById('topbar-user').textContent = roleLabel + ' · ' + username;
 
   const staffNav = document.getElementById('nav-staff');
@@ -123,7 +123,7 @@ async function submitAuth() {
 
     if (!res.ok || data.status === 'pending') {
       const isPending = data.status === 'pending';
-      showAuthError(isPending ? '⏳ Account created! Waiting for admin approval.' : (data.message || data.error || 'Something went wrong.'), isPending);
+      showAuthError(isPending ? 'Account created! Waiting for admin approval.' : (data.message || data.error || 'Something went wrong.'), isPending);
       return;
     }
     hideAuthScreen(data.username, data.isAdmin, data.role || 'manager', data.daysLeft);
@@ -226,21 +226,70 @@ function navigateTo(page) {
   const pageEl = document.getElementById('page-' + page);
   if (!pageEl) return;
   pageEl.classList.add('active');
-  // Mark matching nav buttons active (both group button and dropdown item)
-  document.querySelectorAll('nav button[data-page="' + page + '"]').forEach(b => b.classList.add('active'));
+  // Mark matching nav buttons active
+  document.querySelectorAll('nav button[data-page="' + page + '"]').forEach(function (b) {
+    b.classList.add('active');
+    // If inside a nav-dropdown, open its parent group
+    const dropdown = b.closest('.nav-dropdown');
+    if (dropdown) {
+      const group = dropdown.closest('.nav-group');
+      if (group) {
+        document.querySelectorAll('.nav-group.open').forEach(function (g) { if (g !== group) g.classList.remove('open'); });
+        group.classList.add('open');
+        // also mark the group btn active
+        const groupBtn = group.querySelector('.nav-group-btn');
+        if (groupBtn) groupBtn.classList.add('active');
+      }
+    }
+  });
   document.getElementById('nav').classList.remove('open');
   if (PAGE_RENDERERS[page]) PAGE_RENDERERS[page]();
 }
 
 document.getElementById('nav').addEventListener('click', function (e) {
-  const btn = e.target.closest('button[data-page]');
+  const btn = e.target.closest('button');
   if (!btn) return;
-  navigateTo(btn.dataset.page);
+  // Group header: toggle the accordion open/close
+  if (btn.classList.contains('nav-group-btn')) {
+    const group = btn.closest('.nav-group');
+    const wasOpen = group.classList.contains('open');
+    // close sibling groups (accordion behaviour)
+    document.querySelectorAll('.nav-group.open').forEach(function (g) { if (g !== group) g.classList.remove('open'); });
+    group.classList.toggle('open', !wasOpen);
+    if (btn.dataset.page) navigateTo(btn.dataset.page);
+    return;
+  }
+  if (btn.dataset.page) navigateTo(btn.dataset.page);
 });
 
 document.getElementById('menuToggle').addEventListener('click', () => {
   document.getElementById('nav').classList.toggle('open');
 });
+
+// Sidebar collapse (desktop)
+function toggleSidebar() {
+  document.getElementById('app').classList.toggle('nav-collapsed');
+  try { localStorage.setItem('bm-sidebar', document.getElementById('app').classList.contains('nav-collapsed') ? '1' : '0'); } catch (e) {}
+}
+
+// Theme toggle (light/dark)
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const icon = document.querySelector('#theme-toggle i');
+  if (icon) icon.className = theme === 'dark' ? 'ti ti-sun' : 'ti ti-moon';
+}
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  try { localStorage.setItem('bm-theme', next); } catch (e) {}
+}
+(function initThemeAndSidebar() {
+  let theme = 'light';
+  try { theme = localStorage.getItem('bm-theme') || 'light'; } catch (e) {}
+  applyTheme(theme);
+  try { if (localStorage.getItem('bm-sidebar') === '1') document.getElementById('app').classList.add('nav-collapsed'); } catch (e) {}
+})();
 
 function fmt(n) {
   return 'Tk ' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1204,9 +1253,59 @@ async function renderSettingsPage() {
     document.getElementById('set-bc-width').value = settings.barcodeWidth || 2;
     document.getElementById('set-bc-height').value = settings.barcodeHeight || 56;
   }
+  // Profile picture
+  renderProfilePic(settings.profile_picture || null);
+  // Profile name display
+  const nameEl = document.getElementById('profile-display-name');
+  const roleEl = document.getElementById('profile-display-role');
+  if (nameEl) nameEl.textContent = document.getElementById('topbar-user').textContent.split('·').pop().trim() || 'User';
+  if (roleEl) roleEl.textContent = currentRole === 'manager' ? 'Manager' : 'Sales Staff';
+
   document.getElementById('pw-current').value = '';
   document.getElementById('pw-new').value = '';
   document.getElementById('pw-confirm').value = '';
+}
+
+function renderProfilePic(src) {
+  const img = document.getElementById('profile-pic-img');
+  const placeholder = document.getElementById('profile-pic-placeholder');
+  if (img && placeholder) {
+    if (src) {
+      img.src = src; img.style.display = 'block'; placeholder.style.display = 'none';
+    } else {
+      img.style.display = 'none'; placeholder.style.display = 'flex';
+    }
+  }
+  // Also update topbar if we add avatar there later
+}
+
+function handleProfilePicUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { alert('Photo must be under 2MB.'); return; }
+  const reader = new FileReader();
+  reader.onload = async function (e) {
+    const base64 = e.target.result;
+    renderProfilePic(base64);
+    // Save to settings
+    const existing = await apiGet('/settings');
+    const patch = { ...existing, profile_picture: base64 };
+    delete patch.id; delete patch.user_id;
+    await apiPut('/settings', patch);
+    settings.profile_picture = base64;
+    toast('Profile photo saved');
+  };
+  reader.readAsDataURL(file);
+}
+
+async function removeProfilePic() {
+  renderProfilePic(null);
+  const existing = await apiGet('/settings');
+  const patch = { ...existing, profile_picture: null };
+  delete patch.id; delete patch.user_id;
+  await apiPut('/settings', patch);
+  settings.profile_picture = null;
+  toast('Profile photo removed');
 }
 
 async function saveSettings() {
@@ -1240,7 +1339,7 @@ async function changePassword() {
   document.getElementById('pw-current').value = '';
   document.getElementById('pw-new').value = '';
   document.getElementById('pw-confirm').value = '';
-  toast('Password updated ✅');
+  toast('Password updated successfully');
 }
 
 // ───────── Staff & Roles (manager only) ─────────
@@ -1253,7 +1352,7 @@ async function renderStaffPage() {
   }
   window.__staffRows = rows;
   tb.innerHTML = rows.map(function (s) {
-    return '<tr><td style="font-weight:600">' + esc(s.name) + '</td><td>' + esc(s.phone) + '</td><td>' + (s.role === 'manager' ? '👤 Manager' : '🧑\u200d💼 Sales') + '</td><td style="white-space:nowrap"><button class="edit-btn" onclick="editStaff(' + s.id + ')" title="Edit"><i class="ti ti-pencil"></i></button><button class="del-btn" onclick="deleteStaff(' + s.id + ')" title="Delete"><i class="ti ti-trash"></i></button></td></tr>';
+    return '<tr><td style="font-weight:600">' + esc(s.name) + '</td><td>' + esc(s.phone) + '</td><td>' + (s.role === 'manager' ? '<i class="ti ti-user-circle"></i> Manager' : '<i class="ti ti-user"></i> Sales') + '</td><td style="white-space:nowrap"><button class="edit-btn" onclick="editStaff(' + s.id + ')" title="Edit"><i class="ti ti-pencil"></i></button><button class="del-btn" onclick="deleteStaff(' + s.id + ')" title="Delete"><i class="ti ti-trash"></i></button></td></tr>';
   }).join('');
 }
 
@@ -1361,11 +1460,89 @@ function buildPosBillHtml(bill, widthMm) {
     '</div>';
 }
 
+// ───────── Bill format: Thermal 58mm / 80mm / A4 Invoice ─────────
+let currentBillFormat = 'thermal80'; // default
+
+function setBillFormat(format) {
+  currentBillFormat = format;
+  ['thermal58', 'thermal80', 'a4'].forEach(function (f) {
+    const btn = document.getElementById('fmt-' + f);
+    if (btn) btn.classList.toggle('active', f === format);
+  });
+  if (lastBillForPrint) refreshPosPreview();
+}
+
+function refreshPosPreview() {
+  const el = document.getElementById('pos-bill-content');
+  if (!el) return;
+  if (currentBillFormat === 'a4') {
+    el.innerHTML = buildA4InvoiceHtml(lastBillForPrint);
+  } else {
+    el.innerHTML = buildPosBillHtml(lastBillForPrint, currentBillFormat === 'thermal58' ? 58 : 80);
+  }
+}
+
+// A4 formal invoice builder
+function buildA4InvoiceHtml(bill) {
+  const s = settings;
+  const dt = new Date(bill.date + 'T00:00:00');
+  const dateStr = isNaN(dt.getTime()) ? bill.date : dt.toLocaleDateString('en-GB');
+  const billNoStr = bill.billNo != null ? String(bill.billNo).padStart(6, '0') : '—';
+  const itemsHtml = bill.items.map(function (it, idx) {
+    const unitPrice = it.unit_price != null ? it.unit_price : (it.amount / (it.quantity || 1));
+    return '<tr>' +
+      '<td style="padding:10px 14px;border-bottom:1px solid #e5e8ed;font-size:13px">' + (idx + 1) + '</td>' +
+      '<td style="padding:10px 14px;border-bottom:1px solid #e5e8ed;font-size:13px">' + (it.desc || '') + '</td>' +
+      '<td style="padding:10px 14px;border-bottom:1px solid #e5e8ed;text-align:center;font-size:13px">' + it.quantity + '</td>' +
+      '<td style="padding:10px 14px;border-bottom:1px solid #e5e8ed;text-align:right;font-size:13px">' + fmtPlain(unitPrice) + '</td>' +
+      '<td style="padding:10px 14px;border-bottom:1px solid #e5e8ed;text-align:right;font-size:13px;font-weight:600">' + fmtPlain(it.amount) + '</td>' +
+      '</tr>';
+  }).join('');
+
+  return '<div style="background:#fff;font-family:Roboto,Arial,sans-serif;padding:36px 40px;max-width:700px;margin:0 auto;box-sizing:border-box;font-size:14px;color:#222">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px">' +
+    '<div>' +
+    '<div style="font-size:26px;font-weight:800;color:#1b3a6b;letter-spacing:-0.5px">' + (s.businessName || 'BizSheba') + '</div>' +
+    (s.address ? '<div style="color:#666;margin-top:4px;font-size:13px">' + (s.address || '') + '</div>' : '') +
+    (s.phone ? '<div style="color:#666;font-size:13px">' + (s.phone) + '</div>' : '') +
+    (s.gst ? '<div style="color:#666;font-size:13px">GST# ' + (s.gst) + '</div>' : '') +
+    '</div>' +
+    '<div style="text-align:right">' +
+    '<div style="font-size:22px;font-weight:700;color:#2f6fd0;letter-spacing:1px">INVOICE</div>' +
+    '<div style="margin-top:6px;font-size:13px;color:#666"># <strong style="color:#222">' + billNoStr + '</strong></div>' +
+    '<div style="font-size:13px;color:#666">Date: <strong style="color:#222">' + dateStr + '</strong></div>' +
+    '</div></div>' +
+    '<div style="height:2px;background:linear-gradient(90deg,#1b3a6b,#2aa9c9);border-radius:2px;margin-bottom:20px"></div>' +
+    (bill.customer && bill.customer.name ? '<div style="background:#f3f7fb;border-radius:8px;padding:12px 16px;margin-bottom:20px">' +
+    '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#888;margin-bottom:4px">Bill To</div>' +
+    '<div style="font-weight:700;font-size:14px">' + (bill.customer.name || '') + '</div>' +
+    (bill.customer.phone ? '<div style="color:#666;font-size:13px">' + bill.customer.phone + '</div>' : '') +
+    '</div>' : '') +
+    '<table style="width:100%;border-collapse:collapse;margin-bottom:20px">' +
+    '<thead><tr style="background:#f3f7fb">' +
+    '<th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#888;font-weight:600">#</th>' +
+    '<th style="padding:10px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#888;font-weight:600">Item</th>' +
+    '<th style="padding:10px 14px;text-align:center;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#888;font-weight:600">Qty</th>' +
+    '<th style="padding:10px 14px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#888;font-weight:600">Unit Price</th>' +
+    '<th style="padding:10px 14px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#888;font-weight:600">Amount (Tk)</th>' +
+    '</tr></thead><tbody>' + itemsHtml + '</tbody></table>' +
+    '<div style="display:flex;justify-content:flex-end;margin-bottom:24px">' +
+    '<div style="min-width:240px">' +
+    '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e5e8ed;font-size:13px"><span style="color:#666">Subtotal</span><span>' + fmtPlain(bill.total) + '</span></div>' +
+    '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e5e8ed;font-size:13px"><span style="color:#666">Amount Paid</span><span style="color:#15a07a;font-weight:600">' + fmtPlain(bill.amountPaid) + '</span></div>' +
+    (bill.dueAmount > 0 ? '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e5e8ed;font-size:13px"><span style="color:#666">Balance Due</span><span style="color:#d2890c;font-weight:600">' + fmtPlain(bill.dueAmount) + '</span></div>' : '') +
+    '<div style="display:flex;justify-content:space-between;padding:10px 0;font-size:16px;font-weight:700;color:#1b3a6b"><span>TOTAL</span><span>' + fmtPlain(bill.total) + ' Tk</span></div>' +
+    '</div></div>' +
+    '<div style="border-top:1px solid #e5e8ed;padding-top:16px;text-align:center;color:#888;font-size:12.5px">' + (s.note || 'Thank you for your business!') + '</div>' +
+    '</div>';
+}
+
 async function openPosModal(bill) {
   if (!settings || !settings.businessName) settings = await apiGet('/settings');
   lastBillForPrint = bill;
-  const widthMm = settings.posWidthMm || 80;
-  document.getElementById('pos-bill-content').innerHTML = buildPosBillHtml(bill, widthMm);
+  // Default format based on settings
+  if (!currentBillFormat) currentBillFormat = 'thermal' + (settings.posWidthMm || 80);
+  refreshPosPreview();
   document.getElementById('posModal').style.display = 'flex';
 }
 
@@ -1375,9 +1552,14 @@ function closePosModal() {
 
 function printPosBill() {
   if (!lastBillForPrint) return;
-  const widthMm = settings.posWidthMm || 80;
-  const billHtml = buildPosBillHtml(lastBillForPrint, widthMm);
-  printViaIframe('<div style="display:flex;justify-content:center;padding:6px 0;background:#fff">' + billHtml + '</div>', 'Print bill');
+  let html;
+  if (currentBillFormat === 'a4') {
+    html = '<div style="display:flex;justify-content:center;padding:20px;background:#fff">' + buildA4InvoiceHtml(lastBillForPrint) + '</div>';
+  } else {
+    const widthMm = currentBillFormat === 'thermal58' ? 58 : 80;
+    html = '<div style="display:flex;justify-content:center;padding:6px 0;background:#fff">' + buildPosBillHtml(lastBillForPrint, widthMm) + '</div>';
+  }
+  printViaIframe(html, 'Print bill');
 }
 
 // ───────── Dashboard ─────────
@@ -1388,11 +1570,11 @@ async function renderDashboard() {
   const profit = summary.netProfit;
 
   document.getElementById('dash-metrics').innerHTML =
-    '<div class="metric-card"><div class="label">Total sales</div><div class="value green">' + fmt(summary.totalSales) + '</div></div>' +
+    '<div class="metric-card grad grad-blue"><div class="label">Total sales</div><div class="value">' + fmt(summary.totalSales) + '</div></div>' +
+    '<div class="metric-card grad grad-cyan"><div class="label">Net profit</div><div class="value">' + fmt(profit) + '</div></div>' +
+    '<div class="metric-card grad grad-teal"><div class="label">Outstanding dues</div><div class="value">' + fmt(summary.totalDues) + '</div></div>' +
     '<div class="metric-card"><div class="label">Cost of goods sold</div><div class="value">' + fmt(summary.totalCOGS) + '</div></div>' +
     '<div class="metric-card"><div class="label">Total expenses</div><div class="value red">' + fmt(summary.totalExpenses) + '</div></div>' +
-    '<div class="metric-card"><div class="label">Net profit</div><div class="value ' + (profit >= 0 ? 'green' : 'red') + '">' + fmt(profit) + '</div></div>' +
-    '<div class="metric-card"><div class="label">Outstanding dues</div><div class="value amber">' + fmt(summary.totalDues) + '</div></div>' +
     '<div class="metric-card"><div class="label">Dues collected</div><div class="value">' + fmt(summary.totalDuePaid) + '</div></div>' +
     '<div class="metric-card"><div class="label">Products' + (summary.lowStockCount ? ' · low stock' : '') + '</div><div class="value ' + (summary.lowStockCount ? 'red' : '') + '">' + summary.productCount + (summary.lowStockCount ? ' (' + summary.lowStockCount + ')' : '') + '</div></div>';
 
@@ -1448,14 +1630,14 @@ async function renderAdminPage() {
   }
   tb.innerHTML = rows.map(function (u) {
     const statusColor = u.status === 'approved' ? 'var(--ok)' : u.status === 'rejected' ? 'var(--danger)' : 'var(--warn)';
-    const statusLabel = u.status === 'approved' ? '✅ Approved' : u.status === 'rejected' ? '❌ Rejected' : '⏳ Pending';
+    const statusLabel = u.status === 'approved' ? '<i class="ti ti-circle-check" style="color:var(--ok)"></i> Approved' : u.status === 'rejected' ? '<i class="ti ti-circle-x" style="color:var(--danger)"></i> Rejected' : '<i class="ti ti-clock" style="color:var(--warn)"></i> Pending';
     let expiryLabel = '—';
     if (u.is_admin) expiryLabel = '∞';
     else if (u.status === 'approved') {
       if (u.isExpired) expiryLabel = '<span style="color:var(--danger);font-weight:600">Expired</span>';
       else expiryLabel = '<span style="color:' + (u.daysLeft <= 5 ? 'var(--danger)' : 'var(--text)') + '">' + u.daysLeft + ' day' + (u.daysLeft === 1 ? '' : 's') + ' left</span>';
     }
-    return '<tr><td style="font-weight:600">' + esc(u.username) + '</td><td>' + (esc(u.phone) || '—') + '</td><td><span style="color:' + statusColor + ';font-weight:600">' + statusLabel + '</span></td><td>' + expiryLabel + '</td><td>' + (u.is_admin ? '👑 Admin' : '👤 User') + '</td><td style="white-space:nowrap">' +
+    return '<tr><td style="font-weight:600">' + esc(u.username) + '</td><td>' + (esc(u.phone) || '—') + '</td><td><span style="color:' + statusColor + ';font-weight:600">' + statusLabel + '</span></td><td>' + expiryLabel + '</td><td>' + (u.is_admin ? '<i class="ti ti-shield-check"></i> Admin' : '<i class="ti ti-user-circle"></i> User') + '</td><td style="white-space:nowrap">' +
       (u.status !== 'approved' ? '<button class="edit-btn" onclick="adminApprove(' + u.id + ')" title="Approve" style="color:var(--ok)"><i class="ti ti-check"></i> Approve</button>' : '') +
       (u.status !== 'rejected' && !u.is_admin ? '<button class="edit-btn" onclick="adminReject(' + u.id + ')" title="Reject" style="color:var(--warn)"><i class="ti ti-x"></i> Reject</button>' : '') +
       (!u.is_admin && u.status === 'approved' ? '<button class="edit-btn" onclick="adminRenew(' + u.id + ')" title="Renew 30 days" style="color:var(--info)"><i class="ti ti-refresh"></i> Renew</button>' : '') +
@@ -1466,7 +1648,7 @@ async function renderAdminPage() {
 
 async function adminApprove(userId) {
   await apiPost('/admin/approve', { userId: userId });
-  toast('Business approved ✅ — 30 day trial started');
+  toast('Business approved — 30 day trial started');
   renderAdminPage();
 }
 
@@ -1480,7 +1662,7 @@ async function adminReject(userId) {
 async function adminRenew(userId) {
   if (!confirm('Renew this business for another 30 days?')) return;
   await apiPost('/admin/renew', { userId: userId, days: 30 });
-  toast('Renewed for 30 days ✅');
+  toast('Renewed for 30 days');
   renderAdminPage();
 }
 
