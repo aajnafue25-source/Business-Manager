@@ -336,7 +336,10 @@ const routes = {
     if (!b.date || !items.length) return send(res, 400, { error: 'date and items required' });
     const billId = await getNextId();
     const billNo = await getNextBillNo();
-    let total = 0;
+    const discountPct = Number(b.discountPct) || 0;
+    const discountAmt = Number(b.discountAmt) || 0;
+    const vatPct = Number(b.vatPct) || 0;
+    let subtotal = 0;
     const saleRows = [];
     let customerPhone = null;
     let customerName = b.customerName || null;
@@ -359,19 +362,24 @@ const routes = {
         }
       }
       const rowId = await getNextId();
-      const row = { id: rowId, user_id: session.businessId, date: b.date, description: it.desc, amount, product_id: it.product_id || null, quantity: qty, unit_price: unitPrice, cost_price: costPrice, bill_id: billId, bill_no: billNo, customer_id: b.customer_id || null, customer_phone: customerPhone, customer_name: customerName };
+      const row = { id: rowId, user_id: session.businessId, date: b.date, description: it.desc, amount, product_id: it.product_id || null, quantity: qty, unit_price: unitPrice, cost_price: costPrice, bill_id: billId, bill_no: billNo, customer_id: b.customer_id || null, customer_phone: customerPhone, customer_name: customerName, discount_pct: discountPct, discount_amount: discountAmt, vat_pct: vatPct, vat_amount: 0 };
       await sb('POST', 'sales', { body: row });
       saleRows.push({ ...row, desc: row.description });
-      total += amount;
+      subtotal += amount;
     }
     if (!saleRows.length) return send(res, 400, { error: 'no valid items' });
+    // Apply discount + VAT to get final total
+    const discountApplied = discountAmt > 0 ? discountAmt : (subtotal * discountPct / 100);
+    const afterDiscount = Math.max(0, subtotal - discountApplied);
+    const vatApplied = afterDiscount * vatPct / 100;
+    const total = afterDiscount + vatApplied;
     const amountPaid = Math.min(Number(b.amountPaid) || 0, total);
     const dueAmount = Math.max(0, total - amountPaid);
     if (dueAmount > 0) {
       const dueId = await getNextId();
       await sb('POST', 'dues', { body: { id: dueId, user_id: session.businessId, date: b.date, party: customer ? customer.name : (b.customerName || 'Walk-in'), amount: dueAmount, note: `Bill #${billNo}`, customer_id: b.customer_id || null, bill_id: billId, bill_no: billNo } });
     }
-    send(res, 200, { billId, billNo, total, amountPaid, dueAmount, items: saleRows, date: b.date, customer: customer || (b.customerName ? { name: b.customerName } : null) });
+    send(res, 200, { billId, billNo, subtotal, discountApplied, vatApplied, total, amountPaid, dueAmount, items: saleRows, date: b.date, customer: customer || (b.customerName ? { name: b.customerName } : null), discountPct, discountAmt, vatPct });
   },
 
   // ----- Sales returns -----

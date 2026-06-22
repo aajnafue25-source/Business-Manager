@@ -243,7 +243,9 @@ const PAGE_RENDERERS = {
   purchasereturns: renderPurchaseReturnsPage,
   suppliers: renderSuppliersPage,
   expenses: renderExpensePage,
-  dues: renderDuesPage,
+  dues: function () { navigateTo('dueentry'); },
+  dueentry: renderDueEntryPage,
+  duepaid: renderDuePaidPage,
   products: renderProductsPage,
   categories: renderCategoriesPage,
   brands: renderBrandsPage,
@@ -897,17 +899,39 @@ function removeCartItem(idx) {
   renderCart();
 }
 
+function getCartTotals() {
+  var subtotal = cart.reduce(function (s, it) { return s + it.amount; }, 0);
+  var discPct = parseFloat(document.getElementById('cart-discount-pct') ? document.getElementById('cart-discount-pct').value : 0) || 0;
+  var discAmt = parseFloat(document.getElementById('cart-discount-amt') ? document.getElementById('cart-discount-amt').value : 0) || 0;
+  var vatPct = parseFloat(document.getElementById('cart-vat-pct') ? document.getElementById('cart-vat-pct').value : 0) || 0;
+  var discApplied = discAmt > 0 ? Math.min(discAmt, subtotal) : (subtotal * discPct / 100);
+  var afterDiscount = Math.max(0, subtotal - discApplied);
+  var vatApplied = afterDiscount * vatPct / 100;
+  var total = afterDiscount + vatApplied;
+  return { subtotal: subtotal, discApplied: discApplied, discPct: discPct, discAmt: discAmt, vatPct: vatPct, vatApplied: vatApplied, total: total };
+}
+
 function renderCart() {
   const tb = document.getElementById('cart-tbody');
   if (!cart.length) {
-    tb.innerHTML = '<tr><td colspan="5" class="empty-state">No items added yet.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="5" class="empty-state">Click a product card to add it to cart.</td></tr>';
   } else {
     tb.innerHTML = cart.map(function (it, i) {
       return '<tr><td>' + esc(it.desc) + '</td><td class="num">' + it.quantity + '</td><td class="num">' + fmtPlain(it.unit_price) + '</td><td class="num" style="font-weight:600">' + fmtPlain(it.amount) + '</td><td><button class="cart-row-remove" onclick="removeCartItem(' + i + ')"><i class="ti ti-trash"></i></button></td></tr>';
     }).join('');
   }
-  const total = cart.reduce(function (s, it) { return s + it.amount; }, 0);
-  document.getElementById('cart-total-val').textContent = fmt(total);
+  renderCartTotals();
+  updatePayPreview();
+}
+
+function renderCartTotals() {
+  var t = getCartTotals();
+  var subtotalEl = document.getElementById('cart-subtotal-val');
+  if (subtotalEl) subtotalEl.textContent = fmt(t.subtotal);
+  var totalEl = document.getElementById('cart-total-val');
+  if (totalEl) totalEl.textContent = fmt(t.total);
+  var vatDisplay = document.getElementById('cart-vat-display');
+  if (vatDisplay) vatDisplay.textContent = t.vatApplied > 0 ? '+VAT ' + fmt(t.vatApplied) : '';
   updatePayPreview();
 }
 
@@ -921,12 +945,12 @@ function setPayMode(mode) {
 }
 
 function updatePayPreview() {
-  const total = cart.reduce(function (s, it) { return s + it.amount; }, 0);
-  let amountPaid = 0;
+  var t = getCartTotals();
+  var total = t.total;
+  var amountPaid = 0;
   if (payMode === 'full') amountPaid = total;
   if (payMode === 'due') amountPaid = 0;
   if (payMode === 'partial') amountPaid = parseFloat(document.getElementById('cart-amount-paid').value) || 0;
-
   const due = Math.max(0, total - amountPaid);
   const preview = document.getElementById('cart-due-preview');
   if (due > 0) {
@@ -944,8 +968,9 @@ document.addEventListener('input', function (e) {
 async function checkout() {
   if (!cart.length) return alert('Add at least one item to the cart first.');
 
-  const total = cart.reduce(function (s, it) { return s + it.amount; }, 0);
-  let amountPaid = total;
+  var t = getCartTotals();
+  var total = t.total;
+  var amountPaid = total;
   if (payMode === 'due') amountPaid = 0;
   if (payMode === 'partial') {
     amountPaid = parseFloat(document.getElementById('cart-amount-paid').value);
@@ -959,7 +984,9 @@ async function checkout() {
 
   const res = await apiPost('/checkout', {
     date: date, customer_id: customerId, customerName: customerName,
-    amountPaid: amountPaid, items: cart.map(function (it) {
+    amountPaid: amountPaid,
+    discountPct: t.discPct, discountAmt: t.discAmt, vatPct: t.vatPct,
+    items: cart.map(function (it) {
       return { product_id: it.product_id, desc: it.desc, quantity: it.quantity, unit_price: it.unit_price, amount: it.amount, cost_price: it.cost_price };
     })
   });
@@ -975,6 +1002,9 @@ async function checkout() {
   document.getElementById('cart-customer-name').value = '';
   document.getElementById('cart-customer-name-row').style.display = 'flex';
   document.getElementById('cart-amount-paid').value = '';
+  var discPctEl = document.getElementById('cart-discount-pct'); if (discPctEl) discPctEl.value = '';
+  var discAmtEl = document.getElementById('cart-discount-amt'); if (discAmtEl) discAmtEl.value = '';
+  var vatEl = document.getElementById('cart-vat-pct'); if (vatEl) vatEl.value = '';
   setPayMode('full');
 
   await loadProductOptions();
@@ -998,14 +1028,17 @@ async function addExpense() {
 // ───────── Dues ─────────
 async function addDue() {
   const party = document.getElementById('due-party').value.trim();
+  const customerId = document.getElementById('due-customer-id') ? document.getElementById('due-customer-id').value || null : null;
   const amount = parseFloat(document.getElementById('due-amount').value);
   const note = document.getElementById('due-note').value.trim();
   if (!party || isNaN(amount) || amount <= 0) return alert('Please fill in party name and a valid amount.');
-  await apiPost('/dues', { date: dateOf('due-date'), party: party, amount: amount, note: note });
+  await apiPost('/dues', { date: dateOf('due-date'), party: party, amount: amount, note: note, customer_id: customerId });
   document.getElementById('due-party').value = '';
   document.getElementById('due-amount').value = '';
   document.getElementById('due-note').value = '';
-  renderDuesPage();
+  if (document.getElementById('due-customer-id')) document.getElementById('due-customer-id').value = '';
+  if (document.getElementById('due-customer-search')) document.getElementById('due-customer-search').value = '';
+  renderDueEntryList();
   toast('Due saved');
 }
 
@@ -1018,9 +1051,13 @@ async function addDuePaid() {
   document.getElementById('dpaid-party').value = '';
   document.getElementById('dpaid-amount').value = '';
   document.getElementById('dpaid-note').value = '';
-  renderDuesPage();
+  if (document.getElementById('dpaid-customer-search')) document.getElementById('dpaid-customer-search').value = '';
+  if (document.getElementById('dpaid-outstanding-info')) document.getElementById('dpaid-outstanding-info').style.display = 'none';
+  __customerOutstandingDue = 0;
+  renderDuePaidList();
   toast('Payment recorded');
 }
+
 
 // ───────── Sales page ─────────
 // Rows are click-to-open (view popup holds Print/Edit/Delete). No inline action column.
@@ -1183,33 +1220,112 @@ function editExpenseEntry(r) {
   });
 }
 
-async function renderDuesPage() {
+async function renderDueEntryPage() {
   const dueDateEl = document.getElementById('due-date');
   if (dueDateEl && !dueDateEl.value) dueDateEl.value = new Date().toISOString().slice(0, 10);
+  // Wire customer search for due entry
+  wireSearchPicker('due-customer-search', 'due-customer-results', searchCustomersApi, renderCustomerSearchItem, function (c) {
+    document.getElementById('due-customer-id').value = c.id;
+    document.getElementById('due-party').value = c.name;
+    document.getElementById('due-customer-search').value = c.name + (c.phone ? ' — ' + c.phone : '');
+  }, { showOnEmpty: false });
+  renderDueEntryList();
+}
+
+async function renderDueEntryList() {
+  const search = (document.getElementById('dueentry-search') ? document.getElementById('dueentry-search').value : '').toLowerCase();
+  const from = document.getElementById('dueentry-from') ? document.getElementById('dueentry-from').value : '';
+  const to = document.getElementById('dueentry-to') ? document.getElementById('dueentry-to').value : '';
+  let outstanding = await apiGet('/dues');
+  outstanding.sort(function (a, b) { return b.date.localeCompare(a.date) || b.id - a.id; });
+  if (from) outstanding = outstanding.filter(function (r) { return r.date >= from; });
+  if (to) outstanding = outstanding.filter(function (r) { return r.date <= to; });
+  if (search) outstanding = outstanding.filter(function (r) { return (r.party || '').toLowerCase().includes(search) || (r.note || '').toLowerCase().includes(search); });
+  window.__duesRows = outstanding;
+  const dtb = document.getElementById('dues-tbody');
+  if (dtb) dtb.innerHTML = outstanding.length ? outstanding.map(function (r, i) {
+    return '<tr class="clickable-row" onclick="viewDueEntry(window.__duesRows[' + i + '],\'due\')"><td>' + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + '</td><td class="num" style="color:var(--warn)">' + fmt(r.amount) + '</td></tr>';
+  }).join('') : '<tr><td colspan="4" class="empty-state">No outstanding dues.</td></tr>';
+  const totalEl = document.getElementById('dues-total-val');
+  if (totalEl) totalEl.textContent = fmt(outstanding.reduce(function (s, r) { return s + Number(r.amount); }, 0));
+}
+
+function clearDueEntryFilter() {
+  ['dueentry-search', 'dueentry-from', 'dueentry-to'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
+  renderDueEntryList();
+}
+
+var __duePaidMode = 'full';
+var __customerOutstandingDue = 0;
+
+async function renderDuePaidPage() {
   const dpaidDateEl = document.getElementById('dpaid-date');
   if (dpaidDateEl && !dpaidDateEl.value) dpaidDateEl.value = new Date().toISOString().slice(0, 10);
-
-  const results = await Promise.all([apiGet('/dues'), apiGet('/due-paid')]);
-  const outstanding = results[0], paid = results[1];
-  outstanding.sort(function (a, b) { return b.date.localeCompare(a.date) || b.id - a.id; });
-  paid.sort(function (a, b) { return b.date.localeCompare(a.date) || b.id - a.id; });
-  window.__duesRows = outstanding;
-  window.__paidRows = paid;
-
-  const dtb = document.getElementById('dues-tbody');
-  dtb.innerHTML = outstanding.length ? outstanding.map(function (r, i) {
-    const rowRef = "window.__duesRows[" + i + "]";
-    return '<tr class="clickable-row" onclick="viewDueEntry(' + rowRef + ",'due')\"><td>" + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + '</td><td class="num" style="color:var(--warn)">' + fmt(r.amount) + '</td></tr>';
-  }).join('') : '<tr><td colspan="4" class="empty-state">No outstanding dues.</td></tr>';
-  document.getElementById('dues-total-val').textContent = fmt(outstanding.reduce(function (s, r) { return s + r.amount; }, 0));
-
-  const ptb = document.getElementById('paid-tbody');
-  ptb.innerHTML = paid.length ? paid.map(function (r, i) {
-    const rowRef = "window.__paidRows[" + i + "]";
-    return '<tr class="clickable-row" onclick="viewDueEntry(' + rowRef + ",'paid')\"><td>" + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + '</td><td class="num" style="color:var(--ok)">' + fmt(r.amount) + '</td></tr>';
-  }).join('') : '<tr><td colspan="4" class="empty-state">No payments recorded.</td></tr>';
-  document.getElementById('paid-total-val').textContent = fmt(paid.reduce(function (s, r) { return s + r.amount; }, 0));
+  // Wire customer search — auto-fills outstanding due
+  wireSearchPicker('dpaid-customer-search', 'dpaid-customer-results', searchCustomersApi, renderCustomerSearchItem, async function (c) {
+    document.getElementById('dpaid-customer-id').value = c.id;
+    document.getElementById('dpaid-party').value = c.name;
+    document.getElementById('dpaid-customer-search').value = c.name + (c.phone ? ' — ' + c.phone : '');
+    // Fetch this customer's outstanding dues
+    const allDues = await apiGet('/dues');
+    const customerDues = allDues.filter(function (d) { return d.customer_id === c.id || (d.party || '').toLowerCase() === c.name.toLowerCase(); });
+    const totalDue = customerDues.reduce(function (s, d) { return s + Number(d.amount); }, 0);
+    __customerOutstandingDue = totalDue;
+    const infoBox = document.getElementById('dpaid-outstanding-info');
+    if (totalDue > 0) {
+      infoBox.style.display = 'block';
+      infoBox.innerHTML = '<div style="font-size:12px;color:var(--ok);margin-bottom:6px"><i class="ti ti-check"></i> Found ' + customerDues.length + ' outstanding due(s)</div>' +
+        customerDues.map(function (d) { return '<div class="due-item"><span>' + d.date + ' — ' + esc(d.note || 'Due') + '</span><span>' + fmt(d.amount) + '</span></div>'; }).join('') +
+        '<div style="border-top:1px solid var(--ok);margin-top:6px;padding-top:6px;display:flex;justify-content:space-between;font-weight:700"><span>Total outstanding</span><span>' + fmt(totalDue) + '</span></div>';
+      if (__duePaidMode === 'full') document.getElementById('dpaid-amount').value = totalDue.toFixed(2);
+    } else {
+      infoBox.style.display = 'block';
+      infoBox.innerHTML = '<div style="color:var(--text-2);font-size:13px"><i class="ti ti-check"></i> No outstanding dues for this customer.</div>';
+      __customerOutstandingDue = 0;
+    }
+  }, { showOnEmpty: false });
+  renderDuePaidList();
 }
+
+function setDuePaidMode(mode) {
+  __duePaidMode = mode;
+  ['full', 'partial'].forEach(function (m) {
+    const btn = document.getElementById('dpaid-mode-' + m);
+    if (btn) btn.classList.toggle('active', m === mode);
+  });
+  if (mode === 'full' && __customerOutstandingDue > 0) {
+    document.getElementById('dpaid-amount').value = __customerOutstandingDue.toFixed(2);
+  } else if (mode === 'partial') {
+    document.getElementById('dpaid-amount').value = '';
+    document.getElementById('dpaid-amount').focus();
+  }
+}
+
+async function renderDuePaidList() {
+  const search = (document.getElementById('duepaid-search') ? document.getElementById('duepaid-search').value : '').toLowerCase();
+  const from = document.getElementById('duepaid-from') ? document.getElementById('duepaid-from').value : '';
+  const to = document.getElementById('duepaid-to') ? document.getElementById('duepaid-to').value : '';
+  let paid = await apiGet('/due-paid');
+  paid.sort(function (a, b) { return b.date.localeCompare(a.date) || b.id - a.id; });
+  if (from) paid = paid.filter(function (r) { return r.date >= from; });
+  if (to) paid = paid.filter(function (r) { return r.date <= to; });
+  if (search) paid = paid.filter(function (r) { return (r.party || '').toLowerCase().includes(search); });
+  window.__paidRows = paid;
+  const ptb = document.getElementById('paid-tbody');
+  if (ptb) ptb.innerHTML = paid.length ? paid.map(function (r, i) {
+    return '<tr class="clickable-row" onclick="viewDueEntry(window.__paidRows[' + i + '],\'paid\')"><td>' + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + '</td><td class="num" style="color:var(--ok)">' + fmt(r.amount) + '</td></tr>';
+  }).join('') : '<tr><td colspan="4" class="empty-state">No payments recorded.</td></tr>';
+  const totalEl = document.getElementById('paid-total-val');
+  if (totalEl) totalEl.textContent = fmt(paid.reduce(function (s, r) { return s + Number(r.amount); }, 0));
+}
+
+function clearDuePaidFilter() {
+  ['duepaid-search', 'duepaid-from', 'duepaid-to'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
+  renderDuePaidList();
+}
+
+async function renderDuesPage() { navigateTo('dueentry'); }
+
 
 function editDueEntry(r, table) {
   openEditModal(table === 'due-paid' ? 'Edit Payment' : 'Edit Due', [
@@ -1677,6 +1793,8 @@ function buildPosBillHtml(bill, widthMm) {
     '<th style="text-align:right;padding:3px 2px;font-weight:700;width:25%">Amount</th>' +
     '</tr></thead><tbody>' + itemsHtml + '</tbody></table>' +
     '<div style="border-top:1px dashed #000;margin:8px 0"></div>' +
+    (bill.discountApplied > 0 ? '<div style="display:flex;justify-content:space-between;font-size:' + baseFont + ';padding:2px 0"><span>Subtotal</span><span>' + bfmt(bill.subtotal || bill.total) + '</span></div><div style="display:flex;justify-content:space-between;font-size:' + baseFont + ';padding:2px 0;color:#c00"><span>Discount</span><span>-' + bfmt(bill.discountApplied) + '</span></div>' : '') +
+    (bill.vatApplied > 0 ? '<div style="display:flex;justify-content:space-between;font-size:' + baseFont + ';padding:2px 0"><span>VAT (' + (bill.vatPct || 0) + '%)</span><span>+' + bfmt(bill.vatApplied) + '</span></div>' : '') +
     '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:' + (s.priceFontSize ? s.priceFontSize + 4 : 17) + 'px;padding:4px 0"><span>TOTAL</span><span>' + bfmt(bill.total) + '</span></div>' +
     '<div style="font-size:' + (s.priceFontSize || 13) + 'px;font-weight:700">' +
     '<div style="display:flex;justify-content:space-between;padding:2px 0"><span>Paid</span><span>' + bfmt(bill.amountPaid) + '</span></div>' +
@@ -1792,18 +1910,67 @@ function printPosBill() {
 
 // ───────── Dashboard ─────────
 let barChart = null, donutChart = null;
-async function renderDashboard() {
-  const results = await Promise.all([apiGet('/summary'), apiGet('/sales'), apiGet('/expenses'), apiGet('/dues'), apiGet('/purchases')]);
-  const summary = results[0], sales = results[1], expenses = results[2], dues = results[3], purchases = results[4];
-  const profit = summary.netProfit;
-  const totalPurchases = (purchases || []).reduce(function (s, r) { return s + Number(r.total || 0); }, 0);
+// ───────── Dashboard period filter ─────────
+var __dashPeriod = 'today';
 
-  // Hero gradient cards
+function setDashPeriod(period) {
+  __dashPeriod = period;
+  document.querySelectorAll('.dash-period-btn').forEach(function (b) { b.classList.remove('active'); });
+  var activeBtn = document.getElementById('dp-' + period);
+  if (activeBtn) activeBtn.classList.add('active');
+  // For custom, don't override the date inputs
+  if (period !== 'custom') {
+    var today = new Date();
+    var toDate = today.toISOString().slice(0, 10);
+    var fromDate = toDate;
+    if (period === '7d') { var d = new Date(today); d.setDate(d.getDate() - 6); fromDate = d.toISOString().slice(0, 10); }
+    if (period === '1m') { var d2 = new Date(today); d2.setMonth(d2.getMonth() - 1); fromDate = d2.toISOString().slice(0, 10); }
+    if (period === '6m') { var d3 = new Date(today); d3.setMonth(d3.getMonth() - 6); fromDate = d3.toISOString().slice(0, 10); }
+    if (period === '1y') { var d4 = new Date(today); d4.setFullYear(d4.getFullYear() - 1); fromDate = d4.toISOString().slice(0, 10); }
+    if (period === 'all') { fromDate = '2000-01-01'; }
+    var fromEl = document.getElementById('dash-from');
+    var toEl = document.getElementById('dash-to');
+    if (fromEl) fromEl.value = fromDate;
+    if (toEl) toEl.value = toDate;
+  }
+  renderDashboard();
+}
+
+async function renderDashboard() {
+  var fromEl = document.getElementById('dash-from');
+  var toEl = document.getElementById('dash-to');
+  var fromDate = fromEl ? fromEl.value : new Date().toISOString().slice(0, 10);
+  var toDate = toEl ? toEl.value : new Date().toISOString().slice(0, 10);
+  // Default to today if not set
+  if (!fromDate || !toDate) {
+    fromDate = toDate = new Date().toISOString().slice(0, 10);
+    if (fromEl) fromEl.value = fromDate;
+    if (toEl) toEl.value = toDate;
+  }
+  var inRange = function (d) { return d >= fromDate && d <= toDate; };
+
+
+  const results = await Promise.all([apiGet('/sales'), apiGet('/expenses'), apiGet('/dues'), apiGet('/purchases')]);
+  const allSales = results[0], allExpenses = results[1], allDues = results[2], allPurchases = results[3];
+
+  // Filter to selected period
+  const sales = allSales.filter(function (r) { return inRange(r.date); });
+  const expenses = allExpenses.filter(function (r) { return inRange(r.date); });
+  const purchases = allPurchases.filter(function (r) { return inRange(r.date); });
+
+  const totalSales = sales.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  const totalExp = expenses.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  const totalPurchases = purchases.reduce(function (s, r) { return s + Number(r.total || 0); }, 0);
+  const totalDues = allDues.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  const profit = totalSales - totalExp - totalPurchases;
+  var periodLabel = fromDate === toDate ? fromDate : fromDate + ' → ' + toDate;
+
+  // Hero gradient cards (period-filtered)
   document.getElementById('dash-metrics').innerHTML =
-    '<div class="metric-card grad grad-blue"><div class="label">Total sales</div><div class="value">' + fmt(summary.totalSales) + '</div></div>' +
-    '<div class="metric-card grad grad-navy"><div class="label">Total purchases</div><div class="value">' + fmt(totalPurchases) + '</div></div>' +
-    '<div class="metric-card grad grad-cyan"><div class="label">Net profit</div><div class="value">' + fmt(profit) + '</div></div>' +
-    '<div class="metric-card grad grad-teal"><div class="label">Outstanding dues</div><div class="value">' + fmt(summary.totalDues) + '</div></div>';
+    '<div class="metric-card grad grad-blue"><div class="label">Sales <span style="font-size:10px;opacity:0.8">(' + periodLabel + ')</span></div><div class="value">' + fmt(totalSales) + '</div></div>' +
+    '<div class="metric-card grad grad-navy"><div class="label">Purchases (' + periodLabel + ')</div><div class="value">' + fmt(totalPurchases) + '</div></div>' +
+    '<div class="metric-card grad grad-cyan"><div class="label">Net profit (' + periodLabel + ')</div><div class="value">' + fmt(profit) + '</div></div>' +
+    '<div class="metric-card grad grad-teal"><div class="label">Outstanding dues (all time)</div><div class="value">' + fmt(totalDues) + '</div></div>';
 
   // Summary mini cards row
   function summaryCard(icon, color, label, val) {
@@ -1811,12 +1978,11 @@ async function renderDashboard() {
   }
   var sumEl = document.getElementById('dash-summary');
   if (sumEl) sumEl.innerHTML =
-    summaryCard('ti-receipt', '#3b82f6', 'Sale Invoices', (purchases || []).length + (sales || []).length) +
-    summaryCard('ti-truck-delivery', '#8b5cf6', 'Purchases', (purchases || []).length) +
-    summaryCard('ti-coin', '#10b981', 'Cash Flow', fmt(summary.totalSales - summary.totalExpenses)) +
-    summaryCard('ti-receipt-2', '#ef4444', 'Expenses', fmt(summary.totalExpenses)) +
-    summaryCard('ti-clock', '#f59e0b', 'Customer Dues', fmt(summary.totalDues)) +
-    summaryCard('ti-package', summary.lowStockCount ? '#ef4444' : '#6366f1', 'Products' + (summary.lowStockCount ? ' (low stock)' : ''), summary.productCount);
+    summaryCard('ti-receipt', '#3b82f6', 'Sale Invoices (' + periodLabel + ')', sales.length) +
+    summaryCard('ti-truck-delivery', '#8b5cf6', 'Purchases (' + periodLabel + ')', purchases.length) +
+    summaryCard('ti-coin', '#10b981', 'Cash Flow', fmt(totalSales - totalExp)) +
+    summaryCard('ti-receipt-2', '#ef4444', 'Expenses', fmt(totalExp)) +
+    summaryCard('ti-clock', '#f59e0b', 'Customer Dues', fmt(totalDues));
 
   // 30-day trend — aggregate by day
   var now = new Date();
@@ -1829,8 +1995,8 @@ async function renderDashboard() {
   }
   var minDate = now.toISOString().slice(0, 10).replace(/\d{2}$/, '') + String(now.getDate() - 29).padStart(2, '0');
   sales.forEach(function (r) { var k = r.date ? r.date.slice(5, 10) : ''; if (daySales[k] !== undefined) daySales[k] += Number(r.amount || 0); });
-  (purchases || []).forEach(function (r) { var k = r.date ? r.date.slice(5, 10) : ''; if (dayPurch[k] !== undefined) dayPurch[k] += Number(r.total || 0); });
-  expenses.forEach(function (r) { var k = r.date ? r.date.slice(5, 10) : ''; if (dayExp[k] !== undefined) dayExp[k] += Number(r.amount || 0); });
+  allPurchases.forEach(function (r) { var k = r.date ? r.date.slice(5, 10) : ''; if (dayPurch[k] !== undefined) dayPurch[k] += Number(r.total || 0); });
+  allExpenses.forEach(function (r) { var k = r.date ? r.date.slice(5, 10) : ''; if (dayExp[k] !== undefined) dayExp[k] += Number(r.amount || 0); });
 
   // Show every 3rd label to avoid crowding
   var sparseLabels = days30Labels.map(function (l, i) { return i % 3 === 0 ? l : ''; });

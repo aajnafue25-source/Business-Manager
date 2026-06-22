@@ -345,6 +345,23 @@ main { flex: 1; }
 .metric-card.grad-navy { background: linear-gradient(135deg, #16294d 0%, #234a86 100%); }
 
 /* Chart card */
+/* Dashboard period filter bar */
+.dash-period-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dash-period-btn { padding: 6px 13px; border-radius: 20px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-2); font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all .14s; white-space: nowrap; }
+.dash-period-btn:hover { border-color: var(--accent); color: var(--accent); }
+.dash-period-btn.active { background: var(--grad-cyan); color: #fff; border-color: transparent; }
+.dash-date-input { padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-2); color: var(--text); font-size: 12px; font-family: inherit; }
+
+/* POS discount/VAT rows */
+.pos-subtotal-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-2); padding: 4px 0; }
+.pos-discount-row, .pos-vat-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.pos-disc-input { width: 0; flex: 1 !important; min-width: 0; padding: 7px 9px !important; font-size: 12.5px !important; }
+.disc-or { font-size: 11px; color: var(--text-3); white-space: nowrap; }
+
+/* Due paid info box */
+.dpaid-info-box { background: var(--ok-bg); border: 1px solid var(--ok); border-radius: 9px; padding: 10px 14px; font-size: 13px; margin-bottom: 10px; }
+.dpaid-info-box .due-item { display: flex; justify-content: space-between; padding: 3px 0; font-weight: 600; color: var(--ok); }
+
 /* Toggle purchase price button */
 .toggle-cost-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--surface-2); font-size: 13px; font-weight: 600; color: var(--text-2); cursor: pointer; font-family: inherit; transition: all .15s; }
 .toggle-cost-btn:hover { border-color: var(--accent); color: var(--accent); }

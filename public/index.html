@@ -116,7 +116,13 @@
     </div>
 
     <button data-page="expenses"><i class="ti ti-receipt"></i><span>Expenses</span></button>
-    <button data-page="dues"><i class="ti ti-clock"></i><span>Dues</span></button>
+    <div class="nav-group">
+      <button class="nav-group-btn" data-page="dueentry" data-default="dueentry"><i class="ti ti-clock"></i><span>Dues</span><i class="ti ti-chevron-down nav-caret"></i></button>
+      <div class="nav-dropdown">
+        <button data-page="dueentry"><i class="ti ti-clock"></i>Due Entry</button>
+        <button data-page="duepaid"><i class="ti ti-circle-check"></i>Due Paid</button>
+      </div>
+    </div>
     <button data-page="customers"><i class="ti ti-users"></i><span>Customers</span></button>
 
     <div class="nav-group">
@@ -136,7 +142,20 @@
 
     <!-- DASHBOARD -->
     <section id="page-dashboard" class="page active">
-      <h1 class="page-title"><i class="ti ti-layout-dashboard"></i> Dashboard</h1>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+        <h1 class="page-title" style="margin:0"><i class="ti ti-layout-dashboard"></i> Dashboard</h1>
+        <div class="dash-period-bar">
+          <button class="dash-period-btn active" id="dp-today" onclick="setDashPeriod('today')">Today</button>
+          <button class="dash-period-btn" id="dp-7d" onclick="setDashPeriod('7d')">7 Days</button>
+          <button class="dash-period-btn" id="dp-1m" onclick="setDashPeriod('1m')">1 Month</button>
+          <button class="dash-period-btn" id="dp-6m" onclick="setDashPeriod('6m')">6 Months</button>
+          <button class="dash-period-btn" id="dp-1y" onclick="setDashPeriod('1y')">1 Year</button>
+          <button class="dash-period-btn" id="dp-all" onclick="setDashPeriod('all')">All time</button>
+          <span class="filter-to" style="font-size:12px">Custom:</span>
+          <input type="date" id="dash-from" class="dash-date-input" onchange="setDashPeriod('custom')" />
+          <input type="date" id="dash-to" class="dash-date-input" onchange="setDashPeriod('custom')" />
+        </div>
+      </div>
 
       <!-- Quick action buttons (like reference ERP) -->
       <div class="quick-actions" id="dash-quick-actions">
@@ -247,6 +266,16 @@
 
           <!-- Summary + payment -->
           <div class="pos-summary">
+            <div class="pos-subtotal-row"><span>Subtotal</span><span id="cart-subtotal-val">Tk 0.00</span></div>
+            <div class="pos-discount-row">
+              <input type="number" id="cart-discount-pct" class="pos-input pos-disc-input" min="0" max="100" placeholder="Discount %" oninput="renderCartTotals()" />
+              <span class="disc-or">or</span>
+              <input type="number" id="cart-discount-amt" class="pos-input pos-disc-input" min="0" placeholder="Discount Tk" oninput="renderCartTotals()" />
+            </div>
+            <div class="pos-vat-row">
+              <input type="number" id="cart-vat-pct" class="pos-input pos-disc-input" min="0" max="100" placeholder="VAT %" oninput="renderCartTotals()" />
+              <span id="cart-vat-display" class="disc-or" style="color:var(--info)"></span>
+            </div>
             <div class="pos-total-row"><span>Total</span><span id="cart-total-val" class="pos-total-amt">Tk 0.00</span></div>
             <div class="pay-toggle" style="margin-bottom:10px">
               <button type="button" class="pay-btn active" id="pay-full" onclick="setPayMode('full')"><i class="ti ti-cash"></i> Full cash</button>
@@ -523,50 +552,86 @@
       </div>
     </section>
 
-    <!-- DUES -->
-    <section id="page-dues" class="page">
-      <h1 class="page-title"><i class="ti ti-clock"></i> Dues</h1>
-
-      <div class="entry-grid" style="margin-bottom:18px">
-        <div class="entry-section">
-          <h3><i class="ti ti-plus" style="color:var(--warn)"></i> Add due</h3>
-          <div class="form-row"><label>Date</label><input type="date" id="due-date" /></div>
-          <div class="form-row"><label>Person / party</label><input type="text" id="due-party" placeholder="Customer or vendor name" /></div>
-          <div class="form-row"><label>Amount (Tk)</label><input type="number" id="due-amount" placeholder="0.00" min="0" /></div>
-          <div class="form-row"><label>Note</label><input type="text" id="due-note" placeholder="Optional note" /></div>
-          <button class="btn-save" onclick="addDue()">Save due</button>
+    <!-- DUE ENTRY -->
+    <section id="page-dueentry" class="page">
+      <h1 class="page-title"><i class="ti ti-clock"></i> Due Entry</h1>
+      <div class="entry-section" style="margin-bottom:18px">
+        <h3><i class="ti ti-plus" style="color:var(--warn)"></i> Add due entry</h3>
+        <div class="form-row"><label>Date</label><input type="date" id="due-date" /></div>
+        <div class="form-row"><label>Customer / Party</label>
+          <div class="search-pick-wrap">
+            <input type="text" id="due-customer-search" class="search-pick-input" placeholder="🔍 Search by name or phone..." autocomplete="off" />
+            <input type="hidden" id="due-customer-id" value="" />
+            <div id="due-customer-results" class="search-pick-results"></div>
+          </div>
         </div>
-        <div class="entry-section">
-          <h3><i class="ti ti-circle-check" style="color:var(--info)"></i> Record due paid</h3>
-          <div class="form-row"><label>Date</label><input type="date" id="dpaid-date" /></div>
-          <div class="form-row"><label>Person / party</label><input type="text" id="dpaid-party" placeholder="Who paid?" /></div>
-          <div class="form-row"><label>Amount (Tk)</label><input type="number" id="dpaid-amount" placeholder="0.00" min="0" /></div>
-          <div class="form-row"><label>Note</label><input type="text" id="dpaid-note" placeholder="Optional note" /></div>
-          <button class="btn-save" onclick="addDuePaid()">Record payment</button>
-        </div>
+        <div class="form-row"><label>Party name (if not in customer list)</label><input type="text" id="due-party" placeholder="Or type name manually" /></div>
+        <div class="form-row"><label>Amount (Tk)</label><input type="number" id="due-amount" placeholder="0.00" min="0" /></div>
+        <div class="form-row"><label>Note</label><input type="text" id="due-note" placeholder="Optional note, e.g. Bill #10" /></div>
+        <button class="btn-save" onclick="addDue()"><i class="ti ti-plus"></i> Save due</button>
       </div>
+      <div class="filter-bar">
+        <input type="text" id="dueentry-search" placeholder="🔍 Search party..." oninput="renderDueEntryList()" style="flex:1;min-width:140px" />
+        <input type="date" id="dueentry-from" />
+        <span class="filter-to">to</span>
+        <input type="date" id="dueentry-to" />
+        <button class="btn-filter" onclick="renderDueEntryList()">Filter</button>
+        <button class="btn-clear" onclick="clearDueEntryFilter()">Clear</button>
+      </div>
+      <div class="list-card">
+        <div class="list-header"><i class="ti ti-alert-circle" style="color:var(--warn)"></i> Outstanding dues</div>
+        <div class="table-scroll">
+          <table><thead><tr><th>Date</th><th>Party</th><th>Note</th><th class="num">Amount</th></tr></thead>
+          <tbody id="dues-tbody"></tbody></table>
+        </div>
+        <div class="total-row"><span>Total outstanding</span><span id="dues-total-val">Tk 0</span></div>
+      </div>
+    </section>
 
-      <div class="dues-grid">
-        <div class="list-card">
-          <div class="list-header"><i class="ti ti-alert-circle" style="color:var(--warn)"></i> Outstanding dues</div>
-          <div class="table-scroll">
-          <table>
-            <thead><tr><th>Date</th><th>Party</th><th>Note</th><th class="num">Amount</th></tr></thead>
-            <tbody id="dues-tbody"></tbody>
-          </table>
+    <!-- DUE PAID -->
+    <section id="page-duepaid" class="page">
+      <h1 class="page-title"><i class="ti ti-circle-check"></i> Due Paid</h1>
+      <div class="entry-section" style="margin-bottom:18px">
+        <h3><i class="ti ti-circle-check" style="color:var(--ok)"></i> Record payment</h3>
+        <div class="form-row"><label>Date</label><input type="date" id="dpaid-date" /></div>
+
+        <!-- Customer search — auto-fills outstanding amount -->
+        <div class="form-row"><label>Search customer / party</label>
+          <div class="search-pick-wrap">
+            <input type="text" id="dpaid-customer-search" class="search-pick-input" placeholder="🔍 Search by name or phone to auto-fill due..." autocomplete="off" />
+            <input type="hidden" id="dpaid-customer-id" value="" />
+            <div id="dpaid-customer-results" class="search-pick-results"></div>
           </div>
-          <div class="total-row"><span>Total outstanding</span><span id="dues-total-val">Tk 0</span></div>
         </div>
-        <div class="list-card">
-          <div class="list-header"><i class="ti ti-circle-check" style="color:var(--ok)"></i> Paid dues</div>
-          <div class="table-scroll">
-          <table>
-            <thead><tr><th>Date</th><th>Party</th><th>Note</th><th class="num">Amount</th></tr></thead>
-            <tbody id="paid-tbody"></tbody>
-          </table>
+        <div id="dpaid-outstanding-info" class="dpaid-info-box" style="display:none"></div>
+        <div class="form-row"><label>Party name</label><input type="text" id="dpaid-party" placeholder="Name of person who paid" /></div>
+
+        <!-- Full / Partial toggle -->
+        <div class="form-row"><label>Payment type</label>
+          <div class="pay-toggle">
+            <button type="button" class="pay-btn active" id="dpaid-mode-full" onclick="setDuePaidMode('full')"><i class="ti ti-cash"></i> Full payment</button>
+            <button type="button" class="pay-btn" id="dpaid-mode-partial" onclick="setDuePaidMode('partial')"><i class="ti ti-coin"></i> Partial</button>
           </div>
-          <div class="total-row"><span>Total paid</span><span id="paid-total-val">Tk 0</span></div>
         </div>
+        <div class="form-row"><label>Amount (Tk)</label><input type="number" id="dpaid-amount" placeholder="0.00" min="0" /></div>
+        <div class="form-row"><label>Note</label><input type="text" id="dpaid-note" placeholder="Optional note" /></div>
+        <button class="btn-save" onclick="addDuePaid()"><i class="ti ti-circle-check"></i> Record payment</button>
+      </div>
+      <div class="filter-bar">
+        <input type="text" id="duepaid-search" placeholder="🔍 Search party..." oninput="renderDuePaidList()" style="flex:1;min-width:140px" />
+        <input type="date" id="duepaid-from" />
+        <span class="filter-to">to</span>
+        <input type="date" id="duepaid-to" />
+        <button class="btn-filter" onclick="renderDuePaidList()">Filter</button>
+        <button class="btn-clear" onclick="clearDuePaidFilter()">Clear</button>
+      </div>
+      <div class="list-card">
+        <div class="list-header"><i class="ti ti-circle-check" style="color:var(--ok)"></i> Payment history</div>
+        <div class="table-scroll">
+          <table><thead><tr><th>Date</th><th>Party</th><th>Note</th><th class="num">Amount</th></tr></thead>
+          <tbody id="paid-tbody"></tbody></table>
+        </div>
+        <div class="total-row"><span>Total paid</span><span id="paid-total-val">Tk 0</span></div>
       </div>
     </section>
 
