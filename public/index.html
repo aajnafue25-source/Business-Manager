@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>BizSheba</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
@@ -68,8 +68,25 @@
     <div class="topbar-right">
       <span id="topbar-days-left" class="days-badge" style="display:none"></span>
       <button onclick="toggleTheme()" id="theme-toggle" class="icon-btn" title="Toggle light/dark"><i class="ti ti-moon"></i></button>
-      <span id="topbar-user" class="topbar-user"></span>
-      <button onclick="logout()" id="logout-btn" class="logout-btn" style="display:none"><i class="ti ti-logout"></i> <span class="logout-text">Logout</span></button>
+      <!-- Business name + Profile avatar + dropdown -->
+      <div class="profile-avatar-wrap">
+        <button id="profile-avatar-btn" class="profile-avatar-btn-outer" onclick="toggleProfileDrop()" title="Account">
+          <span id="topbar-biz-name" class="topbar-biz-name">Your Business</span>
+          <div id="profile-avatar-inner" class="profile-avatar-inner"></div>
+        </button>
+        <div id="profile-dropdown" class="profile-dropdown">
+          <div class="profile-drop-header">
+            <div id="profile-drop-name" style="font-weight:700;font-size:14px"></div>
+            <div id="profile-drop-role" style="font-size:12px;color:var(--text-2);margin-top:2px"></div>
+          </div>
+          <div class="profile-drop-divider"></div>
+          <button class="profile-drop-item" onclick="toggleProfileDrop();navigateTo('settings')"><i class="ti ti-settings"></i> Settings</button>
+          <button class="profile-drop-item" onclick="toggleProfileDrop();navigateTo('staff')" id="profile-drop-staff" style="display:none"><i class="ti ti-users-group"></i> Manage staff</button>
+          <button class="profile-drop-item" onclick="toggleProfileDrop();navigateTo('admin')" id="profile-drop-admin" style="display:none"><i class="ti ti-shield"></i> Admin panel</button>
+          <div class="profile-drop-divider"></div>
+          <button class="profile-drop-item danger-text" onclick="toggleProfileDrop();logout()"><i class="ti ti-logout"></i> Log out</button>
+        </div>
+      </div>
       <button class="menu-toggle" id="menuToggle" aria-label="Open menu"><i class="ti ti-menu-2"></i></button>
     </div>
   </header>
@@ -77,42 +94,42 @@
   <div class="shell-body">
     <nav id="nav">
     <button class="nav-collapse-btn" onclick="toggleSidebar()" title="Collapse menu"><i class="ti ti-layout-sidebar-right-collapse"></i></button>
-    <button class="active" data-page="dashboard"><i class="ti ti-layout-dashboard"></i> Dashboard</button>
+
+    <button class="active" data-page="dashboard"><i class="ti ti-layout-dashboard"></i><span>Dashboard</span></button>
 
     <div class="nav-group">
-      <button class="nav-group-btn" data-page="sales"><i class="ti ti-chart-line"></i> Sales <i class="ti ti-chevron-down nav-caret"></i></button>
+      <button class="nav-group-btn" data-page="sales" data-default="sales"><i class="ti ti-chart-line"></i><span>Sales</span><i class="ti ti-chevron-down nav-caret"></i></button>
       <div class="nav-dropdown">
-        <button data-page="sales"><i class="ti ti-shopping-cart"></i> New Sale</button>
-        <button data-page="saleslist"><i class="ti ti-list"></i> Sales List</button>
-        <button data-page="salesreturns"><i class="ti ti-arrow-back-up"></i> Sales Returns</button>
+        <button data-page="sales"><i class="ti ti-shopping-cart"></i>New Sale</button>
+        <button data-page="saleslist"><i class="ti ti-list"></i>Sales List</button>
       </div>
     </div>
 
     <div class="nav-group">
-      <button class="nav-group-btn" data-page="purchases"><i class="ti ti-truck-delivery"></i> Purchases <i class="ti ti-chevron-down nav-caret"></i></button>
+      <button class="nav-group-btn" data-page="purchases" data-default="purchases"><i class="ti ti-truck-delivery"></i><span>Purchases</span><i class="ti ti-chevron-down nav-caret"></i></button>
       <div class="nav-dropdown">
-        <button data-page="purchases"><i class="ti ti-plus"></i> New Purchase</button>
-        <button data-page="purchaselist"><i class="ti ti-list"></i> Purchase List</button>
-        <button data-page="purchasereturns"><i class="ti ti-arrow-back-up"></i> Purchase Returns</button>
-        <button data-page="suppliers"><i class="ti ti-building-warehouse"></i> Suppliers</button>
+        <button data-page="purchases"><i class="ti ti-plus"></i>New Purchase</button>
+        <button data-page="purchaselist"><i class="ti ti-list"></i>Purchase List</button>
+        <button data-page="purchasereturns"><i class="ti ti-arrow-back-up"></i>Purchase Returns</button>
+        <button data-page="suppliers"><i class="ti ti-building-warehouse"></i>Suppliers</button>
       </div>
     </div>
 
-    <button data-page="expenses"><i class="ti ti-receipt"></i> Expenses</button>
-    <button data-page="dues"><i class="ti ti-clock"></i> Dues</button>
+    <button data-page="expenses"><i class="ti ti-receipt"></i><span>Expenses</span></button>
+    <button data-page="dues"><i class="ti ti-clock"></i><span>Dues</span></button>
+    <button data-page="customers"><i class="ti ti-users"></i><span>Customers</span></button>
 
     <div class="nav-group">
-      <button class="nav-group-btn" data-page="products"><i class="ti ti-package"></i> Inventory <i class="ti ti-chevron-down nav-caret"></i></button>
+      <button class="nav-group-btn" data-page="products" data-default="products"><i class="ti ti-package"></i><span>Inventory</span><i class="ti ti-chevron-down nav-caret"></i></button>
       <div class="nav-dropdown">
-        <button data-page="products"><i class="ti ti-package"></i> Products</button>
-        <button data-page="customers"><i class="ti ti-users"></i> Customers</button>
+        <button data-page="products"><i class="ti ti-package"></i>Products</button>
+        <button data-page="categories"><i class="ti ti-tag"></i>Categories</button>
+        <button data-page="brands"><i class="ti ti-bookmark"></i>Brands</button>
       </div>
     </div>
 
-    <button data-page="reports"><i class="ti ti-report-analytics"></i> Reports</button>
-    <button data-page="settings"><i class="ti ti-settings"></i> Settings</button>
-    <button data-page="staff" id="nav-staff" style="display:none"><i class="ti ti-users-group"></i> Staff</button>
-    <button data-page="admin" id="nav-admin" style="display:none"><i class="ti ti-shield"></i> Admin</button>
+    <button data-page="reports"><i class="ti ti-report-analytics"></i><span>Reports</span></button>
+
   </nav>
 
   <main id="main">
@@ -120,88 +137,139 @@
     <!-- DASHBOARD -->
     <section id="page-dashboard" class="page active">
       <h1 class="page-title"><i class="ti ti-layout-dashboard"></i> Dashboard</h1>
+
+      <!-- Quick action buttons (like reference ERP) -->
+      <div class="quick-actions" id="dash-quick-actions">
+        <button onclick="navigateTo('sales')" class="qa-btn qa-green"><i class="ti ti-shopping-cart"></i> New Sale</button>
+        <button onclick="navigateTo('purchases')" class="qa-btn qa-blue"><i class="ti ti-truck-delivery"></i> New Purchase</button>
+        <button onclick="navigateTo('products')" class="qa-btn qa-purple"><i class="ti ti-package"></i> Products</button>
+        <button onclick="navigateTo('customers')" class="qa-btn qa-teal"><i class="ti ti-users"></i> Customers</button>
+        <button onclick="navigateTo('suppliers')" class="qa-btn qa-orange"><i class="ti ti-building-warehouse"></i> Suppliers</button>
+        <button onclick="navigateTo('saleslist')" class="qa-btn qa-red"><i class="ti ti-list"></i> Sales List</button>
+        <button onclick="navigateTo('purchaselist')" class="qa-btn qa-indigo"><i class="ti ti-list"></i> Purchase List</button>
+      </div>
+
+      <!-- Main metric cards -->
       <div class="metric-row" id="dash-metrics"></div>
-      <div class="chart-card">
-        <h3>Sales vs expenses vs due (recent entries)</h3>
-        <div class="chart-legend">
-          <span><span class="dot" style="background:#3b82f6"></span>Sales</span>
-          <span><span class="dot" style="background:#ef4444"></span>Expenses</span>
-          <span><span class="dot" style="background:#f59e0b"></span>Due</span>
+
+      <!-- Summary mini cards -->
+      <div class="dash-summary-row" id="dash-summary"></div>
+
+      <!-- Charts side by side -->
+      <div class="dash-charts-row">
+        <div class="chart-card" style="flex:2">
+          <div class="chart-card-header">
+            <h3>Last 30 Days Trend</h3>
+            <div class="chart-legend">
+              <span><span class="dot" style="background:#3b82f6"></span>Sales</span>
+              <span><span class="dot" style="background:#10b981"></span>Purchases</span>
+              <span><span class="dot" style="background:#ef4444"></span>Expenses</span>
+            </div>
+          </div>
+          <div class="chart-wrap" style="height:240px"><canvas id="dashChart"></canvas></div>
         </div>
-        <div class="chart-wrap" style="height:240px"><canvas id="dashChart" role="img" aria-label="Bar chart comparing sales, expenses and dues over recent days"></canvas></div>
+        <div class="chart-card" style="flex:1">
+          <div class="chart-card-header"><h3>Financial breakdown</h3></div>
+          <div class="chart-wrap" style="height:220px"><canvas id="donutChart"></canvas></div>
+        </div>
       </div>
-      <div class="chart-card">
-        <h3>Financial summary breakdown</h3>
-        <div class="chart-wrap" style="height:220px"><canvas id="donutChart" role="img" aria-label="Donut chart of financial summary"></canvas></div>
+    </section>
+
+    <!-- SALE DETAIL (full page, replaces popup) -->
+    <section id="page-saledetail" class="page">
+      <div class="detail-page-nav">
+        <button class="btn-back" onclick="navigateTo('saleslist')"><i class="ti ti-arrow-left"></i> Back to Sales</button>
       </div>
+      <div id="saledetail-content"></div>
     </section>
 
     <!-- SALES -->
     <section id="page-sales" class="page">
       <h1 class="page-title"><i class="ti ti-chart-line"></i> Sales</h1>
 
-      <div class="entry-section" style="margin-bottom:18px">
-        <h3><i class="ti ti-shopping-cart" style="color:var(--ok)"></i> New sale</h3>
+      <div class="pos-layout">
 
-        <div class="form-row"><label>Date</label><input type="date" id="cart-date" /></div>
-
-        <div class="form-row"><label>Customer</label>
-          <div class="search-pick-wrap">
-            <input type="text" id="cart-customer-search" class="search-pick-input" placeholder="🔍 Walk-in customer — type name or phone to search" autocomplete="off" />
-            <input type="hidden" id="cart-customer" value="" />
-            <div id="cart-customer-results" class="search-pick-results"></div>
-          </div>
-        </div>
-        <div class="form-row" id="cart-customer-name-row" style="display:none">
-          <label>Customer name</label><input type="text" id="cart-customer-name" placeholder="Name for this sale" />
-        </div>
-        <button type="button" class="btn-secondary" style="margin-bottom:14px;font-size:12.5px;padding:8px 14px" onclick="openQuickAddCustomer()"><i class="ti ti-user-plus"></i> Add new customer</button>
-
-        <div class="cart-add-row">
-          <div class="form-row" style="flex:2"><label>Search product (or type a custom item below)</label>
-            <div class="search-pick-wrap">
-              <input type="text" id="cart-product-search" class="search-pick-input" placeholder="🔍 Type product name or scan/type barcode..." autocomplete="off" />
+        <!-- LEFT: Product quick-pick grid -->
+        <div class="pos-products-panel">
+          <div class="pos-panel-header">
+            <div class="search-pick-wrap" style="flex:1">
+              <input type="text" id="cart-product-search" class="search-pick-input pos-search" placeholder="🔍 Search product or scan barcode..." autocomplete="off" />
               <input type="hidden" id="cart-product" value="" />
               <div id="cart-product-results" class="search-pick-results"></div>
             </div>
           </div>
-        </div>
-        <div class="cart-add-row">
-          <div class="form-row" style="flex:2"><label>Item Name</label><input type="text" id="cart-desc" placeholder="Custom item name (or search above)" /></div>
-          <div class="form-row" style="flex:1"><label>Qty</label><input type="number" id="cart-qty" placeholder="1" min="0" value="1" /></div>
-          <div class="form-row" style="flex:1"><label>Unit price</label><input type="number" id="cart-unit-price" placeholder="0.00" min="0" /></div>
-          <button class="btn-add-item" onclick="addCartItem()"><i class="ti ti-plus"></i> Add item</button>
+          <div id="pos-product-grid" class="pos-product-grid">
+            <div class="empty-state" style="grid-column:1/-1">Loading products...</div>
+          </div>
         </div>
 
-        <div class="cart-table-wrap">
-          <table id="cart-table">
-            <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Amount</th><th></th></tr></thead>
-            <tbody id="cart-tbody"><tr><td colspan="5" class="empty-state">No items added yet.</td></tr></tbody>
-          </table>
-        </div>
+        <!-- RIGHT: Cart + payment -->
+        <div class="pos-cart-panel">
 
-        <div class="cart-summary">
-          <div class="cart-summary-row"><span>Total</span><span id="cart-total-val">Tk 0.00</span></div>
-          <div class="form-row"><label>Payment</label>
-            <div class="pay-toggle">
+          <!-- Compact header row: date + customer -->
+          <div class="pos-cart-header">
+            <div class="pos-field-group">
+              <label class="pos-label">Date</label>
+              <input type="date" id="cart-date" class="pos-input" />
+            </div>
+            <div class="pos-field-group" style="flex:2">
+              <label class="pos-label">Customer</label>
+              <div class="search-pick-wrap">
+                <input type="text" id="cart-customer-search" class="search-pick-input pos-input" placeholder="Walk-in — search by name/phone" autocomplete="off" />
+                <input type="hidden" id="cart-customer" value="" />
+                <div id="cart-customer-results" class="search-pick-results"></div>
+              </div>
+            </div>
+            <button type="button" class="pos-icon-btn" onclick="openQuickAddCustomer()" title="Add new customer"><i class="ti ti-user-plus"></i></button>
+          </div>
+
+          <!-- Manual custom item row (collapsed by default) -->
+          <details class="pos-custom-item">
+            <summary><i class="ti ti-pencil"></i> Add custom / unlisted item</summary>
+            <div class="pos-custom-fields">
+              <input type="text" id="cart-desc" class="pos-input" placeholder="Item name" style="flex:2" />
+              <input type="number" id="cart-qty" class="pos-input" placeholder="Qty" min="0" value="1" style="flex:1" />
+              <input type="number" id="cart-unit-price" class="pos-input" placeholder="Price" min="0" style="flex:1" />
+              <button class="pos-add-btn" onclick="addCartItem()"><i class="ti ti-plus"></i></button>
+            </div>
+          </details>
+          <div class="form-row" id="cart-customer-name-row" style="display:none">
+            <input type="text" id="cart-customer-name" class="pos-input" placeholder="Customer name" />
+          </div>
+
+          <!-- Cart table -->
+          <div class="pos-cart-table-wrap">
+            <table id="cart-table">
+              <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th><th style="width:32px"></th></tr></thead>
+              <tbody id="cart-tbody"><tr><td colspan="5" class="empty-state" style="padding:20px">Click a product to add it to cart</td></tr></tbody>
+            </table>
+          </div>
+
+          <!-- Summary + payment -->
+          <div class="pos-summary">
+            <div class="pos-total-row"><span>Total</span><span id="cart-total-val" class="pos-total-amt">Tk 0.00</span></div>
+            <div class="pay-toggle" style="margin-bottom:10px">
               <button type="button" class="pay-btn active" id="pay-full" onclick="setPayMode('full')"><i class="ti ti-cash"></i> Full cash</button>
               <button type="button" class="pay-btn" id="pay-partial" onclick="setPayMode('partial')"><i class="ti ti-coin"></i> Partial</button>
               <button type="button" class="pay-btn" id="pay-due" onclick="setPayMode('due')"><i class="ti ti-clock"></i> Full due</button>
             </div>
+            <div id="cart-paid-row" style="display:none;margin-bottom:10px">
+              <input type="number" id="cart-amount-paid" class="pos-input" min="0" placeholder="Amount received (Tk)" />
+            </div>
+            <div class="pos-due-row" id="cart-due-preview" style="display:none">
+              <span>Balance due</span><span id="cart-due-val">Tk 0.00</span>
+            </div>
+            <button class="btn-save" id="btn-checkout" onclick="checkout()"><i class="ti ti-receipt-2"></i> Sell &amp; print bill</button>
           </div>
-          <div class="form-row" id="cart-paid-row" style="display:none">
-            <label>Amount received now (Tk)</label><input type="number" id="cart-amount-paid" min="0" placeholder="0.00" />
-          </div>
-          <div class="cart-summary-row due-preview" id="cart-due-preview" style="display:none"><span>Goes to due</span><span id="cart-due-val">Tk 0.00</span></div>
-          <button class="btn-save" id="btn-checkout" onclick="checkout()"><i class="ti ti-receipt-2"></i> Sell &amp; print bill</button>
         </div>
       </div>
 
-      <div class="list-card">
+      <!-- Recent sales below -->
+      <div class="list-card" style="margin-top:20px">
         <div class="list-header"><i class="ti ti-chart-line"></i> Recent sales (last 10)</div>
         <div class="table-scroll">
         <table>
-          <thead><tr><th>Date</th><th>Bill</th><th>Customer</th><th>Description</th><th class="num">Qty</th><th class="num">Amount (Tk)</th></tr></thead>
+          <thead><tr><th>Date</th><th>Bill #</th><th>Customer</th><th>Items</th><th class="num">Qty</th><th class="num">Total (Tk)</th></tr></thead>
           <tbody id="sales-tbody"></tbody>
         </table>
         </div>
@@ -224,7 +292,7 @@
         <div class="list-header"><i class="ti ti-list"></i> All sales <span id="saleslist-count" style="font-weight:400;color:var(--text-2);font-size:12.5px"></span></div>
         <div class="table-scroll">
         <table>
-          <thead><tr><th>Date</th><th>Bill</th><th>Customer</th><th>Description</th><th class="num">Qty</th><th class="num">Amount (Tk)</th></tr></thead>
+          <thead><tr><th>Date</th><th>Bill #</th><th>Customer</th><th>Items</th><th class="num">Qty</th><th class="num">Total (Tk)</th></tr></thead>
           <tbody id="saleslist-tbody"></tbody>
         </table>
         </div>
@@ -293,13 +361,16 @@
         <div class="cart-add-row">
           <div class="form-row" style="flex:2"><label>Item / Product Name</label><input type="text" id="pur-desc" placeholder="Enter product name" /></div>
           <div class="form-row" style="flex:1"><label>Qty</label><input type="number" id="pur-qty" min="0" placeholder="1" value="1" /></div>
-          <div class="form-row" style="flex:1"><label>Unit cost</label><input type="number" id="pur-cost" min="0" placeholder="0.00" /></div>
+          <div class="form-row" style="flex:1"><label>Cost price</label><input type="number" id="pur-cost" min="0" placeholder="0.00" /></div>
+          <div class="form-row" style="flex:1"><label>Sell price</label><input type="number" id="pur-sell" min="0" placeholder="0.00" /></div>
+          <div class="form-row" style="flex:1"><label>Category</label><select id="pur-category"><option value="">None</option></select></div>
+          <div class="form-row" style="flex:1"><label>Brand</label><select id="pur-brand"><option value="">None</option></select></div>
           <button class="btn-add-item" onclick="addPurchaseItem()"><i class="ti ti-plus"></i> Add item</button>
         </div>
 
         <div class="cart-table-wrap">
           <table id="pur-table">
-            <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Cost</th><th class="num">Amount</th><th></th></tr></thead>
+            <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Cost</th><th class="num">Sell price</th><th class="num">Amount</th><th></th></tr></thead>
             <tbody id="pur-tbody"><tr><td colspan="5" class="empty-state">No items added yet.</td></tr></tbody>
           </table>
         </div>
@@ -522,6 +593,12 @@
           <div class="form-row"><label>Purchase price (Tk)</label><input type="number" id="prod-purchase" placeholder="0.00" min="0" /></div>
           <div class="form-row"><label>Sell price (Tk)</label><input type="number" id="prod-sell" placeholder="0.00" min="0" /></div>
           <div class="form-row"><label>Barcode (leave empty to auto-generate)</label><input type="text" id="prod-barcode" placeholder="Scan or type existing barcode" /></div>
+          <div class="form-row"><label>Category</label>
+            <select id="prod-category"><option value="">— No category —</option></select>
+          </div>
+          <div class="form-row"><label>Brand</label>
+            <select id="prod-brand"><option value="">— No brand —</option></select>
+          </div>
         </div>
         <button class="btn-save" onclick="addProduct()">Save product &amp; generate barcode</button>
       </div>
@@ -531,6 +608,46 @@
       </div>
 
       <div id="products-grid" class="products-grid"></div>
+    </section>
+
+    <!-- CATEGORIES -->
+    <section id="page-categories" class="page">
+      <h1 class="page-title"><i class="ti ti-tag"></i> Categories</h1>
+      <div class="entry-section" style="margin-bottom:18px">
+        <h3><i class="ti ti-plus" style="color:var(--ok)"></i> Add category</h3>
+        <div class="form-row" style="max-width:400px">
+          <label>Category name</label>
+          <input type="text" id="cat-name" placeholder="e.g. Electronics, Clothing, Food" />
+        </div>
+        <button class="btn-save" style="max-width:200px;margin-top:10px" onclick="addCategory()"><i class="ti ti-plus"></i> Save category</button>
+      </div>
+      <div class="list-card">
+        <div class="list-header"><i class="ti ti-tag"></i> All categories</div>
+        <div class="table-scroll">
+          <table><thead><tr><th>Category name</th><th>Products</th><th></th></tr></thead>
+          <tbody id="categories-tbody"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <!-- BRANDS -->
+    <section id="page-brands" class="page">
+      <h1 class="page-title"><i class="ti ti-bookmark"></i> Brands</h1>
+      <div class="entry-section" style="margin-bottom:18px">
+        <h3><i class="ti ti-plus" style="color:var(--ok)"></i> Add brand</h3>
+        <div class="form-row" style="max-width:400px">
+          <label>Brand name</label>
+          <input type="text" id="brand-name" placeholder="e.g. Nike, Samsung, Pran" />
+        </div>
+        <button class="btn-save" style="max-width:200px;margin-top:10px" onclick="addBrand()"><i class="ti ti-plus"></i> Save brand</button>
+      </div>
+      <div class="list-card">
+        <div class="list-header"><i class="ti ti-bookmark"></i> All brands</div>
+        <div class="table-scroll">
+          <table><thead><tr><th>Brand name</th><th>Products</th><th></th></tr></thead>
+          <tbody id="brands-tbody"></tbody></table>
+        </div>
+      </div>
     </section>
 
     <!-- CUSTOMERS -->
@@ -562,7 +679,8 @@
       </div>
     </section>
 
-    <!-- SETTINGS -->\n    <section id="page-settings" class="page">
+    <!-- SETTINGS -->
+    <section id="page-settings" class="page">
       <h1 class="page-title"><i class="ti ti-settings"></i> Settings</h1>
 
       <div class="entry-section" style="margin-bottom:18px">

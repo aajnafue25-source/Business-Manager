@@ -9,7 +9,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://eivuhxvrnckgvkwcidpj.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpdnVoeHZybmNrZ3Zrd2NpZHBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2OTE1MjcsImV4cCI6MjA5NzI2NzUyN30.EX4AD5xcM7_I7MEZl5xUzdbM1Lk4p2VTs-3Aus3Tr0M';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || 'PASTE_YOUR_ANON_KEY_HERE';
 const ADMIN_USERNAME = 'nafue';
 const TRIAL_DAYS = 30;
 const PORT = process.env.PORT || 4000;
@@ -449,8 +449,32 @@ const routes = {
     } else {
       barcode = await getNextBarcode(b.name);
     }
-    await sb('POST', 'products', { body: { id, user_id: session.businessId, name: b.name, barcode, quantity: Number(b.quantity) || 0, purchase_price: Number(b.purchase_price) || 0, sell_price: Number(b.sell_price) || 0, unit: b.unit || 'pcs' } });
+    await sb('POST', 'products', { body: { id, user_id: session.businessId, name: b.name, barcode, quantity: Number(b.quantity) || 0, purchase_price: Number(b.purchase_price) || 0, sell_price: Number(b.sell_price) || 0, unit: b.unit || 'pcs', category_id: b.category_id || null, brand_id: b.brand_id || null, category_name: b.category_name || null, brand_name: b.brand_name || null } });
     send(res, 200, { id, barcode });
+  },
+
+  // ----- Categories -----
+  'GET /api/categories': async (req, res, session) => {
+    send(res, 200, (await sb('GET', 'categories', { query: bizQuery(session, 'order=name.asc') })) || []);
+  },
+  'POST /api/categories': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.name) return send(res, 400, { error: 'name required' });
+    const id = await getNextId();
+    await sb('POST', 'categories', { body: { id, user_id: session.businessId, name: b.name } });
+    send(res, 200, { id });
+  },
+
+  // ----- Brands -----
+  'GET /api/brands': async (req, res, session) => {
+    send(res, 200, (await sb('GET', 'brands', { query: bizQuery(session, 'order=name.asc') })) || []);
+  },
+  'POST /api/brands': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.name) return send(res, 400, { error: 'name required' });
+    const id = await getNextId();
+    await sb('POST', 'brands', { body: { id, user_id: session.businessId, name: b.name } });
+    send(res, 200, { id });
   },
 
   // ----- Customers -----
@@ -548,7 +572,8 @@ const routes = {
         const newProdId = await getNextId();
         await sb('POST', 'products', { body: {
           id: newProdId, user_id: session.businessId, name: it.desc, barcode,
-          quantity: qty, purchase_price: unitCost, sell_price: 0, unit: it.unit || 'pcs'
+          quantity: qty, purchase_price: unitCost, sell_price: Number(it.sell_price) || 0,
+          unit: it.unit || 'pcs', category_name: it.category_name || null, brand_name: it.brand_name || null
         }});
         productId = newProdId;
       } else if (productId) {
@@ -556,6 +581,7 @@ const routes = {
         if (prods && prods[0]) {
           const patch = { quantity: (prods[0].quantity || 0) + qty };
           if (it.updatePurchasePrice) patch.purchase_price = unitCost;
+          if (it.sell_price != null && Number(it.sell_price) > 0) patch.sell_price = Number(it.sell_price);
           await sb('PATCH', 'products', { query: `id=eq.${productId}`, body: patch });
         }
       }
@@ -683,7 +709,7 @@ function parseDynamic(method, pathname) {
   if (segs.length === 3 && segs[0] === 'api' && segs[2] !== 'search') {
     const resource = segs[1];
     const id = segs[2];
-    const tableMap = { sales: 'sales', expenses: 'expenses', dues: 'dues', 'due-paid': 'due_paid', products: 'products', customers: 'customers', suppliers: 'suppliers', 'supplier-due-paid': 'supplier_due_paid', 'supplier-dues': 'supplier_dues', 'sales-returns': 'sales_returns', 'purchase-returns': 'purchase_returns', purchases: 'purchases' };
+    const tableMap = { sales: 'sales', expenses: 'expenses', dues: 'dues', 'due-paid': 'due_paid', products: 'products', customers: 'customers', suppliers: 'suppliers', 'supplier-due-paid': 'supplier_due_paid', 'supplier-dues': 'supplier_dues', 'sales-returns': 'sales_returns', 'purchase-returns': 'purchase_returns', purchases: 'purchases', categories: 'categories', brands: 'brands' };
     const table = tableMap[resource];
     if (table && method === 'DELETE') return { type: 'delete', table, id };
     if (table && method === 'PUT') return { type: 'put', table, id };
