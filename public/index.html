@@ -267,7 +267,8 @@
 
           <!-- Summary + payment -->
           <div class="pos-summary">
-            <div class="pos-subtotal-row"><span>Subtotal</span><span id="cart-subtotal-val">Tk 0.00</span></div>
+            <div class="pos-subtotal-row"><span>Subtotal (items)</span><span id="cart-subtotal-val">Tk 0.00</span></div>
+            <div class="pos-subtotal-row" id="cart-prev-balance-row" style="display:none;color:var(--warn);font-weight:600"><span><i class="ti ti-alert-circle"></i> Previous balance</span><span id="cart-prev-balance-val">Tk 0.00</span></div>
             <div class="pos-discount-row">
               <input type="number" id="cart-discount-pct" class="pos-input pos-disc-input" min="0" max="100" placeholder="Discount %" oninput="renderCartTotals()" />
               <span class="disc-or">or</span>

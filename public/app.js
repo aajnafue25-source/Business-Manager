@@ -802,8 +802,10 @@ async function showCartCustomerDue(c) {
     var gross = custDues.reduce(function (s, d) { return s + Number(d.amount); }, 0);
     var paid = custPaid.reduce(function (s, p) { return s + Number(p.amount); }, 0);
     var net = Math.max(0, gross - paid);
+    __cartPreviousBalance = net;
+    renderCartTotals(); // update grand total to include previous balance
     if (net > 0.009) {
-      noticeEl.innerHTML = '<i class="ti ti-alert-circle" style="color:var(--warn)"></i> <strong>' + esc(c.name) + '</strong> has an outstanding due of <strong style="color:var(--warn)">' + fmt(net) + '</strong> from previous purchases.';
+      noticeEl.innerHTML = '<i class="ti ti-alert-circle" style="color:var(--warn)"></i> <strong>' + esc(c.name) + '</strong> has a previous outstanding of <strong style="color:var(--warn)">' + fmt(net) + '</strong> — added to this bill\'s total.';
       noticeEl.className = 'cart-due-notice cart-due-warn';
     } else {
       noticeEl.innerHTML = '<i class="ti ti-circle-check" style="color:var(--ok)"></i> <strong>' + esc(c.name) + '</strong> — no outstanding dues.';
@@ -817,6 +819,8 @@ async function showCartCustomerDue(c) {
 function hideCartCustomerDue() {
   var noticeEl = document.getElementById('cart-customer-due-notice');
   if (noticeEl) { noticeEl.style.display = 'none'; noticeEl.innerHTML = ''; }
+  __cartPreviousBalance = 0;
+  renderCartTotals();
 }
 
 function setupCartProductPicker() {
@@ -937,6 +941,8 @@ function removeCartItem(idx) {
   renderCart();
 }
 
+var __cartPreviousBalance = 0; // outstanding balance of selected customer
+
 function getCartTotals() {
   var subtotal = cart.reduce(function (s, it) { return s + it.amount; }, 0);
   var discPct = parseFloat(document.getElementById('cart-discount-pct') ? document.getElementById('cart-discount-pct').value : 0) || 0;
@@ -945,8 +951,10 @@ function getCartTotals() {
   var discApplied = discAmt > 0 ? Math.min(discAmt, subtotal) : (subtotal * discPct / 100);
   var afterDiscount = Math.max(0, subtotal - discApplied);
   var vatApplied = afterDiscount * vatPct / 100;
-  var total = afterDiscount + vatApplied;
-  return { subtotal: subtotal, discApplied: discApplied, discPct: discPct, discAmt: discAmt, vatPct: vatPct, vatApplied: vatApplied, total: total };
+  var itemsTotal = afterDiscount + vatApplied;
+  var previousBalance = __cartPreviousBalance || 0;
+  var grandTotal = itemsTotal + previousBalance;
+  return { subtotal: subtotal, discApplied: discApplied, discPct: discPct, discAmt: discAmt, vatPct: vatPct, vatApplied: vatApplied, itemsTotal: itemsTotal, previousBalance: previousBalance, total: grandTotal };
 }
 
 function renderCart() {
@@ -966,6 +974,16 @@ function renderCartTotals() {
   var t = getCartTotals();
   var subtotalEl = document.getElementById('cart-subtotal-val');
   if (subtotalEl) subtotalEl.textContent = fmt(t.subtotal);
+  // Show/hide previous balance row
+  var prevRow = document.getElementById('cart-prev-balance-row');
+  if (prevRow) {
+    if (t.previousBalance > 0) {
+      prevRow.style.display = 'flex';
+      document.getElementById('cart-prev-balance-val').textContent = fmt(t.previousBalance);
+    } else {
+      prevRow.style.display = 'none';
+    }
+  }
   var totalEl = document.getElementById('cart-total-val');
   if (totalEl) totalEl.textContent = fmt(t.total);
   var vatDisplay = document.getElementById('cart-vat-display');
@@ -1035,6 +1053,7 @@ async function checkout() {
   const res = await apiPost('/checkout', {
     date: date, customer_id: customerId, customerName: customerName,
     amountPaid: amountPaid,
+    previousBalance: t.previousBalance,
     discountPct: t.discPct, discountAmt: t.discAmt, vatPct: t.vatPct,
     items: cart.map(function (it) {
       return { product_id: it.product_id, desc: it.desc, quantity: it.quantity, unit_price: it.unit_price, amount: it.amount, cost_price: it.cost_price };
@@ -1044,6 +1063,8 @@ async function checkout() {
   if (res.error) return alert(res.error);
 
   lastBillForPrint = res;
+  __cartPreviousBalance = 0;
+  hideCartCustomerDue();
   cart = [];
   renderCart();
   selectedCartCustomer = null;
@@ -1893,6 +1914,7 @@ function buildPosBillHtml(bill, widthMm) {
     '<div style="border-top:1px dashed #000;margin:8px 0"></div>' +
     (bill.discountApplied > 0 ? '<div style="display:flex;justify-content:space-between;font-size:' + baseFont + ';padding:2px 0"><span>Subtotal</span><span>' + bfmt(bill.subtotal || bill.total) + '</span></div><div style="display:flex;justify-content:space-between;font-size:' + baseFont + ';padding:2px 0;color:#c00"><span>Discount</span><span>-' + bfmt(bill.discountApplied) + '</span></div>' : '') +
     (bill.vatApplied > 0 ? '<div style="display:flex;justify-content:space-between;font-size:' + baseFont + ';padding:2px 0"><span>VAT (' + (bill.vatPct || 0) + '%)</span><span>+' + bfmt(bill.vatApplied) + '</span></div>' : '') +
+    (bill.previousBalance > 0 ? '<div style="display:flex;justify-content:space-between;font-size:' + baseFont + ';padding:2px 0;color:#c00"><span>Previous balance</span><span>+' + bfmt(bill.previousBalance) + '</span></div>' : '') +
     '<div style="display:flex;justify-content:space-between;font-weight:700;font-size:' + (s.priceFontSize ? s.priceFontSize + 4 : 17) + 'px;padding:4px 0"><span>TOTAL</span><span>' + bfmt(bill.total) + '</span></div>' +
     '<div style="font-size:' + (s.priceFontSize || 13) + 'px;font-weight:700">' +
     '<div style="display:flex;justify-content:space-between;padding:2px 0"><span>Paid</span><span>' + bfmt(bill.amountPaid) + '</span></div>' +
@@ -1974,6 +1996,7 @@ function buildA4InvoiceHtml(bill) {
     '<div style="min-width:240px">' +
     '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e5e8ed;font-size:13px"><span style="color:#666">Subtotal</span><span>' + fmtPlain(bill.total) + '</span></div>' +
     '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e5e8ed;font-size:13px"><span style="color:#666">Amount Paid</span><span style="color:#15a07a;font-weight:600">' + fmtPlain(bill.amountPaid) + '</span></div>' +
+    (bill.previousBalance > 0 ? '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e5e8ed;font-size:13px"><span style="color:#666">Previous balance</span><span style="color:#c00;font-weight:600">+' + fmtPlain(bill.previousBalance) + '</span></div>' : '') +
     (bill.dueAmount > 0 ? '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e5e8ed;font-size:13px"><span style="color:#666">Balance Due</span><span style="color:#d2890c;font-weight:600">' + fmtPlain(bill.dueAmount) + '</span></div>' : '') +
     '<div style="display:flex;justify-content:space-between;padding:10px 0;font-size:16px;font-weight:700;color:#1b3a6b"><span>TOTAL</span><span>' + bfmt(bill.total) + '</span></div>' +
     '</div></div>' +

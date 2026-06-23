@@ -372,14 +372,31 @@ const routes = {
     const discountApplied = discountAmt > 0 ? discountAmt : (subtotal * discountPct / 100);
     const afterDiscount = Math.max(0, subtotal - discountApplied);
     const vatApplied = afterDiscount * vatPct / 100;
-    const total = afterDiscount + vatApplied;
-    const amountPaid = Math.min(Number(b.amountPaid) || 0, total);
-    const dueAmount = Math.max(0, total - amountPaid);
-    if (dueAmount > 0) {
-      const dueId = await getNextId();
-      await sb('POST', 'dues', { body: { id: dueId, user_id: session.businessId, date: b.date, party: customer ? customer.name : (b.customerName || 'Walk-in'), amount: dueAmount, note: `Bill #${billNo}`, customer_id: b.customer_id || null, bill_id: billId, bill_no: billNo } });
+    const itemsTotal = afterDiscount + vatApplied;
+    const previousBalance = Math.max(0, Number(b.previousBalance) || 0);
+    const grandTotal = itemsTotal + previousBalance;
+    const amountPaid = Math.min(Number(b.amountPaid) || 0, grandTotal);
+
+    // Apply payment to previous balance first, then new items
+    const paidToOldBalance = Math.min(amountPaid, previousBalance);
+    const remainingForItems = Math.max(0, amountPaid - paidToOldBalance);
+    const newItemsDue = Math.max(0, itemsTotal - remainingForItems);
+
+    // If previous balance was paid (even partially), create a due_paid entry
+    if (paidToOldBalance > 0 && b.customer_id) {
+      const dpId = await getNextId();
+      const partyName = customer ? customer.name : (b.customerName || 'Walk-in');
+      await sb('POST', 'due_paid', { body: { id: dpId, user_id: session.businessId, date: b.date, party: partyName, amount: paidToOldBalance, note: `Paid via Bill #${billNo}`, customer_id: b.customer_id } });
     }
-    send(res, 200, { billId, billNo, subtotal, discountApplied, vatApplied, total, amountPaid, dueAmount, items: saleRows, date: b.date, customer: customer || (b.customerName ? { name: b.customerName } : null), discountPct, discountAmt, vatPct });
+
+    // Create new due entry only for the new items' unpaid portion
+    if (newItemsDue > 0) {
+      const dueId = await getNextId();
+      await sb('POST', 'dues', { body: { id: dueId, user_id: session.businessId, date: b.date, party: customer ? customer.name : (b.customerName || 'Walk-in'), amount: newItemsDue, note: `Bill #${billNo}`, customer_id: b.customer_id || null, bill_id: billId, bill_no: billNo } });
+    }
+
+    const dueAmount = Math.max(0, grandTotal - amountPaid);
+    send(res, 200, { billId, billNo, subtotal, itemsTotal, previousBalance, discountApplied, vatApplied, total: grandTotal, amountPaid, dueAmount, items: saleRows, date: b.date, customer: customer || (b.customerName ? { name: b.customerName } : null), discountPct, discountAmt, vatPct });
   },
 
   // ----- Sales returns -----
