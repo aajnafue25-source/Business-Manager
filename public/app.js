@@ -3105,24 +3105,44 @@ async function renderProductsPage() {
   if (formSection) formSection.style.display = isManager ? 'block' : 'none';
   let prods = await apiGet('/products');
   prods.sort(function (a, b) { return a.name.localeCompare(b.name); });
-  const grid = document.getElementById('products-grid');
-  if (!prods.length) {
-    grid.innerHTML = '<div class="empty-state">No products yet.</div>';
+  window.__allProducts = prods;
+  renderProductsTable(prods, isManager);
+}
+
+function renderProductsTable(prods, isManager) {
+  if (isManager === undefined) isManager = currentRole === 'manager';
+  var tb = document.getElementById('products-tbody');
+  if (!tb) return;
+  if (!prods || !prods.length) {
+    tb.innerHTML = '<tr><td colspan="8" class="empty-state" style="padding:30px">No products yet. Add one above.</td></tr>';
     return;
   }
-  grid.innerHTML = prods.map(function (p) {
+  tb.innerHTML = prods.map(function (p) {
     var lowStock = Number(p.quantity) <= 5;
-    return '<div class="product-card' + (lowStock ? ' product-card-low' : '') + '">' +
-      '<div class="product-card-name">' + esc(p.name) + '</div>' +
-      (p.brand_name ? '<div class="product-card-badge">' + esc(p.brand_name) + '</div>' : '') +
-      (p.category_name ? '<div class="product-card-badge cat">' + esc(p.category_name) + '</div>' : '') +
-      '<div class="product-card-bc"><i class="ti ti-barcode"></i> ' + esc(p.barcode) + '</div>' +
-      '<div class="product-card-row"><span class="product-card-label">Stock</span><span class="' + (lowStock ? 'text-danger' : '') + '">' + p.quantity + ' ' + esc(p.unit || 'pcs') + '</span></div>' +
-      '<div class="product-card-row product-cost-row"><span class="product-card-label">Buy</span><span>' + fmt(p.purchase_price) + '</span></div>' +
-      '<div class="product-card-row"><span class="product-card-label">Sell</span><span style="color:var(--ok);font-weight:700">' + fmt(p.sell_price) + '</span></div>' +
-      (isManager ? '<div class="product-card-actions"><button class="edit-btn" onclick="editProduct(' + p.id + ')" title="Edit"><i class="ti ti-pencil"></i></button><button class="del-btn" onclick="deleteRow(\'products\',' + p.id + ',renderProductsPage)" title="Delete"><i class="ti ti-trash"></i></button><button class="edit-btn" onclick="printSingleBarcode(' + JSON.stringify(p).replace(/"/g, '&quot;') + ')" title="Print barcode"><i class="ti ti-barcode"></i></button></div>' : '') +
-      '</div>';
+    var outOfStock = Number(p.quantity) <= 0;
+    var stockColor = outOfStock ? 'var(--danger)' : lowStock ? 'var(--warn)' : 'var(--text)';
+    return '<tr class="' + (lowStock ? 'low-stock-row' : '') + '">' +
+      '<td style="font-weight:600">' + esc(p.name) + '</td>' +
+      '<td style="color:var(--text-2)">' + (esc(p.brand_name) || '<span style="color:var(--text-3)">—</span>') + '</td>' +
+      '<td style="color:var(--text-2)">' + (esc(p.category_name) || '<span style="color:var(--text-3)">—</span>') + '</td>' +
+      '<td style="font-size:12px;color:var(--text-3);font-family:monospace"><i class="ti ti-barcode" style="color:var(--accent)"></i> ' + esc(p.barcode) + '</td>' +
+      '<td class="num" style="color:' + stockColor + ';font-weight:600">' + p.quantity + ' <span style="font-size:11px;font-weight:400">' + esc(p.unit || 'pcs') + '</span></td>' +
+      '<td class="num product-cost-row">' + fmt(p.purchase_price) + '</td>' +
+      '<td class="num" style="color:var(--ok);font-weight:700">' + fmt(p.sell_price) + '</td>' +
+      '<td>' +
+      (isManager ? '<button class="edit-btn" onclick="editProduct(' + p.id + ')" title="Edit"><i class="ti ti-pencil"></i></button> <button class="del-btn" onclick="deleteRow(\'products\',' + p.id + ',renderProductsPage)" title="Delete"><i class="ti ti-trash"></i></button> ' : '') +
+      '<button class="edit-btn" onclick="openBarcodeModal(' + p.id + ')" title="Print barcode"><i class="ti ti-barcode"></i></button>' +
+      '</td></tr>';
   }).join('');
+}
+
+function filterProductsList() {
+  var q = (document.getElementById('products-search') ? document.getElementById('products-search').value : '').toLowerCase();
+  var all = window.__allProducts || [];
+  var filtered = q ? all.filter(function (p) {
+    return (p.name || '').toLowerCase().includes(q) || (p.barcode || '').toLowerCase().includes(q) || (p.category_name || '').toLowerCase().includes(q) || (p.brand_name || '').toLowerCase().includes(q);
+  }) : all;
+  renderProductsTable(filtered);
 }
 
 // ───────── Updated setupPurchasePage: one-click add from search ─────────
