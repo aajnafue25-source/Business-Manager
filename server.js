@@ -504,15 +504,24 @@ const routes = {
   },
 
   'GET /api/customers-summary': async (req, res, session) => {
-    const [customers, sales, dues] = await Promise.all([
+    const [customers, sales, dues, duePaid] = await Promise.all([
       sb('GET', 'customers', { query: bizQuery(session) }),
       sb('GET', 'sales', { query: bizQuery(session) }),
-      sb('GET', 'dues', { query: bizQuery(session) })
+      sb('GET', 'dues', { query: bizQuery(session) }),
+      sb('GET', 'due_paid', { query: bizQuery(session) })
     ]);
     const list = (customers || []).map(c => {
       const theirSales = (sales || []).filter(s => String(s.customer_id) === String(c.id));
       const theirDues = (dues || []).filter(d => String(d.customer_id) === String(c.id));
-      return { ...c, totalPurchased: theirSales.reduce((s, r) => s + Number(r.amount), 0), totalDue: theirDues.reduce((s, r) => s + Number(r.amount), 0), billCount: new Set(theirSales.map(s => s.bill_id)).size };
+      // Match payments by customer_id first, fall back to party name match
+      const theirPaid = (duePaid || []).filter(p =>
+        (p.customer_id && String(p.customer_id) === String(c.id)) ||
+        (!p.customer_id && (p.party || '').toLowerCase() === (c.name || '').toLowerCase())
+      );
+      const grossDue = theirDues.reduce((s, r) => s + Number(r.amount), 0);
+      const totalPaid = theirPaid.reduce((s, r) => s + Number(r.amount), 0);
+      const totalDue = Math.max(0, grossDue - totalPaid);
+      return { ...c, totalPurchased: theirSales.reduce((s, r) => s + Number(r.amount), 0), totalDue, billCount: new Set(theirSales.map(s => s.bill_id)).size };
     });
     send(res, 200, list);
   },

@@ -243,8 +243,8 @@ const PAGE_RENDERERS = {
   purchasereturns: renderPurchaseReturnsPage,
   suppliers: renderSuppliersPage,
   expenses: renderExpensePage,
-  dues: function () { navigateTo('dueentry'); },
-  dueentry: renderDueEntryPage,
+  dues: function () { navigateTo('duepaid'); },
+  dueentry: function () { navigateTo('duepaid'); },
   duepaid: renderDuePaidPage,
   products: renderProductsPage,
   categories: renderCategoriesPage,
@@ -1055,6 +1055,7 @@ async function addDuePaid() {
   if (document.getElementById('dpaid-outstanding-info')) document.getElementById('dpaid-outstanding-info').style.display = 'none';
   __customerOutstandingDue = 0;
   renderDuePaidList();
+  renderDueEntryList(); // refresh outstanding dues to reflect payment
   toast('Payment recorded');
 }
 
@@ -1261,6 +1262,10 @@ var __customerOutstandingDue = 0;
 async function renderDuePaidPage() {
   const dpaidDateEl = document.getElementById('dpaid-date');
   if (dpaidDateEl && !dpaidDateEl.value) dpaidDateEl.value = new Date().toISOString().slice(0, 10);
+
+  // Load outstanding dues at the top
+  renderDueEntryList();
+
   // Wire customer search — auto-fills outstanding due
   wireSearchPicker('dpaid-customer-search', 'dpaid-customer-results', searchCustomersApi, renderCustomerSearchItem, async function (c) {
     document.getElementById('dpaid-customer-id').value = c.id;
@@ -2026,18 +2031,28 @@ async function renderDashboard() {
     }
   });
 
+  // Calculate COGS from filtered sales
+  var cogs = sales.reduce(function (s, r) {
+    if (r.cost_price != null && r.quantity) return s + Number(r.cost_price) * Number(r.quantity);
+    return s;
+  }, 0);
+  var netProfit = Math.max(0, totalSales - cogs - totalExp);
+
   if (donutChart) donutChart.destroy();
-  donutChart = new Chart(document.getElementById('donutChart').getContext('2d'), {
-    type: 'doughnut',
-    data: {
-      labels: ['COGS', 'Expenses', 'Net profit', 'Customer dues'],
-      datasets: [{ data: [summary.totalCOGS, summary.totalExpenses, Math.max(summary.netProfit, 0), summary.totalDues], backgroundColor: ['#8b5cf6', '#ef4444', '#10b981', '#f59e0b'], borderWidth: 0, hoverOffset: 6 }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false, cutout: '65%',
-      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10, boxWidth: 10 } } }
-    }
-  });
+  var donutCanvas = document.getElementById('donutChart');
+  if (donutCanvas) {
+    donutChart = new Chart(donutCanvas.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: ['COGS', 'Expenses', 'Net profit', 'Customer dues'],
+        datasets: [{ data: [cogs, totalExp, netProfit, totalDues], backgroundColor: ['#8b5cf6', '#ef4444', '#10b981', '#f59e0b'], borderWidth: 0, hoverOffset: 6 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '65%',
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10, boxWidth: 10 } } }
+      }
+    });
+  }
 }
 
 // ───────── Admin Panel ─────────

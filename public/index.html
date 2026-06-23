@@ -117,10 +117,9 @@
 
     <button data-page="expenses"><i class="ti ti-receipt"></i><span>Expenses</span></button>
     <div class="nav-group">
-      <button class="nav-group-btn" data-page="dueentry" data-default="dueentry"><i class="ti ti-clock"></i><span>Dues</span><i class="ti ti-chevron-down nav-caret"></i></button>
+      <button class="nav-group-btn" data-page="duepaid" data-default="duepaid"><i class="ti ti-clock"></i><span>Dues</span><i class="ti ti-chevron-down nav-caret"></i></button>
       <div class="nav-dropdown">
-        <button data-page="dueentry"><i class="ti ti-clock"></i>Due Entry</button>
-        <button data-page="duepaid"><i class="ti ti-circle-check"></i>Due Paid</button>
+        <button data-page="duepaid"><i class="ti ti-circle-check"></i>Due Payment</button>
       </div>
     </div>
     <button data-page="customers"><i class="ti ti-users"></i><span>Customers</span></button>
@@ -552,61 +551,40 @@
       </div>
     </section>
 
-    <!-- DUE ENTRY -->
-    <section id="page-dueentry" class="page">
-      <h1 class="page-title"><i class="ti ti-clock"></i> Due Entry</h1>
-      <div class="entry-section" style="margin-bottom:18px">
-        <h3><i class="ti ti-plus" style="color:var(--warn)"></i> Add due entry</h3>
-        <div class="form-row"><label>Date</label><input type="date" id="due-date" /></div>
-        <div class="form-row"><label>Customer / Party</label>
-          <div class="search-pick-wrap">
-            <input type="text" id="due-customer-search" class="search-pick-input" placeholder="🔍 Search by name or phone..." autocomplete="off" />
-            <input type="hidden" id="due-customer-id" value="" />
-            <div id="due-customer-results" class="search-pick-results"></div>
+    <!-- DUE PAYMENT (combined: outstanding list + payment form + payment history) -->
+    <section id="page-duepaid" class="page">
+      <h1 class="page-title"><i class="ti ti-clock"></i> Due Payment</h1>
+
+      <!-- Outstanding dues list -->
+      <div class="list-card" style="margin-bottom:18px">
+        <div class="list-header" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <span><i class="ti ti-alert-circle" style="color:var(--warn)"></i> Outstanding dues</span>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <input type="text" id="dueentry-search" placeholder="Search..." oninput="renderDueEntryList()" style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;background:var(--surface-2);color:var(--text);width:130px" />
+            <input type="date" id="dueentry-from" style="padding:6px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:var(--surface-2);color:var(--text)" onchange="renderDueEntryList()" />
+            <input type="date" id="dueentry-to" style="padding:6px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:var(--surface-2);color:var(--text)" onchange="renderDueEntryList()" />
           </div>
         </div>
-        <div class="form-row"><label>Party name (if not in customer list)</label><input type="text" id="due-party" placeholder="Or type name manually" /></div>
-        <div class="form-row"><label>Amount (Tk)</label><input type="number" id="due-amount" placeholder="0.00" min="0" /></div>
-        <div class="form-row"><label>Note</label><input type="text" id="due-note" placeholder="Optional note, e.g. Bill #10" /></div>
-        <button class="btn-save" onclick="addDue()"><i class="ti ti-plus"></i> Save due</button>
-      </div>
-      <div class="filter-bar">
-        <input type="text" id="dueentry-search" placeholder="🔍 Search party..." oninput="renderDueEntryList()" style="flex:1;min-width:140px" />
-        <input type="date" id="dueentry-from" />
-        <span class="filter-to">to</span>
-        <input type="date" id="dueentry-to" />
-        <button class="btn-filter" onclick="renderDueEntryList()">Filter</button>
-        <button class="btn-clear" onclick="clearDueEntryFilter()">Clear</button>
-      </div>
-      <div class="list-card">
-        <div class="list-header"><i class="ti ti-alert-circle" style="color:var(--warn)"></i> Outstanding dues</div>
         <div class="table-scroll">
           <table><thead><tr><th>Date</th><th>Party</th><th>Note</th><th class="num">Amount</th></tr></thead>
           <tbody id="dues-tbody"></tbody></table>
         </div>
         <div class="total-row"><span>Total outstanding</span><span id="dues-total-val">Tk 0</span></div>
       </div>
-    </section>
 
-    <!-- DUE PAID -->
-    <section id="page-duepaid" class="page">
-      <h1 class="page-title"><i class="ti ti-circle-check"></i> Due Paid</h1>
+      <!-- Payment form -->
       <div class="entry-section" style="margin-bottom:18px">
         <h3><i class="ti ti-circle-check" style="color:var(--ok)"></i> Record payment</h3>
         <div class="form-row"><label>Date</label><input type="date" id="dpaid-date" /></div>
-
-        <!-- Customer search — auto-fills outstanding amount -->
         <div class="form-row"><label>Search customer / party</label>
           <div class="search-pick-wrap">
-            <input type="text" id="dpaid-customer-search" class="search-pick-input" placeholder="🔍 Search by name or phone to auto-fill due..." autocomplete="off" />
+            <input type="text" id="dpaid-customer-search" class="search-pick-input" placeholder="Search by name or phone to auto-fill due..." autocomplete="off" />
             <input type="hidden" id="dpaid-customer-id" value="" />
             <div id="dpaid-customer-results" class="search-pick-results"></div>
           </div>
         </div>
         <div id="dpaid-outstanding-info" class="dpaid-info-box" style="display:none"></div>
         <div class="form-row"><label>Party name</label><input type="text" id="dpaid-party" placeholder="Name of person who paid" /></div>
-
-        <!-- Full / Partial toggle -->
         <div class="form-row"><label>Payment type</label>
           <div class="pay-toggle">
             <button type="button" class="pay-btn active" id="dpaid-mode-full" onclick="setDuePaidMode('full')"><i class="ti ti-cash"></i> Full payment</button>
@@ -617,8 +595,10 @@
         <div class="form-row"><label>Note</label><input type="text" id="dpaid-note" placeholder="Optional note" /></div>
         <button class="btn-save" onclick="addDuePaid()"><i class="ti ti-circle-check"></i> Record payment</button>
       </div>
+
+      <!-- Payment history -->
       <div class="filter-bar">
-        <input type="text" id="duepaid-search" placeholder="🔍 Search party..." oninput="renderDuePaidList()" style="flex:1;min-width:140px" />
+        <input type="text" id="duepaid-search" placeholder="Search payments..." oninput="renderDuePaidList()" style="flex:1;min-width:140px" />
         <input type="date" id="duepaid-from" />
         <span class="filter-to">to</span>
         <input type="date" id="duepaid-to" />
@@ -628,14 +608,14 @@
       <div class="list-card">
         <div class="list-header"><i class="ti ti-circle-check" style="color:var(--ok)"></i> Payment history</div>
         <div class="table-scroll">
-          <table><thead><tr><th>Date</th><th>Party</th><th>Note</th><th class="num">Amount</th></tr></thead>
+          <table><thead><tr><th>Date</th><th>Party</th><th>Note</th><th class="num">Amount paid</th></tr></thead>
           <tbody id="paid-tbody"></tbody></table>
         </div>
         <div class="total-row"><span>Total paid</span><span id="paid-total-val">Tk 0</span></div>
       </div>
     </section>
 
-    <!-- PRODUCTS -->
+        <!-- PRODUCTS -->
     <section id="page-products" class="page">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px">
         <h1 class="page-title" style="margin:0"><i class="ti ti-package"></i> Products</h1>
