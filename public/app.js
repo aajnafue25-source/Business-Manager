@@ -1038,6 +1038,8 @@ async function checkout() {
     document.getElementById('cart-customer-search').focus();
     return;
   }
+
+  var t = getCartTotals();
   var total = t.total;
   var amountPaid = total;
   if (payMode === 'due') amountPaid = 0;
