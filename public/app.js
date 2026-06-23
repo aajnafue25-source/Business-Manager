@@ -241,7 +241,7 @@ function updateTopbarBizName() {
 const PAGE_RENDERERS = {
   dashboard: renderDashboard,
   admin: renderAdminPage,
-  sales: function () { loadProductOptions(); loadCustomerOptions(); renderSalesPage(); },
+  sales: function () { loadProductOptions(); loadCustomerOptions(); renderSalesPage(); loadSalesmanDropdown(); },
   saleslist: renderSalesListPage,
   saledetail: renderSaleDetailPage,
   salesreturns: renderSalesReturnsPage,
@@ -264,6 +264,7 @@ const PAGE_RENDERERS = {
   staff: renderStaffPage,
   attendance: renderAttendancePage,
   staffsales: renderStaffSalesPage,
+  staffreports: renderStaffReportsPage,
 };
 
 function navigateTo(page) {
@@ -3509,9 +3510,63 @@ async function loadSalesmanDropdown() {
     var staff = await apiGet('/staff');
     var current = sel.value;
     sel.innerHTML = '<option value="">— Walk-in / self —</option>' +
-      (staff || []).map(function (s) { return '<option value="' + s.id + '" data-name="' + esc(s.name) + '">' + esc(s.name) + '</option>'; }).join('');
+      (staff || []).map(function (s) {
+        return '<option value="' + s.id + '" data-name="' + esc(s.name) + '">' + esc(s.name) + '</option>';
+      }).join('');
     if (current) sel.value = current;
+  } catch (e) { console.warn('Could not load staff for salesman dropdown', e); }
+}
+
+// ═══════════════════════════════════════════════════════
+//  ATTENDANCE RULES
+// ═══════════════════════════════════════════════════════
+
+var __attRules = { entryTime: '09:00', lunchMaxMinutes: 60 };
+
+function loadAttRules() {
+  try {
+    var saved = localStorage.getItem('bm-att-rules');
+    if (saved) __attRules = JSON.parse(saved);
   } catch (e) {}
+}
+
+function saveAttRules() {
+  var entryTime = (document.getElementById('att-rule-entry').value || '09:00');
+  var lunchMax = parseInt(document.getElementById('att-rule-lunch').value) || 60;
+  __attRules = { entryTime: entryTime, lunchMaxMinutes: lunchMax };
+  try { localStorage.setItem('bm-att-rules', JSON.stringify(__attRules)); } catch (e) {}
+  toast('Rules saved', 'ok');
+  updateAttRulesInfo();
+  renderAttendancePage();
+}
+
+function updateAttRulesInfo() {
+  var el = document.getElementById('att-rules-info');
+  if (el) el.textContent = 'Staff arriving after ' + (__attRules.entryTime || '09:00') + ' will be marked Late. Max lunch: ' + (__attRules.lunchMaxMinutes || 60) + ' minutes.';
+}
+
+function calcLateMinutes(entryTime) {
+  if (!entryTime || !__attRules.entryTime) return 0;
+  var ruleMin = timeToMinutes(__attRules.entryTime);
+  var actualMin = timeToMinutes(entryTime);
+  return Math.max(0, actualMin - ruleMin);
+}
+
+function calcLunchMinutes(lunchOut, lunchIn) {
+  if (!lunchOut || !lunchIn) return 0;
+  return Math.max(0, timeToMinutes(lunchIn) - timeToMinutes(lunchOut));
+}
+
+function timeToMinutes(t) {
+  if (!t) return 0;
+  var parts = t.split(':');
+  return parseInt(parts[0]) * 60 + parseInt(parts[1] || 0);
+}
+
+function minsToLabel(mins) {
+  if (mins <= 0) return '';
+  if (mins < 60) return mins + 'm';
+  return Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -3521,6 +3576,18 @@ async function loadSalesmanDropdown() {
 var __attChart = null, __attLateChart = null;
 
 async function renderAttendancePage() {
+  loadAttRules();
+
+  // Show/hide rules panel for managers
+  var rulesSection = document.getElementById('att-rules-section');
+  if (rulesSection) rulesSection.style.display = (currentRole === 'manager') ? 'block' : 'none';
+  // Populate rules inputs
+  var ruleEntry = document.getElementById('att-rule-entry');
+  var ruleLunch = document.getElementById('att-rule-lunch');
+  if (ruleEntry) ruleEntry.value = __attRules.entryTime || '09:00';
+  if (ruleLunch) ruleLunch.value = __attRules.lunchMaxMinutes || 60;
+  updateAttRulesInfo();
+
   var dateEl = document.getElementById('att-date');
   if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
   var dateFilter = dateEl ? dateEl.value : '';
@@ -3545,25 +3612,69 @@ async function renderAttendancePage() {
 
   var tb = document.getElementById('attendance-tbody');
   if (tb) {
+    window.__attRows = rows;
     if (!rows.length) {
-      tb.innerHTML = '<tr><td colspan="9" class="empty-state">No attendance records' + (dateFilter ? ' for ' + dateFilter : '') + '.</td></tr>';
+      tb.innerHTML = '<tr><td colspan="9" class="empty-state">No records' + (dateFilter ? ' for ' + dateFilter : '') + '.</td></tr>';
     } else {
-      window.__attRows = rows;
       tb.innerHTML = rows.map(function (r, i) {
-        var statusColor = r.status === 'present' ? 'var(--ok)' : r.status === 'late' ? 'var(--warn)' : r.status === 'leave' ? '#6366f1' : 'var(--danger)';
-        var statusLabel = (r.status || 'present').charAt(0).toUpperCase() + (r.status || 'present').slice(1);
-        return '<tr><td>' + r.date + '</td><td style="font-weight:600">' + esc(r.staff_name) + '</td>' +
+        var lateMin = (r.status === 'present' || r.status === 'late') ? calcLateMinutes(r.entry_time) : 0;
+        var isLate = lateMin > 0;
+        var displayStatus = isLate ? 'late' : (r.status || 'present');
+        var statusColor = displayStatus === 'present' ? 'var(--ok)' : displayStatus === 'late' ? 'var(--warn)' : displayStatus === 'leave' ? '#6366f1' : 'var(--danger)';
+        var statusLabel = displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1);
+        var lunchMin = calcLunchMinutes(r.lunch_out, r.lunch_in);
+        var lunchOverMin = lunchMin - (__attRules.lunchMaxMinutes || 60);
+        var lunchLabel = lunchMin > 0 ? minsToLabel(lunchMin) + (lunchOverMin > 0 ? ' <span style="color:var(--danger)">(+' + minsToLabel(lunchOverMin) + ')</span>' : '') : '—';
+        return '<tr>' +
+          '<td>' + r.date + '</td>' +
+          '<td style="font-weight:600">' + esc(r.staff_name) + '</td>' +
           '<td><span style="color:' + statusColor + ';font-weight:600">' + statusLabel + '</span></td>' +
-          '<td>' + (r.entry_time || '—') + '</td><td>' + (r.exit_time || '—') + '</td>' +
-          '<td>' + (r.lunch_out || '—') + '</td><td>' + (r.lunch_in || '—') + '</td>' +
+          '<td>' + (r.entry_time || '—') + '</td>' +
+          '<td>' + (isLate ? '<span style="color:var(--warn);font-weight:600">+' + minsToLabel(lateMin) + '</span>' : '<span style="color:var(--ok)">On time</span>') + '</td>' +
+          '<td>' + (r.exit_time || '—') + '</td>' +
+          '<td>' + lunchLabel + '</td>' +
           '<td style="color:var(--text-2);font-size:12px">' + (esc(r.note) || '') + '</td>' +
-          '<td><button class="del-btn" onclick="deleteRow(\'attendance\',' + r.id + ',renderAttendancePage)"><i class="ti ti-trash"></i></button></td></tr>';
+          '<td style="white-space:nowrap">' +
+          '<button class="edit-btn" onclick="openAttEdit(' + i + ')" title="Edit"><i class="ti ti-pencil"></i></button> ' +
+          '<button class="del-btn" onclick="deleteRow(\'attendance\',' + r.id + ',renderAttendancePage)" title="Delete"><i class="ti ti-trash"></i></button>' +
+          '</td></tr>';
       }).join('');
     }
   }
 
-  // Charts
   renderAttendanceCharts(allRows);
+}
+
+function openAttEdit(idx) {
+  var r = (window.__attRows || [])[idx];
+  if (!r) return;
+  document.getElementById('att-edit-id').value = r.id;
+  document.getElementById('att-edit-status').value = r.status || 'present';
+  document.getElementById('att-edit-entry').value = r.entry_time || '';
+  document.getElementById('att-edit-exit').value = r.exit_time || '';
+  document.getElementById('att-edit-lunch-out').value = r.lunch_out || '';
+  document.getElementById('att-edit-lunch-in').value = r.lunch_in || '';
+  document.getElementById('att-edit-note').value = r.note || '';
+  document.getElementById('att-edit-section').style.display = 'block';
+  document.getElementById('att-edit-section').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function saveAttEdit() {
+  var id = document.getElementById('att-edit-id').value;
+  if (!id) return;
+  var status = document.getElementById('att-edit-status').value;
+  var entryTime = document.getElementById('att-edit-entry').value;
+  var exitTime = document.getElementById('att-edit-exit').value;
+  var lunchOut = document.getElementById('att-edit-lunch-out').value;
+  var lunchIn = document.getElementById('att-edit-lunch-in').value;
+  var note = document.getElementById('att-edit-note').value;
+  // Auto-detect late
+  var lateMin = (status === 'present') ? calcLateMinutes(entryTime) : 0;
+  if (lateMin > 0) status = 'late';
+  var res = await fetch('/api/attendance/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: status, entry_time: entryTime || null, exit_time: exitTime || null, lunch_out: lunchOut || null, lunch_in: lunchIn || null, note: note }) });
+  document.getElementById('att-edit-section').style.display = 'none';
+  toast('Attendance updated', 'ok');
+  renderAttendancePage();
 }
 
 async function addAttendance() {
@@ -3579,19 +3690,28 @@ async function addAttendance() {
   var lunchOut = document.getElementById('att-lunch-out').value;
   var lunchIn = document.getElementById('att-lunch-in').value;
   var note = document.getElementById('att-note').value;
+  // Auto-calculate late based on rules
+  if (status === 'present' && entryTime) {
+    var lateMin = calcLateMinutes(entryTime);
+    if (lateMin > 0) status = 'late';
+  }
   var res = await apiPost('/attendance', { staff_id: staffId, staff_name: staffName, date: date, status: status, entry_time: entryTime || null, exit_time: exitTime || null, lunch_out: lunchOut || null, lunch_in: lunchIn || null, note: note });
   if (res && res.error) { alert(res.error); return; }
-  // Clear time fields
   ['att-entry', 'att-exit', 'att-lunch-out', 'att-lunch-in', 'att-note'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
-  document.getElementById('att-staff-select').value = '';
-  toast(staffName + ' attendance saved', 'ok');
+  if (staffSel) staffSel.value = '';
+  document.getElementById('att-status').value = 'present';
+  toast(staffName + ' attendance saved' + (status === 'late' ? ' — marked Late' : ''), 'ok');
   renderAttendancePage();
 }
 
 function renderAttendanceCharts(rows) {
-  // Summary donut: present/late/absent/leave counts
   var counts = { present: 0, late: 0, absent: 0, leave: 0 };
-  rows.forEach(function (r) { var s = r.status || 'present'; if (counts[s] !== undefined) counts[s]++; });
+  rows.forEach(function (r) {
+    var lateMin = (r.status === 'present' || r.status === 'late') ? calcLateMinutes(r.entry_time) : 0;
+    var effective = lateMin > 0 ? 'late' : (r.status || 'present');
+    if (counts[effective] !== undefined) counts[effective]++;
+    else counts.present++;
+  });
 
   var attCanvas = document.getElementById('att-chart');
   if (attCanvas) {
@@ -3603,10 +3723,10 @@ function renderAttendanceCharts(rows) {
     });
   }
 
-  // Late count per staff
   var lateCounts = {};
-  rows.filter(function (r) { return r.status === 'late'; }).forEach(function (r) {
-    lateCounts[r.staff_name] = (lateCounts[r.staff_name] || 0) + 1;
+  rows.forEach(function (r) {
+    var lateMin = (r.status === 'present' || r.status === 'late') ? calcLateMinutes(r.entry_time) : 0;
+    if (lateMin > 0) lateCounts[r.staff_name] = (lateCounts[r.staff_name] || 0) + 1;
   });
   var lateNames = Object.keys(lateCounts).sort(function (a, b) { return lateCounts[b] - lateCounts[a]; });
 
@@ -3615,14 +3735,106 @@ function renderAttendanceCharts(rows) {
     if (__attLateChart) __attLateChart.destroy();
     __attLateChart = new Chart(lateCanvas.getContext('2d'), {
       type: 'bar',
-      data: { labels: lateNames.length ? lateNames : ['No data'], datasets: [{ label: 'Late count', data: lateNames.map(function (n) { return lateCounts[n]; }), backgroundColor: '#f59e0b', borderRadius: 6 }] },
+      data: { labels: lateNames.length ? lateNames : ['No late records'], datasets: [{ label: 'Late count', data: lateNames.length ? lateNames.map(function (n) { return lateCounts[n]; }) : [0], backgroundColor: '#f59e0b', borderRadius: 6 }] },
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
     });
   }
 }
 
 // ═══════════════════════════════════════════════════════
-//  STAFF SALES PAGE
+//  STAFF REPORTS — Per-staff attendance + sales breakdown
+// ═══════════════════════════════════════════════════════
+
+async function renderStaffReportsPage() {
+  var from = document.getElementById('sr-from') ? document.getElementById('sr-from').value : '';
+  var to = document.getElementById('sr-to') ? document.getElementById('sr-to').value : '';
+  var inRange = function (d) { return (!from || d >= from) && (!to || d <= to); };
+  var content = document.getElementById('staffreports-content');
+  content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-2)">Loading...</div>';
+  loadAttRules();
+
+  var results = await Promise.all([apiGet('/staff'), apiGet('/attendance'), apiGet('/sales')]);
+  var staffList = results[0] || [], allAtt = results[1] || [], allSales = results[2] || [];
+
+  var att = allAtt.filter(function (r) { return inRange(r.date); });
+  var sales = allSales.filter(function (r) { return inRange(r.date); });
+
+  if (!staffList.length) { content.innerHTML = '<div class="empty-state" style="padding:30px">No staff found. Add staff in Manage Staff.</div>'; return; }
+
+  var html = '<div class="cf-columns">';
+  staffList.forEach(function (s) {
+    var sAtt = att.filter(function (r) { return r.staff_id === s.id || (r.staff_name || '').toLowerCase() === (s.name || '').toLowerCase(); });
+    var sSales = sales.filter(function (r) { return r.salesman_id === s.id || (r.salesman_name || '').toLowerCase() === (s.name || '').toLowerCase(); });
+    var totalSales = sSales.reduce(function (t, r) { return t + Number(r.amount || 0); }, 0);
+    var bills = new Set(sSales.map(function (r) { return r.bill_id; })).size;
+
+    var attCounts = { present: 0, late: 0, absent: 0, leave: 0 };
+    var totalLateMin = 0;
+    sAtt.forEach(function (r) {
+      var lateMin = (r.status === 'present' || r.status === 'late') ? calcLateMinutes(r.entry_time) : 0;
+      var eff = lateMin > 0 ? 'late' : (r.status || 'present');
+      totalLateMin += lateMin;
+      if (attCounts[eff] !== undefined) attCounts[eff]++; else attCounts.present++;
+    });
+    var totalDays = sAtt.length;
+
+    html += '<div class="detail-card" style="cursor:pointer" onclick="openStaffDetailReport(' + s.id + ',\'' + esc(s.name) + '\')">' +
+      '<div class="detail-card-header"><i class="ti ti-user"></i> ' + esc(s.name) + ' <span style="font-size:11px;color:var(--text-2);font-weight:400">— ' + esc(s.role) + '</span></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0">' +
+      '<div style="padding:12px 16px;border-bottom:1px solid var(--border);border-right:1px solid var(--border)"><div style="font-size:11px;color:var(--text-2)">Total Sales</div><div style="font-size:18px;font-weight:700;color:var(--ok)">' + fmt(totalSales) + '</div><div style="font-size:11px;color:var(--text-2)">' + bills + ' bills</div></div>' +
+      '<div style="padding:12px 16px;border-bottom:1px solid var(--border)"><div style="font-size:11px;color:var(--text-2)">Attendance</div><div style="font-size:15px;font-weight:700">' + totalDays + ' days</div><div style="font-size:11px;color:var(--text-2)">' + attCounts.present + ' present · ' + attCounts.late + ' late · ' + attCounts.absent + ' absent</div></div>' +
+      '<div style="padding:12px 16px;border-right:1px solid var(--border)"><div style="font-size:11px;color:var(--text-2)">Total late time</div><div style="font-size:15px;font-weight:700;color:' + (totalLateMin > 0 ? 'var(--warn)' : 'var(--ok)') + '">' + (totalLateMin > 0 ? minsToLabel(totalLateMin) : 'Never late') + '</div></div>' +
+      '<div style="padding:12px 16px"><div style="font-size:11px;color:var(--text-2)">Leave / Absent</div><div style="font-size:15px;font-weight:700">' + attCounts.leave + ' leave · ' + attCounts.absent + ' absent</div></div>' +
+      '</div>' +
+      '<div style="padding:10px 16px;border-top:1px solid var(--border);font-size:12px;color:var(--accent)"><i class="ti ti-arrow-right"></i> Click for full report</div>' +
+      '</div>';
+  });
+  html += '</div>';
+  content.innerHTML = html;
+}
+
+async function openStaffDetailReport(staffId, staffName) {
+  var from = document.getElementById('sr-from') ? document.getElementById('sr-from').value : '';
+  var to = document.getElementById('sr-to') ? document.getElementById('sr-to').value : '';
+  var inRange = function (d) { return (!from || d >= from) && (!to || d <= to); };
+  loadAttRules();
+
+  var results = await Promise.all([apiGet('/attendance'), apiGet('/sales')]);
+  var allAtt = results[0] || [], allSales = results[1] || [];
+  var nameLower = (staffName || '').toLowerCase();
+
+  var att = allAtt.filter(function (r) { return inRange(r.date) && (r.staff_id === staffId || (r.staff_name || '').toLowerCase() === nameLower); });
+  var sales = allSales.filter(function (r) { return inRange(r.date) && (r.salesman_id === staffId || (r.salesman_name || '').toLowerCase() === nameLower); });
+  att.sort(function (a, b) { return b.date.localeCompare(a.date); });
+
+  var attHtml = att.length ? att.map(function (r) {
+    var lateMin = calcLateMinutes(r.entry_time);
+    var eff = (r.status === 'present' && lateMin > 0) ? 'late' : r.status;
+    var col = eff === 'present' ? 'var(--ok)' : eff === 'late' ? 'var(--warn)' : eff === 'leave' ? '#6366f1' : 'var(--danger)';
+    var lunchMin = calcLunchMinutes(r.lunch_out, r.lunch_in);
+    return '<tr><td>' + r.date + '</td><td style="color:' + col + ';font-weight:600">' + eff.charAt(0).toUpperCase() + eff.slice(1) + '</td>' +
+      '<td>' + (r.entry_time || '—') + '</td><td>' + (lateMin > 0 ? '<span style="color:var(--warn)">+' + minsToLabel(lateMin) + '</span>' : 'On time') + '</td>' +
+      '<td>' + (r.exit_time || '—') + '</td><td>' + (lunchMin > 0 ? minsToLabel(lunchMin) : '—') + '</td>' +
+      '<td style="font-size:12px;color:var(--text-2)">' + (r.note || '') + '</td></tr>';
+  }).join('') : '<tr><td colspan="7" class="empty-state">No attendance records.</td></tr>';
+
+  var salesTotal = sales.reduce(function (t, r) { return t + Number(r.amount || 0); }, 0);
+  var billSet = new Set(sales.filter(function (r) { return r.bill_id; }).map(function (r) { return r.bill_id; }));
+
+  openViewEntryModal('Staff Report — ' + staffName, [
+    { label: 'Period', value: (from || 'All time') + (to ? ' → ' + to : '') },
+    { label: 'Total Sales', value: '<span style="color:var(--ok);font-weight:700">' + fmt(salesTotal) + '</span> (' + billSet.size + ' bills, ' + sales.length + ' items)' },
+    { label: 'Days tracked', value: att.length },
+    { label: 'Attendance', value: '<table style="width:100%;font-size:13px;margin-top:6px"><thead><tr><th>Date</th><th>Status</th><th>Entry</th><th>Late by</th><th>Exit</th><th>Lunch</th><th>Note</th></tr></thead><tbody>' + attHtml + '</tbody></table>' }
+  ]);
+}
+
+function clearSRFilter() {
+  var from = document.getElementById('sr-from'); if (from) from.value = '';
+  var to = document.getElementById('sr-to'); if (to) to.value = '';
+  renderStaffReportsPage();
+}
+
 // ═══════════════════════════════════════════════════════
 
 async function renderStaffSalesPage() {

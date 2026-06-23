@@ -144,6 +144,7 @@
         <button data-page="staff"><i class="ti ti-users-group"></i>Manage Staff</button>
         <button data-page="attendance"><i class="ti ti-calendar-check"></i>Attendance</button>
         <button data-page="staffsales"><i class="ti ti-chart-bar"></i>Staff Sales</button>
+        <button data-page="staffreports"><i class="ti ti-report-analytics"></i>Staff Reports</button>
       </div>
     </div>
 
@@ -254,11 +255,6 @@
           </div>
           <!-- Outstanding due notice for selected customer -->
           <div id="cart-customer-due-notice" class="cart-due-notice" style="display:none"></div>
-          <!-- Salesman dropdown -->
-          <div class="pos-field-group">
-            <label class="pos-label">Salesman</label>
-            <select id="cart-salesman" class="pos-input"><option value="">— Walk-in / self —</option></select>
-          </div>
 
           <!-- Manual custom item row (collapsed by default) -->
           <details class="pos-custom-item">
@@ -294,6 +290,11 @@
             <div class="pos-vat-row">
               <input type="number" id="cart-vat-pct" class="pos-input pos-disc-input" min="0" max="100" placeholder="VAT %" oninput="renderCartTotals()" />
               <span id="cart-vat-display" class="disc-or" style="color:var(--info)"></span>
+            </div>
+            <!-- Salesman — between VAT and Total -->
+            <div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+              <span style="font-size:12px;color:var(--text-2);white-space:nowrap"><i class="ti ti-user"></i> Salesman</span>
+              <select id="cart-salesman" class="pos-input" style="flex:1"><option value="">— Walk-in / self —</option></select>
             </div>
             <div class="pos-total-row"><span>Total</span><span id="cart-total-val" class="pos-total-amt">Tk 0.00</span></div>
             <div class="pay-toggle" style="margin-bottom:10px">
@@ -927,12 +928,31 @@
     <!-- ATTENDANCE -->
     <section id="page-attendance" class="page">
       <h1 class="page-title"><i class="ti ti-calendar-check"></i> Attendance</h1>
+
+      <!-- Rules Panel (manager only) -->
+      <div class="entry-section" id="att-rules-section" style="margin-bottom:14px;background:var(--accent-soft);border:1px solid var(--accent)">
+        <h3 style="color:var(--accent)"><i class="ti ti-settings"></i> Attendance Rules</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end">
+          <div class="form-row" style="flex:1;min-width:160px">
+            <label>Standard entry time</label>
+            <input type="time" id="att-rule-entry" value="09:00" />
+          </div>
+          <div class="form-row" style="flex:1;min-width:160px">
+            <label>Max lunch duration (minutes)</label>
+            <input type="number" id="att-rule-lunch" min="0" max="240" value="60" placeholder="e.g. 60" />
+          </div>
+          <button class="btn-save" style="max-width:160px;margin-bottom:0" onclick="saveAttRules()"><i class="ti ti-check"></i> Save rules</button>
+        </div>
+        <div id="att-rules-info" style="font-size:12px;color:var(--text-2);margin-top:8px"></div>
+      </div>
+
       <div class="filter-bar" style="margin-bottom:16px">
         <input type="date" id="att-date" onchange="renderAttendancePage()" />
         <input type="text" id="att-search" placeholder="🔍 Search staff..." oninput="renderAttendancePage()" style="flex:1" />
         <button class="btn-filter" onclick="renderAttendancePage()">Load</button>
       </div>
-      <!-- Quick add for today -->
+
+      <!-- Add entry form -->
       <div class="entry-section" style="margin-bottom:18px" id="att-form-section">
         <h3><i class="ti ti-plus" style="color:var(--ok)"></i> Add attendance entry</h3>
         <div class="att-form-grid">
@@ -942,7 +962,6 @@
           <div class="form-row"><label>Status</label>
             <select id="att-status">
               <option value="present">Present</option>
-              <option value="late">Late</option>
               <option value="absent">Absent</option>
               <option value="leave">Leave</option>
             </select>
@@ -955,14 +974,40 @@
         </div>
         <button class="btn-save" onclick="addAttendance()"><i class="ti ti-calendar-check"></i> Save attendance</button>
       </div>
+
+      <!-- Edit form (hidden until edit clicked) -->
+      <div id="att-edit-section" style="display:none;margin-bottom:18px">
+        <div class="entry-section" style="border-color:var(--accent)">
+          <h3 style="color:var(--accent)"><i class="ti ti-pencil"></i> Edit attendance record</h3>
+          <input type="hidden" id="att-edit-id" />
+          <div class="att-form-grid">
+            <div class="form-row"><label>Status</label>
+              <select id="att-edit-status">
+                <option value="present">Present</option>
+                <option value="absent">Absent</option>
+                <option value="leave">Leave</option>
+              </select>
+            </div>
+            <div class="form-row"><label>Entry time</label><input type="time" id="att-edit-entry" /></div>
+            <div class="form-row"><label>Exit time</label><input type="time" id="att-edit-exit" /></div>
+            <div class="form-row"><label>Lunch out</label><input type="time" id="att-edit-lunch-out" /></div>
+            <div class="form-row"><label>Lunch in</label><input type="time" id="att-edit-lunch-in" /></div>
+            <div class="form-row"><label>Note</label><input type="text" id="att-edit-note" /></div>
+          </div>
+          <div style="display:flex;gap:10px">
+            <button class="btn-save" onclick="saveAttEdit()"><i class="ti ti-check"></i> Update</button>
+            <button class="btn-secondary" onclick="document.getElementById('att-edit-section').style.display='none'">Cancel</button>
+          </div>
+        </div>
+      </div>
+
       <div class="list-card" style="margin-bottom:18px">
         <div class="list-header"><i class="ti ti-list"></i> Attendance records</div>
         <div class="table-scroll">
-          <table><thead><tr><th>Date</th><th>Staff</th><th>Status</th><th>Entry</th><th>Exit</th><th>Lunch out</th><th>Lunch in</th><th>Note</th><th></th></tr></thead>
+          <table><thead><tr><th>Date</th><th>Staff</th><th>Status</th><th>Entry</th><th>Late by</th><th>Exit</th><th>Lunch</th><th>Note</th><th></th></tr></thead>
           <tbody id="attendance-tbody"></tbody></table>
         </div>
       </div>
-      <!-- Attendance charts -->
       <div class="dash-charts-row">
         <div class="chart-card" style="flex:1">
           <div class="chart-card-header"><h3>Attendance summary</h3></div>
@@ -986,6 +1031,19 @@
         <button class="btn-clear" onclick="clearSSFilter()">All time</button>
       </div>
       <div id="staffsales-content" style="margin-top:16px"></div>
+    </section>
+
+    <!-- STAFF REPORTS -->
+    <section id="page-staffreports" class="page">
+      <h1 class="page-title"><i class="ti ti-report-analytics"></i> Staff Reports</h1>
+      <div class="filter-bar">
+        <input type="date" id="sr-from" />
+        <span class="filter-to">to</span>
+        <input type="date" id="sr-to" />
+        <button class="btn-filter" onclick="renderStaffReportsPage()">Filter</button>
+        <button class="btn-clear" onclick="clearSRFilter()">All time</button>
+      </div>
+      <div id="staffreports-content" style="margin-top:16px"></div>
     </section>
 
       <!-- ADMIN -->
