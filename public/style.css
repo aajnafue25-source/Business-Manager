@@ -362,6 +362,11 @@ main { flex: 1; }
 .dpaid-info-box { background: var(--ok-bg); border: 1px solid var(--ok); border-radius: 9px; padding: 10px 14px; font-size: 13px; margin-bottom: 10px; }
 .dpaid-info-box .due-item { display: flex; justify-content: space-between; padding: 3px 0; font-weight: 600; color: var(--ok); }
 
+/* Customer outstanding due notice in cart */
+.cart-due-notice { border-radius: 9px; padding: 9px 13px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.cart-due-warn { background: var(--warn-bg); border: 1px solid var(--warn); color: var(--warn); }
+.cart-due-ok { background: var(--ok-bg); border: 1px solid var(--ok); color: var(--ok); }
+
 /* Toggle purchase price button */
 .toggle-cost-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--surface-2); font-size: 13px; font-weight: 600; color: var(--text-2); cursor: pointer; font-family: inherit; transition: all .15s; }
 .toggle-cost-btn:hover { border-color: var(--accent); color: var(--accent); }

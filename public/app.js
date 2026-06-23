@@ -475,12 +475,14 @@ async function apiDelete(path) {
   return r.json();
 }
 
-function toast(msg) {
+function toast(msg, type) {
   const el = document.createElement('div');
   el.textContent = msg;
-  el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--surface);padding:10px 20px;border-radius:8px;font-size:13.5px;font-weight:500;z-index:200;box-shadow:0 4px 16px rgba(0,0,0,0.2)';
+  var bg = type === 'warn' ? 'var(--warn)' : type === 'ok' ? 'var(--ok)' : 'var(--text)';
+  var color = (type === 'warn' || type === 'ok') ? '#fff' : 'var(--surface)';
+  el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:' + bg + ';color:' + color + ';padding:10px 20px;border-radius:8px;font-size:13.5px;font-weight:500;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,0.2);max-width:90vw;text-align:center';
   document.body.appendChild(el);
-  setTimeout(function () { el.remove(); }, 1800);
+  setTimeout(function () { el.remove(); }, 2500);
 }
 
 function badge(type) {
@@ -762,11 +764,13 @@ function renderSupplierSearchItem(s) {
 }
 
 function setupCartCustomerPicker() {
-  wireSearchPicker('cart-customer-search', 'cart-customer-results', searchCustomersApi, renderCustomerSearchItem, function (c) {
+  wireSearchPicker('cart-customer-search', 'cart-customer-results', searchCustomersApi, renderCustomerSearchItem, async function (c) {
     selectedCartCustomer = c;
     document.getElementById('cart-customer').value = c.id;
     document.getElementById('cart-customer-search').value = c.name + (c.phone ? ' — ' + c.phone : '');
     document.getElementById('cart-customer-name-row').style.display = 'none';
+    // Show this customer's outstanding balance as a warning in the cart
+    showCartCustomerDue(c);
   }, { showOnEmpty: true, emptyText: 'No customers yet — use "Add new customer" below' });
 
   const input = document.getElementById('cart-customer-search');
@@ -776,9 +780,43 @@ function setupCartCustomerPicker() {
         selectedCartCustomer = null;
         document.getElementById('cart-customer').value = '';
         document.getElementById('cart-customer-name-row').style.display = 'flex';
+        hideCartCustomerDue();
+        // Reset to full cash if walk-in
+        setPayMode('full');
       }
     });
   }
+}
+
+async function showCartCustomerDue(c) {
+  var noticeEl = document.getElementById('cart-customer-due-notice');
+  if (!noticeEl) return;
+  noticeEl.innerHTML = '<div style="font-size:12px;color:var(--text-2)"><i class="ti ti-refresh"></i> Checking balance...</div>';
+  noticeEl.style.display = 'block';
+  try {
+    var nameLower = (c.name || '').toLowerCase();
+    var results = await Promise.all([apiGet('/dues'), apiGet('/due-paid')]);
+    var allDues = results[0], allPaid = results[1];
+    var custDues = allDues.filter(function (d) { return d.customer_id === c.id || (d.party || '').toLowerCase() === nameLower; });
+    var custPaid = allPaid.filter(function (p) { return (p.customer_id && p.customer_id === c.id) || (p.party || '').toLowerCase() === nameLower; });
+    var gross = custDues.reduce(function (s, d) { return s + Number(d.amount); }, 0);
+    var paid = custPaid.reduce(function (s, p) { return s + Number(p.amount); }, 0);
+    var net = Math.max(0, gross - paid);
+    if (net > 0.009) {
+      noticeEl.innerHTML = '<i class="ti ti-alert-circle" style="color:var(--warn)"></i> <strong>' + esc(c.name) + '</strong> has an outstanding due of <strong style="color:var(--warn)">' + fmt(net) + '</strong> from previous purchases.';
+      noticeEl.className = 'cart-due-notice cart-due-warn';
+    } else {
+      noticeEl.innerHTML = '<i class="ti ti-circle-check" style="color:var(--ok)"></i> <strong>' + esc(c.name) + '</strong> — no outstanding dues.';
+      noticeEl.className = 'cart-due-notice cart-due-ok';
+    }
+  } catch (e) {
+    noticeEl.style.display = 'none';
+  }
+}
+
+function hideCartCustomerDue() {
+  var noticeEl = document.getElementById('cart-customer-due-notice');
+  if (noticeEl) { noticeEl.style.display = 'none'; noticeEl.innerHTML = ''; }
 }
 
 function setupCartProductPicker() {
@@ -936,6 +974,11 @@ function renderCartTotals() {
 }
 
 function setPayMode(mode) {
+  // Block credit/partial for walk-in customers — must select a customer first
+  if ((mode === 'partial' || mode === 'due') && !document.getElementById('cart-customer').value) {
+    toast('⚠ Please select a customer first. Walk-in customers cannot have dues.', 'warn');
+    return; // stay on full cash
+  }
   payMode = mode;
   ['full', 'partial', 'due'].forEach(function (m) {
     document.getElementById('pay-' + m).classList.toggle('active', m === mode);
@@ -968,7 +1011,15 @@ document.addEventListener('input', function (e) {
 async function checkout() {
   if (!cart.length) return alert('Add at least one item to the cart first.');
 
-  var t = getCartTotals();
+  const customerId = document.getElementById('cart-customer').value || null;
+
+  // Hard block: no due/partial for walk-in customers
+  if ((payMode === 'partial' || payMode === 'due') && !customerId) {
+    alert('Walk-in customers cannot have dues.\n\nPlease search and select a customer before using Partial or Full Due payment.');
+    setPayMode('full');
+    document.getElementById('cart-customer-search').focus();
+    return;
+  }
   var total = t.total;
   var amountPaid = total;
   if (payMode === 'due') amountPaid = 0;
@@ -978,7 +1029,6 @@ async function checkout() {
     if (amountPaid > total) amountPaid = total;
   }
 
-  const customerId = document.getElementById('cart-customer').value || null;
   const customerName = document.getElementById('cart-customer-name').value.trim();
   const date = dateOf('cart-date');
 
