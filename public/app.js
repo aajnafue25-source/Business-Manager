@@ -2172,24 +2172,31 @@ async function renderDashboard() {
   var inRange = function (d) { return d >= fromDate && d <= toDate; };
 
 
-  const results = await Promise.all([apiGet('/sales'), apiGet('/expenses'), apiGet('/dues'), apiGet('/purchases')]);
-  const allSales = results[0], allExpenses = results[1], allDues = results[2], allPurchases = results[3];
+  const results = await Promise.all([apiGet('/sales'), apiGet('/expenses'), apiGet('/dues'), apiGet('/purchases'), apiGet('/sales-returns'), apiGet('/exchanges')]);
+  const allSales = results[0], allExpenses = results[1], allDues = results[2], allPurchases = results[3], allReturns = results[4], allExchanges = results[5];
 
   // Filter to selected period
   const sales = allSales.filter(function (r) { return inRange(r.date); });
   const expenses = allExpenses.filter(function (r) { return inRange(r.date); });
   const purchases = allPurchases.filter(function (r) { return inRange(r.date); });
+  const returns = (allReturns || []).filter(function (r) { return inRange(r.date); });
+  const exchanges = (allExchanges || []).filter(function (r) { return inRange(r.date); });
 
-  const totalSales = sales.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  const grossSales = sales.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  const totalReturns = returns.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  // Exchange price diff: positive = customer paid more (adds to sales), negative = refund (subtracts)
+  const totalExchangeDiff = exchanges.reduce(function (s, r) { return s + Number(r.price_diff || 0); }, 0);
+  // Net sales = gross sales − returns + exchange differences
+  const totalSales = grossSales - totalReturns + totalExchangeDiff;
   const totalExp = expenses.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
   const totalPurchases = purchases.reduce(function (s, r) { return s + Number(r.total || 0); }, 0);
   const totalDues = allDues.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
   const profit = totalSales - totalExp - totalPurchases;
   var periodLabel = fromDate === toDate ? fromDate : fromDate + ' → ' + toDate;
 
-  // Hero gradient cards (period-filtered)
+  // Hero gradient cards (period-filtered, net of returns/exchanges)
   document.getElementById('dash-metrics').innerHTML =
-    '<div class="metric-card grad grad-blue"><div class="label">Sales <span style="font-size:10px;opacity:0.8">(' + periodLabel + ')</span></div><div class="value">' + fmt(totalSales) + '</div></div>' +
+    '<div class="metric-card grad grad-blue"><div class="label">Net sales <span style="font-size:10px;opacity:0.8">(' + periodLabel + ')</span></div><div class="value">' + fmt(totalSales) + '</div></div>' +
     '<div class="metric-card grad grad-navy"><div class="label">Purchases (' + periodLabel + ')</div><div class="value">' + fmt(totalPurchases) + '</div></div>' +
     '<div class="metric-card grad grad-cyan"><div class="label">Net profit (' + periodLabel + ')</div><div class="value">' + fmt(profit) + '</div></div>' +
     '<div class="metric-card grad grad-teal"><div class="label">Outstanding dues (all time)</div><div class="value">' + fmt(totalDues) + '</div></div>';
@@ -2202,7 +2209,9 @@ async function renderDashboard() {
   if (sumEl) sumEl.innerHTML =
     summaryCard('ti-receipt', '#3b82f6', 'Sale Invoices (' + periodLabel + ')', sales.length) +
     summaryCard('ti-truck-delivery', '#8b5cf6', 'Purchases (' + periodLabel + ')', purchases.length) +
-    summaryCard('ti-coin', '#10b981', 'Cash Flow', fmt(totalSales - totalExp)) +
+    summaryCard('ti-coin', '#10b981', 'Gross Sales', fmt(grossSales)) +
+    summaryCard('ti-arrow-back-up', '#ef4444', 'Returns', fmt(totalReturns)) +
+    summaryCard('ti-switch-3', totalExchangeDiff >= 0 ? '#10b981' : '#f59e0b', 'Exchange diff', (totalExchangeDiff >= 0 ? '+' : '') + fmt(totalExchangeDiff)) +
     summaryCard('ti-receipt-2', '#ef4444', 'Expenses', fmt(totalExp)) +
     summaryCard('ti-clock', '#f59e0b', 'Customer Dues', fmt(totalDues));
 
@@ -2216,7 +2225,10 @@ async function renderDashboard() {
     days30Labels.push(key); daySales[key] = 0; dayPurch[key] = 0; dayExp[key] = 0;
   }
   var minDate = now.toISOString().slice(0, 10).replace(/\d{2}$/, '') + String(now.getDate() - 29).padStart(2, '0');
-  sales.forEach(function (r) { var k = r.date ? r.date.slice(5, 10) : ''; if (daySales[k] !== undefined) daySales[k] += Number(r.amount || 0); });
+  // 30-day trend uses ALL data (not period-filtered), net of returns + exchanges
+  allSales.forEach(function (r) { var k = r.date ? r.date.slice(5, 10) : ''; if (daySales[k] !== undefined) daySales[k] += Number(r.amount || 0); });
+  (allReturns || []).forEach(function (r) { var k = r.date ? r.date.slice(5, 10) : ''; if (daySales[k] !== undefined) daySales[k] -= Number(r.amount || 0); });
+  (allExchanges || []).forEach(function (r) { var k = r.date ? r.date.slice(5, 10) : ''; if (daySales[k] !== undefined) daySales[k] += Number(r.price_diff || 0); });
   allPurchases.forEach(function (r) { var k = r.date ? r.date.slice(5, 10) : ''; if (dayPurch[k] !== undefined) dayPurch[k] += Number(r.total || 0); });
   allExpenses.forEach(function (r) { var k = r.date ? r.date.slice(5, 10) : ''; if (dayExp[k] !== undefined) dayExp[k] += Number(r.amount || 0); });
 
@@ -2707,7 +2719,8 @@ async function renderReportsPage() {
   const results = await Promise.all([
     apiGet('/sales'), apiGet('/expenses'), apiGet('/products'),
     apiGet('/sales-returns'), apiGet('/purchases'), apiGet('/dues'),
-    apiGet('/supplier-dues'), apiGet('/customers-summary'), apiGet('/suppliers-summary')
+    apiGet('/supplier-dues'), apiGet('/customers-summary'), apiGet('/suppliers-summary'),
+    apiGet('/exchanges')
   ]);
   const sales = results[0].filter(function (r) { return inRange(r.date); });
   const expenses = results[1].filter(function (r) { return inRange(r.date); });
@@ -2718,11 +2731,13 @@ async function renderReportsPage() {
   const supplierDues = results[6];
   const customers = results[7];
   const suppliers = results[8];
+  const exchanges = (results[9] || []).filter(function (r) { return inRange(r.date); });
 
   const sum = function (arr, key) { return arr.reduce(function (s, r) { return s + Number(r[key] || 0); }, 0); };
   const totalSales = sum(sales, 'amount');
   const totalReturns = sum(salesReturns, 'amount');
-  const netSales = totalSales - totalReturns;
+  const totalExchangeDiff = sum(exchanges, 'price_diff');
+  const netSales = totalSales - totalReturns + totalExchangeDiff;
   const totalExpenses = sum(expenses, 'amount');
   const cogs = sales.reduce(function (s, r) {
     if (r.cost_price != null && r.quantity) return s + Number(r.cost_price) * Number(r.quantity);

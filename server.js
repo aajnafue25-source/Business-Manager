@@ -747,22 +747,24 @@ const routes = {
 
   // ----- Summary -----
   'GET /api/summary': async (req, res, session) => {
-    const [sales, expenses, dues, duePaid, products, salesReturns] = await Promise.all([
+    const [sales, expenses, dues, duePaid, products, salesReturns, exchanges] = await Promise.all([
       sb('GET', 'sales', { query: bizQuery(session) }), sb('GET', 'expenses', { query: bizQuery(session) }),
       sb('GET', 'dues', { query: bizQuery(session) }), sb('GET', 'due_paid', { query: bizQuery(session) }),
-      sb('GET', 'products', { query: bizQuery(session) }), sb('GET', 'sales_returns', { query: bizQuery(session) })
+      sb('GET', 'products', { query: bizQuery(session) }), sb('GET', 'sales_returns', { query: bizQuery(session) }),
+      sb('GET', 'exchanges', { query: bizQuery(session) })
     ]);
     const sum = (arr) => (arr || []).reduce((s, r) => s + Number(r.amount), 0);
     const totalSales = sum(sales);
     const totalReturns = sum(salesReturns);
+    const totalExchangeDiff = (exchanges || []).reduce((s, r) => s + Number(r.price_diff || 0), 0);
     const totalExpenses = sum(expenses);
     const cogs = (sales || []).reduce((s, r) => {
       if (r.cost_price != null && r.quantity) return s + Number(r.cost_price) * Number(r.quantity);
       if (r.product_id) { const p = (products || []).find(x => String(x.id) === String(r.product_id)); if (p && r.quantity) return s + Number(p.purchase_price || 0) * Number(r.quantity); }
       return s;
     }, 0);
-    const netSales = totalSales - totalReturns;
-    send(res, 200, { totalSales: netSales, totalExpenses, totalCOGS: cogs, totalReturns, grossProfit: netSales - cogs, netProfit: netSales - cogs - totalExpenses, totalDues: sum(dues), totalDuePaid: sum(duePaid), productCount: (products || []).length, lowStockCount: (products || []).filter(p => p.quantity <= 5).length });
+    const netSales = totalSales - totalReturns + totalExchangeDiff;
+    send(res, 200, { totalSales: netSales, totalExpenses, totalCOGS: cogs, totalReturns, totalExchangeDiff, grossProfit: netSales - cogs, netProfit: netSales - cogs - totalExpenses, totalDues: sum(dues), totalDuePaid: sum(duePaid), productCount: (products || []).length, lowStockCount: (products || []).filter(p => p.quantity <= 5).length });
   }
 };
 
