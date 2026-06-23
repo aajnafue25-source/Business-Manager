@@ -61,7 +61,6 @@
   </div>
 </div>
 
-<div id="progress-bar"></div>
 <div id="app">
 
   <header class="topbar">
@@ -1045,6 +1044,22 @@
         <button class="btn-clear" onclick="clearSRFilter()">All time</button>
       </div>
       <div id="staffreports-content" style="margin-top:16px"></div>
+    </section>
+
+    <!-- STAFF DETAIL REPORT -->
+    <section id="page-staffdetail" class="page">
+      <div class="detail-page-nav">
+        <button class="btn-back" onclick="navigateTo('staffreports')"><i class="ti ti-arrow-left"></i> Back to Staff Reports</button>
+      </div>
+      <h1 class="page-title" id="staffdetail-title"><i class="ti ti-user"></i> Staff Report</h1>
+      <div class="filter-bar" style="margin-bottom:16px">
+        <input type="date" id="sd-from" onchange="renderStaffDetailPage()" />
+        <span class="filter-to">to</span>
+        <input type="date" id="sd-to" onchange="renderStaffDetailPage()" />
+        <button class="btn-filter" onclick="renderStaffDetailPage()">Filter</button>
+        <button class="btn-clear" onclick="clearSDFilter()">All time</button>
+      </div>
+      <div id="staffdetail-content"></div>
     </section>
 
       <!-- ADMIN -->

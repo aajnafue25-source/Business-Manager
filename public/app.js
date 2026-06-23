@@ -265,6 +265,7 @@ const PAGE_RENDERERS = {
   attendance: renderAttendancePage,
   staffsales: renderStaffSalesPage,
   staffreports: renderStaffReportsPage,
+  staffdetail: renderStaffDetailPage,
 };
 
 function navigateTo(page) {
@@ -472,21 +473,8 @@ function esc(s) {
 // ───────── API helpers ─────────
 // ── Loading indicators ──
 var __reqCount = 0;
-function startLoad() {
-  __reqCount++;
-  var bar = document.getElementById('progress-bar');
-  if (bar) { bar.className = 'loading'; }
-}
-function endLoad() {
-  __reqCount = Math.max(0, __reqCount - 1);
-  if (__reqCount === 0) {
-    var bar = document.getElementById('progress-bar');
-    if (bar) {
-      bar.className = 'done';
-      setTimeout(function () { bar.className = ''; bar.style.width = ''; }, 500);
-    }
-  }
-}
+function startLoad() { __reqCount++; }
+function endLoad() { __reqCount = Math.max(0, __reqCount - 1); }
 // Set a button into loading or normal state
 function setBtn(btnEl, loading, loadingLabel) {
   if (!btnEl) return;
@@ -1777,6 +1765,23 @@ function printBarcode() {
   if (!currentBarcodeProduct) return;
   const labelHtml = document.getElementById('modal-barcode-content').innerHTML;
   printViaIframe('<div style="text-align:center;font-family:Arial,Helvetica,sans-serif;padding:30px">' + labelHtml + '</div>', 'Print label');
+}
+
+function printSingleBarcode(p) {
+  var win = window.open('', '_blank', 'width=400,height=300');
+  win.document.write('<!DOCTYPE html><html><head><title>Barcode — ' + p.name + '</title>' +
+    '<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"><\/script>' +
+    '<style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:Arial,sans-serif;background:#fff}.label{text-align:center;padding:16px}.prod-name{font-size:14px;font-weight:700;margin-bottom:6px}.prod-price{font-size:16px;font-weight:700;color:#222;margin-top:4px}.prod-barcode-text{font-size:10px;color:#666;margin-top:2px}@media print{body{min-height:0}}</style>' +
+    '</head><body><div class="label">' +
+    '<div class="prod-name">' + p.name + '</div>' +
+    '<svg id="bc"></svg>' +
+    '<div class="prod-price">Tk ' + Number(p.sell_price || 0).toFixed(2) + '</div>' +
+    '<div class="prod-barcode-text">' + p.barcode + '</div>' +
+    '</div>' +
+    '<script>JsBarcode("#bc","' + p.barcode + '",{format:"CODE128",displayValue:false,height:50,width:1.8});<\/script>' +
+    '</body></html>');
+  win.document.close();
+  setTimeout(function () { win.print(); }, 600);
 }
 
 // ───────── Customers ─────────
@@ -3115,7 +3120,7 @@ async function renderProductsPage() {
       '<div class="product-card-row"><span class="product-card-label">Stock</span><span class="' + (lowStock ? 'text-danger' : '') + '">' + p.quantity + ' ' + esc(p.unit || 'pcs') + '</span></div>' +
       '<div class="product-card-row product-cost-row"><span class="product-card-label">Buy</span><span>' + fmt(p.purchase_price) + '</span></div>' +
       '<div class="product-card-row"><span class="product-card-label">Sell</span><span style="color:var(--ok);font-weight:700">' + fmt(p.sell_price) + '</span></div>' +
-      (isManager ? '<div class="product-card-actions"><button class="edit-btn" onclick="editProduct(' + p.id + ')"><i class="ti ti-pencil"></i></button><button class="del-btn" onclick="deleteRow(\'products\',' + p.id + ',renderProductsPage)"><i class="ti ti-trash"></i></button></div>' : '') +
+      (isManager ? '<div class="product-card-actions"><button class="edit-btn" onclick="editProduct(' + p.id + ')" title="Edit"><i class="ti ti-pencil"></i></button><button class="del-btn" onclick="deleteRow(\'products\',' + p.id + ',renderProductsPage)" title="Delete"><i class="ti ti-trash"></i></button><button class="edit-btn" onclick="printSingleBarcode(' + JSON.stringify(p).replace(/"/g, '&quot;') + ')" title="Print barcode"><i class="ti ti-barcode"></i></button></div>' : '') +
       '</div>';
   }).join('');
 }
@@ -3858,39 +3863,76 @@ async function renderStaffReportsPage() {
 }
 
 async function openStaffDetailReport(staffId, staffName) {
-  var from = document.getElementById('sr-from') ? document.getElementById('sr-from').value : '';
-  var to = document.getElementById('sr-to') ? document.getElementById('sr-to').value : '';
-  var inRange = function (d) { return (!from || d >= from) && (!to || d <= to); };
-  loadAttRules();
+  window.__staffDetailId = staffId;
+  window.__staffDetailName = staffName;
+  navigateTo('staffdetail');
+}
 
+async function renderStaffDetailPage() {
+  var staffId = window.__staffDetailId;
+  var staffName = window.__staffDetailName || 'Staff';
+  var titleEl = document.getElementById('staffdetail-title');
+  if (titleEl) titleEl.innerHTML = '<i class="ti ti-user"></i> ' + esc(staffName);
+  var from = document.getElementById('sd-from') ? document.getElementById('sd-from').value : '';
+  var to = document.getElementById('sd-to') ? document.getElementById('sd-to').value : '';
+  var inRange = function (d) { return (!from || d >= from) && (!to || d <= to); };
+  var content = document.getElementById('staffdetail-content');
+  if (content) content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-2)"><span class="btn-spinner btn-spinner-dark"></span> Loading...</div>';
+  loadAttRules();
+  if (!staffId && !staffName) { if (content) content.innerHTML = '<div class="empty-state" style="padding:30px">No staff selected. Go back to Staff Reports.</div>'; return; }
   var results = await Promise.all([apiGet('/attendance'), apiGet('/sales')]);
   var allAtt = results[0] || [], allSales = results[1] || [];
   var nameLower = (staffName || '').toLowerCase();
-
   var att = allAtt.filter(function (r) { return inRange(r.date) && (r.staff_id === staffId || (r.staff_name || '').toLowerCase() === nameLower); });
   var sales = allSales.filter(function (r) { return inRange(r.date) && (r.salesman_id === staffId || (r.salesman_name || '').toLowerCase() === nameLower); });
   att.sort(function (a, b) { return b.date.localeCompare(a.date); });
-
-  var attHtml = att.length ? att.map(function (r) {
+  var totalSales = sales.reduce(function (t, r) { return t + Number(r.amount || 0); }, 0);
+  var billSet = new Set(sales.filter(function (r) { return r.bill_id; }).map(function (r) { return r.bill_id; }));
+  var attCounts = { present: 0, late: 0, absent: 0, leave: 0 };
+  var totalLateMin = 0;
+  att.forEach(function (r) {
     var lateMin = calcLateMinutes(r.entry_time);
-    var eff = (r.status === 'present' && lateMin > 0) ? 'late' : r.status;
+    var eff = (r.status === 'present' && lateMin > 0) ? 'late' : (r.status || 'present');
+    if (eff === 'late') totalLateMin += lateMin;
+    if (attCounts[eff] !== undefined) attCounts[eff]++; else attCounts.present++;
+  });
+  var attRows = att.length ? att.map(function (r) {
+    var lateMin = calcLateMinutes(r.entry_time);
+    var eff = (r.status === 'present' && lateMin > 0) ? 'late' : (r.status || 'present');
     var col = eff === 'present' ? 'var(--ok)' : eff === 'late' ? 'var(--warn)' : eff === 'leave' ? '#6366f1' : 'var(--danger)';
     var lunchMin = calcLunchMinutes(r.lunch_out, r.lunch_in);
+    var lunchOver = lunchMin - (__attRules.lunchMaxMinutes || 60);
     return '<tr><td>' + r.date + '</td><td style="color:' + col + ';font-weight:600">' + eff.charAt(0).toUpperCase() + eff.slice(1) + '</td>' +
-      '<td>' + (r.entry_time || '—') + '</td><td>' + (lateMin > 0 ? '<span style="color:var(--warn)">+' + minsToLabel(lateMin) + '</span>' : 'On time') + '</td>' +
-      '<td>' + (r.exit_time || '—') + '</td><td>' + (lunchMin > 0 ? minsToLabel(lunchMin) : '—') + '</td>' +
-      '<td style="font-size:12px;color:var(--text-2)">' + (r.note || '') + '</td></tr>';
-  }).join('') : '<tr><td colspan="7" class="empty-state">No attendance records.</td></tr>';
+      '<td>' + (r.entry_time || '\u2014') + '</td><td>' + (lateMin > 0 ? '<span style="color:var(--warn)">+' + minsToLabel(lateMin) + '</span>' : '<span style="color:var(--ok)">On time</span>') + '</td>' +
+      '<td>' + (r.exit_time || '\u2014') + '</td><td>' + (lunchMin > 0 ? minsToLabel(lunchMin) + (lunchOver > 0 ? ' <span style="color:var(--danger)">(+' + minsToLabel(lunchOver) + ')</span>' : '') : '\u2014') + '</td>' +
+      '<td style="font-size:12px;color:var(--text-2)">' + (esc(r.note) || '') + '</td></tr>';
+  }).join('') : '<tr><td colspan="7" class="empty-state">No attendance records for this period.</td></tr>';
+  if (content) content.innerHTML =
+    '<div class="dash-summary-row" style="margin-bottom:20px">' +
+    summaryCard2('ti-coin', '#3b82f6', 'Total Sales', fmt(totalSales)) +
+    summaryCard2('ti-calendar-check', '#10b981', 'Present', attCounts.present + ' days') +
+    summaryCard2('ti-clock', '#f59e0b', 'Late', attCounts.late + ' days (' + minsToLabel(totalLateMin) + ')') +
+    summaryCard2('ti-user-x', '#ef4444', 'Absent', attCounts.absent + ' days') +
+    summaryCard2('ti-beach', '#6366f1', 'Leave', attCounts.leave + ' days') +
+    '</div>' +
+    '<div class="list-card" style="margin-bottom:16px"><div class="list-header"><i class="ti ti-calendar-check"></i> Attendance (' + att.length + ' days)</div>' +
+    '<div class="table-scroll"><table><thead><tr><th>Date</th><th>Status</th><th>Entry</th><th>Late by</th><th>Exit</th><th>Lunch</th><th>Note</th></tr></thead><tbody>' + attRows + '</tbody></table></div></div>' +
+    (sales.length ? '<div class="list-card"><div class="list-header"><i class="ti ti-receipt"></i> Sales (' + sales.length + ' items · ' + billSet.size + ' bills)</div>' +
+    '<div class="table-scroll"><table><thead><tr><th>Date</th><th>Bill #</th><th>Customer</th><th>Item</th><th class="num">Qty</th><th class="num">Amount</th></tr></thead><tbody>' +
+    sales.sort(function (a, b) { return b.date.localeCompare(a.date); }).map(function (r) {
+      return '<tr><td>' + r.date + '</td><td>' + (r.bill_no ? '#' + r.bill_no : '\u2014') + '</td><td>' + (esc(r.customer_name) || 'Walk-in') + '</td><td>' + esc(r.desc || r.description || '') + '</td><td class="num">' + (r.quantity || '\u2014') + '</td><td class="num" style="color:var(--ok)">' + fmt(r.amount) + '</td></tr>';
+    }).join('') +
+    '</tbody><tfoot><tr style="font-weight:700;border-top:2px solid var(--border)"><td colspan="5">Total</td><td class="num">' + fmt(totalSales) + '</td></tr></tfoot></table></div></div>' : '<div class="empty-state" style="padding:20px">No sales recorded for this staff member in this period.</div>');
+}
 
-  var salesTotal = sales.reduce(function (t, r) { return t + Number(r.amount || 0); }, 0);
-  var billSet = new Set(sales.filter(function (r) { return r.bill_id; }).map(function (r) { return r.bill_id; }));
+function summaryCard2(icon, color, label, val) {
+  return '<div class="dash-summary-card"><div class="dash-summary-icon" style="background:' + color + '"><i class="ti ' + icon + '"></i></div><div><div class="dash-summary-label">' + label + '</div><div class="dash-summary-val">' + val + '</div></div></div>';
+}
 
-  openViewEntryModal('Staff Report — ' + staffName, [
-    { label: 'Period', value: (from || 'All time') + (to ? ' → ' + to : '') },
-    { label: 'Total Sales', value: '<span style="color:var(--ok);font-weight:700">' + fmt(salesTotal) + '</span> (' + billSet.size + ' bills, ' + sales.length + ' items)' },
-    { label: 'Days tracked', value: att.length },
-    { label: 'Attendance', value: '<table style="width:100%;font-size:13px;margin-top:6px"><thead><tr><th>Date</th><th>Status</th><th>Entry</th><th>Late by</th><th>Exit</th><th>Lunch</th><th>Note</th></tr></thead><tbody>' + attHtml + '</tbody></table>' }
-  ]);
+function clearSDFilter() {
+  var f = document.getElementById('sd-from'); if (f) f.value = '';
+  var t = document.getElementById('sd-to'); if (t) t.value = '';
+  renderStaffDetailPage();
 }
 
 function clearSRFilter() {
