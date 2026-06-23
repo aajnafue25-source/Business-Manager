@@ -746,7 +746,7 @@
           </div>
           <div class="form-row"><label>Purchase price (Tk)</label><input type="number" id="prod-purchase" placeholder="0.00" min="0" /></div>
           <div class="form-row"><label>Sell price (Tk)</label><input type="number" id="prod-sell" placeholder="0.00" min="0" /></div>
-          <div class="form-row"><label>Barcode (leave empty to auto-generate)</label><input type="text" id="prod-barcode" placeholder="Scan or type existing barcode" /></div>
+          <div class="form-row"><label>Barcode <span style="font-weight:400;font-size:11px">(auto if empty)</span></label><input type="text" id="prod-barcode" placeholder="Scan or type existing barcode" /></div>
           <div class="form-row"><label>Category</label>
             <select id="prod-category"><option value="">— No category —</option></select>
           </div>
@@ -757,11 +757,29 @@
         <button class="btn-save" onclick="addProduct()">Save product &amp; generate barcode</button>
       </div>
 
-      <div class="filter-bar">
-        <input type="text" id="prod-search" placeholder="Search by name or barcode..." oninput="renderProductsPage()" style="flex:1;min-width:160px" />
+      <div class="list-card">
+        <div class="list-header" style="justify-content:space-between">
+          <span><i class="ti ti-package"></i> All products</span>
+          <input type="text" id="products-search" placeholder="🔍 Search name, barcode..." oninput="filterProductsList()" style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface-2);color:var(--text);width:220px" />
+        </div>
+        <div class="table-scroll">
+          <table id="products-table">
+            <thead>
+              <tr>
+                <th>Product name</th>
+                <th>Brand</th>
+                <th>Category</th>
+                <th>Barcode</th>
+                <th class="num">Stock</th>
+                <th class="num product-cost-row">Buy price</th>
+                <th class="num">Sell price</th>
+                <th style="width:110px"></th>
+              </tr>
+            </thead>
+            <tbody id="products-tbody"></tbody>
+          </table>
+        </div>
       </div>
-
-      <div id="products-grid" class="products-grid"></div>
     </section>
 
     <!-- CATEGORIES -->
