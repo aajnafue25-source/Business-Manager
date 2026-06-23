@@ -7,6 +7,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const fs = require('fs');
+const bcrypt = require('bcryptjs');
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://eivuhxvrnckgvkwcidpj.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || 'PASTE_YOUR_ANON_KEY_HERE';
@@ -14,6 +15,23 @@ const ADMIN_USERNAME = 'nafue';
 const TRIAL_DAYS = 30;
 const PORT = process.env.PORT || 4000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
+
+// Content Security Policy — matched to the resources the front end actually loads:
+// cdnjs (JsBarcode, Chart.js, Font Awesome), Google Fonts CSS + gstatic font files,
+// and inline scripts/handlers ('unsafe-inline' required by the 140 inline onclick handlers).
+// NOTE: if you later display profile pictures served from Supabase storage, add that
+// origin to img-src (e.g. add the Supabase project URL).
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
+  "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com",
+  "font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com",
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'"
+].join('; ');
 
 // ---------- Supabase REST helper ----------
 async function sb(method, table, opts = {}) {
@@ -78,20 +96,66 @@ function getToken(req) {
   const match = cookie.match(/session=([^;]+)/);
   return match ? match[1] : null;
 }
+// Passwords: bcrypt (slow + salted). Legacy SHA-256 hashes are still accepted and
+// auto-upgraded to bcrypt on the user's next successful login or password change.
 function hashPassword(pass) {
-  return crypto.createHash('sha256').update(pass + 'bizmgr-salt-2024').digest('hex');
+  return bcrypt.hashSync(pass, 10);
 }
+function verifyPassword(pass, stored) {
+  if (!stored) return false;
+  if (stored.startsWith('$2')) return bcrypt.compareSync(pass, stored);
+  return stored === crypto.createHash('sha256').update(pass + 'bizmgr-salt-2024').digest('hex');
+}
+function isLegacyHash(stored) { return !!stored && !stored.startsWith('$2'); }
+
+// Session cookie builder. Secure flag is added only over HTTPS so localhost dev still works.
+function buildSessionCookie(token, req, maxAge = 604800) {
+  let c = `session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+  if (req.headers['x-forwarded-proto'] === 'https') c += '; Secure';
+  return c;
+}
+
+// ---------- Login rate limiting (in-memory, per IP + account) ----------
+const loginAttempts = new Map();
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+function clientIp(req) {
+  const xff = req.headers['x-forwarded-for'];
+  return (xff ? xff.split(',')[0].trim() : (req.socket && req.socket.remoteAddress)) || 'unknown';
+}
+function loginLockedSeconds(key) {
+  const r = loginAttempts.get(key);
+  if (r && r.lockedUntil && r.lockedUntil > Date.now()) return Math.ceil((r.lockedUntil - Date.now()) / 1000);
+  return 0;
+}
+function recordLoginFail(key) {
+  const now = Date.now();
+  let r = loginAttempts.get(key);
+  if (!r || now - r.firstAt > LOGIN_WINDOW_MS) r = { count: 0, firstAt: now, lockedUntil: 0 };
+  r.count++;
+  if (r.count >= MAX_LOGIN_ATTEMPTS) r.lockedUntil = now + LOGIN_LOCKOUT_MS;
+  loginAttempts.set(key, r);
+}
+function recordLoginSuccess(key) { loginAttempts.delete(key); }
 
 // ---------- Helpers ----------
 function send(res, status, body, extraHeaders = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', ...extraHeaders });
   res.end(JSON.stringify(body));
 }
+const MAX_BODY_SIZE = 1024 * 1024; // 1 MB cap — blocks memory-exhaustion payloads
 function readBody(req) {
   return new Promise((resolve) => {
     let chunks = '';
-    req.on('data', (c) => (chunks += c));
-    req.on('end', () => { try { resolve(chunks ? JSON.parse(chunks) : {}); } catch (e) { resolve({}); } });
+    let aborted = false;
+    req.on('data', (c) => {
+      if (aborted) return;
+      chunks += c;
+      if (chunks.length > MAX_BODY_SIZE) { aborted = true; resolve({}); req.destroy(); }
+    });
+    req.on('end', () => { if (!aborted) { try { resolve(chunks ? JSON.parse(chunks) : {}); } catch (e) { resolve({}); } } });
+    req.on('error', () => { if (!aborted) { aborted = true; resolve({}); } });
   });
 }
 const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
@@ -121,7 +185,7 @@ async function handleAuth(method, pathname, req, res) {
   if (method === 'POST' && pathname === '/api/auth/signup') {
     const b = await readBody(req);
     if (!b.username || !b.password || !b.phone) return send(res, 400, { error: 'Username, phone and password required' });
-    if (b.password.length < 6) return send(res, 400, { error: 'Password must be at least 6 characters' });
+    if (b.password.length < 8) return send(res, 400, { error: 'Password must be at least 8 characters' });
     const existing = await sb('GET', 'users', { query: `username=eq.${encodeURIComponent(b.username)}` });
     if (existing && existing.length > 0) return send(res, 400, { error: 'Username already taken' });
     const id = await getNextId();
@@ -131,7 +195,7 @@ async function handleAuth(method, pathname, req, res) {
     await sb('POST', 'users', { body: { id, username: b.username, phone: b.phone, password_hash: hashPassword(b.password), status, is_admin: isAdmin, approved_at: approvedAt, expires_at: null } });
     if (isAdmin) {
       const token = createSession({ businessId: id, role: 'manager', username: b.username, isAdmin: true });
-      return send(res, 200, { ok: true, username: b.username, status: 'approved', isAdmin: true }, { 'Set-Cookie': `session=${token}; Path=/; HttpOnly; Max-Age=604800` });
+      return send(res, 200, { ok: true, username: b.username, status: 'approved', isAdmin: true }, { 'Set-Cookie': buildSessionCookie(token, req) });
     }
     return send(res, 200, { ok: true, status: 'pending' });
   }
@@ -139,36 +203,46 @@ async function handleAuth(method, pathname, req, res) {
   if (method === 'POST' && pathname === '/api/auth/login') {
     const b = await readBody(req);
     if (!b.username || !b.password) return send(res, 400, { error: 'Username and password required' });
+    const lockKey = clientIp(req) + ':u:' + String(b.username).toLowerCase();
+    const lockedFor = loginLockedSeconds(lockKey);
+    if (lockedFor) return send(res, 429, { error: `Too many attempts. Try again in ${Math.ceil(lockedFor / 60)} minute(s).` });
     const users = await sb('GET', 'users', { query: `username=eq.${encodeURIComponent(b.username)}` });
-    if (!users || !users.length) return send(res, 401, { error: 'Invalid username or password' });
+    if (!users || !users.length) { recordLoginFail(lockKey); return send(res, 401, { error: 'Invalid username or password' }); }
     const user = users[0];
-    if (user.password_hash !== hashPassword(b.password)) return send(res, 401, { error: 'Invalid username or password' });
+    if (!verifyPassword(b.password, user.password_hash)) { recordLoginFail(lockKey); return send(res, 401, { error: 'Invalid username or password' }); }
     if (user.status === 'pending') return send(res, 403, { error: 'pending', message: 'Your account is waiting for admin approval.' });
     if (user.status === 'rejected') return send(res, 403, { error: 'rejected', message: 'Your account was not approved. Contact the admin.' });
     if (user.blocked || isExpired(user)) return send(res, 403, { error: 'expired' });
+    recordLoginSuccess(lockKey);
+    if (isLegacyHash(user.password_hash)) await sb('PATCH', 'users', { query: `id=eq.${user.id}`, body: { password_hash: hashPassword(b.password) } });
     const token = createSession({ businessId: user.id, role: 'manager', username: user.username, isAdmin: user.is_admin });
-    return send(res, 200, { ok: true, username: user.username, isAdmin: user.is_admin, role: 'manager' }, { 'Set-Cookie': `session=${token}; Path=/; HttpOnly; Max-Age=604800` });
+    return send(res, 200, { ok: true, username: user.username, isAdmin: user.is_admin, role: 'manager' }, { 'Set-Cookie': buildSessionCookie(token, req) });
   }
 
   if (method === 'POST' && pathname === '/api/auth/staff-login') {
     const b = await readBody(req);
     if (!b.phone || !b.password) return send(res, 400, { error: 'Phone and password required' });
+    const lockKey = clientIp(req) + ':s:' + String(b.phone).toLowerCase();
+    const lockedFor = loginLockedSeconds(lockKey);
+    if (lockedFor) return send(res, 429, { error: `Too many attempts. Try again in ${Math.ceil(lockedFor / 60)} minute(s).` });
     const staffRows = await sb('GET', 'staff', { query: `phone=eq.${encodeURIComponent(b.phone)}` });
-    if (!staffRows || !staffRows.length) return send(res, 401, { error: 'Invalid phone or password' });
+    if (!staffRows || !staffRows.length) { recordLoginFail(lockKey); return send(res, 401, { error: 'Invalid phone or password' }); }
     const staffUser = staffRows[0];
-    if (staffUser.password_hash !== hashPassword(b.password)) return send(res, 401, { error: 'Invalid phone or password' });
+    if (!verifyPassword(b.password, staffUser.password_hash)) { recordLoginFail(lockKey); return send(res, 401, { error: 'Invalid phone or password' }); }
     const bizRows = await sb('GET', 'users', { query: `id=eq.${staffUser.business_user_id}` });
     const biz = bizRows && bizRows[0];
     if (!biz) return send(res, 401, { error: 'Business not found' });
     if (biz.blocked || isExpired(biz)) return send(res, 403, { error: 'expired' });
+    recordLoginSuccess(lockKey);
+    if (isLegacyHash(staffUser.password_hash)) await sb('PATCH', 'staff', { query: `id=eq.${staffUser.id}`, body: { password_hash: hashPassword(b.password) } });
     const token = createSession({ businessId: biz.id, role: staffUser.role, staffId: staffUser.id, username: staffUser.name, isAdmin: false });
-    return send(res, 200, { ok: true, username: staffUser.name, role: staffUser.role, isAdmin: false }, { 'Set-Cookie': `session=${token}; Path=/; HttpOnly; Max-Age=604800` });
+    return send(res, 200, { ok: true, username: staffUser.name, role: staffUser.role, isAdmin: false }, { 'Set-Cookie': buildSessionCookie(token, req) });
   }
 
   if (method === 'POST' && pathname === '/api/auth/logout') {
     const token = getToken(req);
     if (token) sessions.delete(token);
-    return send(res, 200, { ok: true }, { 'Set-Cookie': 'session=; Path=/; Max-Age=0' });
+    return send(res, 200, { ok: true }, { 'Set-Cookie': buildSessionCookie('', req, 0) });
   }
 
   if (method === 'GET' && pathname === '/api/auth/me') {
@@ -188,18 +262,18 @@ async function handleAuth(method, pathname, req, res) {
     if (!session) return send(res, 401, { error: 'Not logged in' });
     const b = await readBody(req);
     if (!b.currentPassword || !b.newPassword) return send(res, 400, { error: 'Current and new password required' });
-    if (b.newPassword.length < 6) return send(res, 400, { error: 'New password must be at least 6 characters' });
+    if (b.newPassword.length < 8) return send(res, 400, { error: 'New password must be at least 8 characters' });
 
     if (session.role === 'manager') {
       const users = await sb('GET', 'users', { query: `id=eq.${session.businessId}` });
       const user = users && users[0];
-      if (!user || user.password_hash !== hashPassword(b.currentPassword)) return send(res, 401, { error: 'Current password incorrect' });
+      if (!user || !verifyPassword(b.currentPassword, user.password_hash)) return send(res, 401, { error: 'Current password incorrect' });
       await sb('PATCH', 'users', { query: `id=eq.${session.businessId}`, body: { password_hash: hashPassword(b.newPassword) } });
       return send(res, 200, { ok: true });
     } else {
       const staffRows = await sb('GET', 'staff', { query: `id=eq.${session.staffId}` });
       const staffUser = staffRows && staffRows[0];
-      if (!staffUser || staffUser.password_hash !== hashPassword(b.currentPassword)) return send(res, 401, { error: 'Current password incorrect' });
+      if (!staffUser || !verifyPassword(b.currentPassword, staffUser.password_hash)) return send(res, 401, { error: 'Current password incorrect' });
       await sb('PATCH', 'staff', { query: `id=eq.${session.staffId}`, body: { password_hash: hashPassword(b.newPassword) } });
       return send(res, 200, { ok: true });
     }
@@ -272,7 +346,7 @@ async function handleStaff(method, pathname, req, res, session) {
   if (method === 'POST' && pathname === '/api/staff') {
     const b = await readBody(req);
     if (!b.name || !b.phone || !b.password) return send(res, 400, { error: 'Name, phone and password required' });
-    if (b.password.length < 6) return send(res, 400, { error: 'Password must be at least 6 characters' });
+    if (b.password.length < 8) return send(res, 400, { error: 'Password must be at least 8 characters' });
     const existing = await sb('GET', 'staff', { query: `phone=eq.${encodeURIComponent(b.phone)}` });
     if (existing && existing.length) return send(res, 400, { error: 'Phone number already used' });
     const id = await getNextId();
@@ -824,6 +898,20 @@ function parseDynamic(method, pathname) {
 }
 
 const server = http.createServer(async (req, res) => {
+  // Force HTTPS in production. Render sets x-forwarded-proto; no header means local dev → skip.
+  const xfProto = req.headers['x-forwarded-proto'];
+  if (xfProto && xfProto !== 'https') {
+    res.writeHead(301, { Location: `https://${req.headers.host}${req.url}` });
+    return res.end();
+  }
+  // Security headers applied to every response (setHeader persists through writeHead).
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  res.setHeader('Content-Security-Policy', CSP);
+  if (xfProto === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+
   if (req.method === 'OPTIONS') return send(res, 200, {});
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
   const pathname = urlObj.pathname;
@@ -1014,7 +1102,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 404, { error: 'route not found' });
     } catch (err) {
       console.error(err);
-      return send(res, 500, { error: err.message });
+      return send(res, 500, { error: 'Something went wrong. Please try again.' });
     }
   }
   serveStatic(req, res, pathname);
