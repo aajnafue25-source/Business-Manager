@@ -1237,15 +1237,52 @@ async function renderDueEntryList() {
   const search = (document.getElementById('dueentry-search') ? document.getElementById('dueentry-search').value : '').toLowerCase();
   const from = document.getElementById('dueentry-from') ? document.getElementById('dueentry-from').value : '';
   const to = document.getElementById('dueentry-to') ? document.getElementById('dueentry-to').value : '';
-  let outstanding = await apiGet('/dues');
-  outstanding.sort(function (a, b) { return b.date.localeCompare(a.date) || b.id - a.id; });
+
+  const [dues, paid] = await Promise.all([apiGet('/dues'), apiGet('/due-paid')]);
+
+  // Sum payments per party (case-insensitive) and per customer_id
+  const paidByParty = {};
+  const paidByCustomer = {};
+  (paid || []).forEach(function (p) {
+    var key = (p.party || '').toLowerCase().trim();
+    if (key) paidByParty[key] = (paidByParty[key] || 0) + Number(p.amount || 0);
+    if (p.customer_id) paidByCustomer[p.customer_id] = (paidByCustomer[p.customer_id] || 0) + Number(p.amount || 0);
+  });
+
+  // Aggregate dues per party, then subtract their total payments
+  const partyGroups = {};
+  (dues || []).forEach(function (d) {
+    var key = (d.party || '').toLowerCase().trim() || ('id_' + d.customer_id);
+    if (!partyGroups[key]) partyGroups[key] = { party: d.party, customer_id: d.customer_id, date: d.date, note: d.note, gross: 0, rows: [] };
+    partyGroups[key].gross += Number(d.amount || 0);
+    partyGroups[key].rows.push(d);
+    // keep most recent date + note
+    if (d.date > partyGroups[key].date) { partyGroups[key].date = d.date; partyGroups[key].note = d.note; }
+  });
+
+  // Build outstanding list: gross dues minus payments
+  var outstanding = [];
+  Object.keys(partyGroups).forEach(function (key) {
+    var g = partyGroups[key];
+    var paidAmt = (paidByParty[key] || 0);
+    // also match payments by customer_id if party name didn't match
+    if (g.customer_id && paidByCustomer[g.customer_id] && !paidByParty[key]) paidAmt = paidByCustomer[g.customer_id];
+    var net = g.gross - paidAmt;
+    if (net > 0.009) {
+      outstanding.push({ party: g.party, customer_id: g.customer_id, date: g.date, note: g.note, amount: net, gross: g.gross, paid: paidAmt, rows: g.rows });
+    }
+  });
+
+  outstanding.sort(function (a, b) { return b.date.localeCompare(a.date); });
   if (from) outstanding = outstanding.filter(function (r) { return r.date >= from; });
   if (to) outstanding = outstanding.filter(function (r) { return r.date <= to; });
   if (search) outstanding = outstanding.filter(function (r) { return (r.party || '').toLowerCase().includes(search) || (r.note || '').toLowerCase().includes(search); });
+
   window.__duesRows = outstanding;
   const dtb = document.getElementById('dues-tbody');
   if (dtb) dtb.innerHTML = outstanding.length ? outstanding.map(function (r, i) {
-    return '<tr class="clickable-row" onclick="viewDueEntry(window.__duesRows[' + i + '],\'due\')"><td>' + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + '</td><td class="num" style="color:var(--warn)">' + fmt(r.amount) + '</td></tr>';
+    var partialNote = r.paid > 0 ? '<span style="color:var(--ok);font-size:11px"> (paid ' + fmt(r.paid) + ' of ' + fmt(r.gross) + ')</span>' : '';
+    return '<tr class="clickable-row" onclick="viewDueEntry(window.__duesRows[' + i + '],\'due\')"><td>' + r.date + '</td><td style="font-weight:600">' + esc(r.party) + '</td><td style="color:var(--text-3);font-size:12.5px">' + (esc(r.note) || '—') + partialNote + '</td><td class="num" style="color:var(--warn)">' + fmt(r.amount) + '</td></tr>';
   }).join('') : '<tr><td colspan="4" class="empty-state">No outstanding dues.</td></tr>';
   const totalEl = document.getElementById('dues-total-val');
   if (totalEl) totalEl.textContent = fmt(outstanding.reduce(function (s, r) { return s + Number(r.amount); }, 0));

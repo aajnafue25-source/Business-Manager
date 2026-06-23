@@ -598,6 +598,9 @@ tr.clickable-row:hover { background: var(--surface-2); }
 
 /* Modal */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+/* POS bill + view-entry modals stack ABOVE the customer modal when opened from it */
+#posModal { z-index: 120; }
+#viewEntryModal { z-index: 120; }
 .modal-box { background: var(--surface); border-radius: var(--radius-lg); padding: 24px; max-width: 360px; width: 100%; position: relative; text-align: center; max-height: 90vh; overflow-y: auto; }
 .modal-box-wide { max-width: 520px; text-align: left; }
 .modal-box-pos { max-width: 340px; text-align: left; padding: 16px; }
