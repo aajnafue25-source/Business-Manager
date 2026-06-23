@@ -900,6 +900,40 @@ const server = http.createServer(async (req, res) => {
           return send(res, 400, { error: 'Cannot edit this record type' });
         }
         if (dyn.type === 'delete') {
+          // For sales: cascade delete the entire bill (all line items + dues + restore stock)
+          if (dyn.table === 'sales') {
+            // First find this row to get bill_id
+            const saleRow = await sb('GET', 'sales', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
+            const billId = saleRow && saleRow[0] ? saleRow[0].bill_id : null;
+            if (billId) {
+              // Get ALL rows on this bill
+              const billRows = await sb('GET', 'sales', { query: `bill_id=eq.${billId}&user_id=eq.${session.businessId}` });
+              // Restore stock for each sold product
+              for (const row of (billRows || [])) {
+                if (row.product_id && row.quantity) {
+                  const prods = await sb('GET', 'products', { query: `id=eq.${row.product_id}&user_id=eq.${session.businessId}` });
+                  if (prods && prods[0]) {
+                    await sb('PATCH', 'products', { query: `id=eq.${row.product_id}`, body: { quantity: (prods[0].quantity || 0) + Number(row.quantity) } });
+                  }
+                }
+              }
+              // Delete ALL sale rows for this bill
+              await sb('DELETE', 'sales', { query: `bill_id=eq.${billId}&user_id=eq.${session.businessId}` });
+              // Delete ALL dues for this bill (clears outstanding)
+              await sb('DELETE', 'dues', { query: `bill_id=eq.${billId}&user_id=eq.${session.businessId}` });
+            } else {
+              // Standalone sale (no bill_id) — just delete + restore stock
+              if (saleRow && saleRow[0] && saleRow[0].product_id) {
+                const prods = await sb('GET', 'products', { query: `id=eq.${saleRow[0].product_id}&user_id=eq.${session.businessId}` });
+                if (prods && prods[0]) {
+                  await sb('PATCH', 'products', { query: `id=eq.${saleRow[0].product_id}`, body: { quantity: (prods[0].quantity || 0) + Number(saleRow[0].quantity || 0) } });
+                }
+              }
+              await sb('DELETE', 'sales', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
+            }
+            return send(res, 200, { ok: true });
+          }
+          // Default: simple delete for all other tables
           await sb('DELETE', dyn.table, { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
           return send(res, 200, { ok: true });
         }

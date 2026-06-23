@@ -720,8 +720,19 @@ function renderSaleDetailEdit() { var r = window.__currentSaleRow; if (r) editSa
 function renderSaleDetailDelete() {
   var r = window.__currentSaleRow;
   if (!r) return;
-  if (!confirm('Delete this sale entry?')) return;
-  deleteRow('sales', r.id, function () { navigateTo('saleslist'); });
+  var billLabel = r.bill_no ? 'Bill #' + r.bill_no : 'this sale';
+  var items = window.__currentBillItems || [];
+  var msg = 'Delete ' + billLabel + '?\n\n' +
+    'This will permanently:\n' +
+    '• Delete ' + items.length + ' item(s) from sales records\n' +
+    '• Clear the associated outstanding due (if any)\n' +
+    '• Restore stock for all products in this bill\n\n' +
+    'This action cannot be undone.';
+  if (!confirm(msg)) return;
+  deleteRow('sales', r.id, function () {
+    toast('Bill deleted — dues cleared, stock restored', 'ok');
+    navigateTo('saleslist');
+  });
 }
 
 
