@@ -268,6 +268,7 @@ const PAGE_RENDERERS = {
 };
 
 function navigateTo(page) {
+  startLoad(); // immediate visual feedback
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const pageEl = document.getElementById('page-' + page);
@@ -469,22 +470,74 @@ function esc(s) {
 }
 
 // ───────── API helpers ─────────
+// ── Loading indicators ──
+var __reqCount = 0;
+function startLoad() {
+  __reqCount++;
+  var bar = document.getElementById('progress-bar');
+  if (bar) { bar.className = 'loading'; }
+}
+function endLoad() {
+  __reqCount = Math.max(0, __reqCount - 1);
+  if (__reqCount === 0) {
+    var bar = document.getElementById('progress-bar');
+    if (bar) {
+      bar.className = 'done';
+      setTimeout(function () { bar.className = ''; bar.style.width = ''; }, 500);
+    }
+  }
+}
+// Set a button into loading or normal state
+function setBtn(btnEl, loading, loadingLabel) {
+  if (!btnEl) return;
+  if (loading) {
+    btnEl.dataset.origHtml = btnEl.innerHTML;
+    btnEl.innerHTML = '<span class="btn-spinner"></span>' + (loadingLabel || 'Saving…');
+    btnEl.disabled = true;
+  } else {
+    if (btnEl.dataset.origHtml) btnEl.innerHTML = btnEl.dataset.origHtml;
+    btnEl.disabled = false;
+  }
+}
+// Show skeleton loader inside a container
+function showSkeleton(containerId, rows) {
+  var el = document.getElementById(containerId);
+  if (!el) return;
+  var html = '';
+  for (var i = 0; i < (rows || 4); i++) {
+    html += '<div class="skeleton-card"><div class="skeleton skeleton-line wide"></div><div class="skeleton skeleton-line med"></div><div class="skeleton skeleton-line short"></div></div>';
+  }
+  el.innerHTML = html;
+}
+
 async function apiGet(path) {
-  const r = await fetch(API + path);
-  if (r.status === 403) { const d = await r.json().catch(function () { return {}; }); if (d.error === 'expired') showExpiredScreen(); }
-  return r.json();
+  startLoad();
+  try {
+    const r = await fetch(API + path);
+    if (r.status === 403) { const d = await r.json().catch(function () { return {}; }); if (d.error === 'expired') showExpiredScreen(); }
+    return r.json();
+  } finally { endLoad(); }
 }
 async function apiPost(path, body) {
-  const r = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  return r.json();
+  startLoad();
+  try {
+    const r = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return r.json();
+  } finally { endLoad(); }
 }
 async function apiPut(path, body) {
-  const r = await fetch(API + path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  return r.json();
+  startLoad();
+  try {
+    const r = await fetch(API + path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return r.json();
+  } finally { endLoad(); }
 }
 async function apiDelete(path) {
-  const r = await fetch(API + path, { method: 'DELETE' });
-  return r.json();
+  startLoad();
+  try {
+    const r = await fetch(API + path, { method: 'DELETE' });
+    return r.json();
+  } finally { endLoad(); }
 }
 
 function toast(msg, type) {
@@ -1149,6 +1202,8 @@ document.addEventListener('input', function (e) {
 
 async function checkout() {
   if (!cart.length) return alert('Add at least one item to the cart first.');
+  var checkoutBtn = document.getElementById('btn-checkout');
+  setBtn(checkoutBtn, true, 'Processing…');
 
   const customerId = document.getElementById('cart-customer').value || null;
 
@@ -1188,7 +1243,7 @@ async function checkout() {
     })
   });
 
-  if (res.error) return alert(res.error);
+  if (res.error) { setBtn(checkoutBtn, false); return alert(res.error); }
 
   lastBillForPrint = res;
   lastBillForPrint.salesman_name = salesmanName;
@@ -1210,6 +1265,7 @@ async function checkout() {
   setPayMode('full');
 
   await loadProductOptions();
+  setBtn(checkoutBtn, false);
   renderSalesPage();
   toast('Sale recorded');
   openPosModal(res);
@@ -2191,6 +2247,11 @@ function setDashPeriod(period) {
 }
 
 async function renderDashboard() {
+  // Show skeleton while loading
+  var metricsEl = document.getElementById('dash-metrics');
+  if (metricsEl) metricsEl.innerHTML = '<div class="skeleton skeleton-card" style="flex:1;height:90px"></div>'.repeat(4);
+  var sumEl2 = document.getElementById('dash-summary');
+  if (sumEl2) sumEl2.innerHTML = '<div class="skeleton skeleton-card" style="height:70px"></div>'.repeat(6);
   var fromEl = document.getElementById('dash-from');
   var toEl = document.getElementById('dash-to');
   var fromDate = fromEl ? fromEl.value : new Date().toISOString().slice(0, 10);
@@ -2552,6 +2613,8 @@ document.addEventListener('input', function (e) {
 
 async function savePurchase() {
   if (!purchaseCart.length) return alert('Add at least one item to the purchase.');
+  var saveBtn = document.getElementById('pur-save-btn');
+  setBtn(saveBtn, true, 'Saving…');
   const total = purchaseCart.reduce(function (s, it) { return s + it.amount; }, 0);
   let amountPaid = total;
   if (purPayMode === 'due') amountPaid = 0;
@@ -2576,6 +2639,7 @@ async function savePurchase() {
   document.getElementById('pur-supplier-search').value = '';
   document.getElementById('pur-amount-paid').value = '';
   setPurPayMode('full');
+  setBtn(saveBtn, false);
   toast('Purchase #' + res.purchaseNo + ' saved · stock updated');
 }
 

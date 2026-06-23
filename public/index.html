@@ -61,6 +61,7 @@
   </div>
 </div>
 
+<div id="progress-bar"></div>
 <div id="app">
 
   <header class="topbar">
@@ -503,7 +504,7 @@
             <label>Amount paid now (Tk)</label><input type="number" id="pur-amount-paid" min="0" placeholder="0.00" />
           </div>
           <div class="cart-summary-row due-preview" id="pur-due-preview" style="display:none"><span>Goes to supplier due</span><span id="pur-due-val">Tk 0.00</span></div>
-          <button class="btn-save" onclick="savePurchase()"><i class="ti ti-device-floppy"></i> Save purchase</button>
+          <button id="pur-save-btn" class="btn-save" onclick="savePurchase()"><i class="ti ti-device-floppy"></i> Save purchase</button>
         </div>
       </div>
     </section>

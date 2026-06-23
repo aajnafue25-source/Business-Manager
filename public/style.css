@@ -382,6 +382,52 @@ main { flex: 1; }
 .cart-due-warn { background: var(--warn-bg); border: 1px solid var(--warn); color: var(--warn); }
 .cart-due-ok { background: var(--ok-bg); border: 1px solid var(--ok); color: var(--ok); }
 
+/* ── Loading states ── */
+
+/* Top progress bar */
+#progress-bar {
+  position: fixed; top: 0; left: 0; height: 3px; z-index: 99999;
+  background: linear-gradient(90deg, var(--accent), #06b6d4, var(--accent));
+  background-size: 200% 100%;
+  width: 0; transition: width 0.2s ease; pointer-events: none;
+}
+#progress-bar.loading {
+  width: 85%;
+  animation: progress-slide 1.4s ease-in-out infinite;
+}
+#progress-bar.done { width: 100%; opacity: 0; transition: width 0.15s, opacity 0.4s 0.1s; }
+@keyframes progress-slide {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Button spinner */
+.btn-spinner {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff;
+  border-radius: 50%; animation: spin 0.6s linear infinite;
+  vertical-align: middle; margin-right: 6px;
+}
+.btn-spinner-dark {
+  border-color: rgba(0,0,0,0.15); border-top-color: var(--accent);
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+button:disabled { opacity: 0.65; cursor: not-allowed !important; }
+
+/* Page content skeleton shimmer */
+.skeleton {
+  background: linear-gradient(90deg, var(--border) 25%, var(--surface-2) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite; border-radius: 6px;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
+.skeleton-line { height: 14px; margin-bottom: 10px; }
+.skeleton-line.wide { width: 90%; }
+.skeleton-line.med  { width: 65%; }
+.skeleton-line.short { width: 40%; }
+.skeleton-card { padding: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 14px; }
+
 /* Cash Flow page */
 .cf-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
 .cf-card { margin-bottom: 0 !important; }
