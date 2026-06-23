@@ -900,40 +900,87 @@ const server = http.createServer(async (req, res) => {
           return send(res, 400, { error: 'Cannot edit this record type' });
         }
         if (dyn.type === 'delete') {
-          // For sales: cascade delete the entire bill (all line items + dues + restore stock)
+          // ── SALES (bill cascade) ──
           if (dyn.table === 'sales') {
-            // First find this row to get bill_id
             const saleRow = await sb('GET', 'sales', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
             const billId = saleRow && saleRow[0] ? saleRow[0].bill_id : null;
             if (billId) {
-              // Get ALL rows on this bill
               const billRows = await sb('GET', 'sales', { query: `bill_id=eq.${billId}&user_id=eq.${session.businessId}` });
-              // Restore stock for each sold product
               for (const row of (billRows || [])) {
                 if (row.product_id && row.quantity) {
                   const prods = await sb('GET', 'products', { query: `id=eq.${row.product_id}&user_id=eq.${session.businessId}` });
-                  if (prods && prods[0]) {
-                    await sb('PATCH', 'products', { query: `id=eq.${row.product_id}`, body: { quantity: (prods[0].quantity || 0) + Number(row.quantity) } });
-                  }
+                  if (prods && prods[0]) await sb('PATCH', 'products', { query: `id=eq.${row.product_id}`, body: { quantity: (prods[0].quantity || 0) + Number(row.quantity) } });
                 }
               }
-              // Delete ALL sale rows for this bill
               await sb('DELETE', 'sales', { query: `bill_id=eq.${billId}&user_id=eq.${session.businessId}` });
-              // Delete ALL dues for this bill (clears outstanding)
               await sb('DELETE', 'dues', { query: `bill_id=eq.${billId}&user_id=eq.${session.businessId}` });
             } else {
-              // Standalone sale (no bill_id) — just delete + restore stock
               if (saleRow && saleRow[0] && saleRow[0].product_id) {
                 const prods = await sb('GET', 'products', { query: `id=eq.${saleRow[0].product_id}&user_id=eq.${session.businessId}` });
-                if (prods && prods[0]) {
-                  await sb('PATCH', 'products', { query: `id=eq.${saleRow[0].product_id}`, body: { quantity: (prods[0].quantity || 0) + Number(saleRow[0].quantity || 0) } });
-                }
+                if (prods && prods[0]) await sb('PATCH', 'products', { query: `id=eq.${saleRow[0].product_id}`, body: { quantity: (prods[0].quantity || 0) + Number(saleRow[0].quantity || 0) } });
               }
               await sb('DELETE', 'sales', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
             }
             return send(res, 200, { ok: true });
           }
-          // Default: simple delete for all other tables
+
+          // ── SALES RETURNS (undo the restock) ──
+          if (dyn.table === 'sales_returns') {
+            const ret = await sb('GET', 'sales_returns', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
+            if (ret && ret[0] && ret[0].product_id && ret[0].quantity) {
+              const prod = await sb('GET', 'products', { query: `id=eq.${ret[0].product_id}&user_id=eq.${session.businessId}` });
+              if (prod && prod[0]) await sb('PATCH', 'products', { query: `id=eq.${ret[0].product_id}`, body: { quantity: Math.max(0, (prod[0].quantity || 0) - Number(ret[0].quantity)) } });
+            }
+            await sb('DELETE', 'sales_returns', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
+            return send(res, 200, { ok: true });
+          }
+
+          // ── EXCHANGES (reverse the swap) ──
+          if (dyn.table === 'exchanges') {
+            const exc = await sb('GET', 'exchanges', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
+            if (exc && exc[0]) {
+              const e = exc[0];
+              // Reverse: new item comes back to stock, original item goes back out
+              if (e.new_product_id && e.new_qty) {
+                const np = await sb('GET', 'products', { query: `id=eq.${e.new_product_id}&user_id=eq.${session.businessId}` });
+                if (np && np[0]) await sb('PATCH', 'products', { query: `id=eq.${e.new_product_id}`, body: { quantity: (np[0].quantity || 0) + Number(e.new_qty) } });
+              }
+              if (e.original_product_id && e.original_qty) {
+                const op = await sb('GET', 'products', { query: `id=eq.${e.original_product_id}&user_id=eq.${session.businessId}` });
+                if (op && op[0]) await sb('PATCH', 'products', { query: `id=eq.${e.original_product_id}`, body: { quantity: Math.max(0, (op[0].quantity || 0) - Number(e.original_qty)) } });
+              }
+            }
+            await sb('DELETE', 'exchanges', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
+            return send(res, 200, { ok: true });
+          }
+
+          // ── PURCHASES (reduce stock, remove items) ──
+          if (dyn.table === 'purchases') {
+            const items = await sb('GET', 'purchase_items', { query: `purchase_id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
+            for (const it of (items || [])) {
+              if (it.product_id && it.quantity) {
+                const prod = await sb('GET', 'products', { query: `id=eq.${it.product_id}&user_id=eq.${session.businessId}` });
+                if (prod && prod[0]) await sb('PATCH', 'products', { query: `id=eq.${it.product_id}`, body: { quantity: Math.max(0, (prod[0].quantity || 0) - Number(it.quantity)) } });
+              }
+            }
+            await sb('DELETE', 'purchase_items', { query: `purchase_id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
+            await sb('DELETE', 'supplier_dues', { query: `purchase_id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
+            await sb('DELETE', 'purchases', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
+            return send(res, 200, { ok: true });
+          }
+
+          // ── PURCHASE RETURNS (restore stock) ──
+          if (dyn.table === 'purchase_returns') {
+            const pr = await sb('GET', 'purchase_returns', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
+            if (pr && pr[0] && pr[0].product_id && pr[0].quantity) {
+              const prod = await sb('GET', 'products', { query: `id=eq.${pr[0].product_id}&user_id=eq.${session.businessId}` });
+              if (prod && prod[0]) await sb('PATCH', 'products', { query: `id=eq.${pr[0].product_id}`, body: { quantity: Math.max(0, (prod[0].quantity || 0) - Number(pr[0].quantity)) } });
+            }
+            await sb('DELETE', 'purchase_returns', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
+            return send(res, 200, { ok: true });
+          }
+
+          // ── DEFAULT: simple delete ──
           await sb('DELETE', dyn.table, { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
           return send(res, 200, { ok: true });
         }

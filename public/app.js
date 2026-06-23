@@ -2573,10 +2573,17 @@ async function renderPurchaseListPage() {
     document.getElementById('purchaselist-total-val').textContent = fmt(0);
     return;
   }
+  const isManager = currentRole === 'manager';
   tb.innerHTML = rows.map(function (r, i) {
-    return '<tr class="clickable-row" onclick="viewPurchase(' + i + ')"><td>' + r.date + '</td><td>#' + String(r.purchase_no || 0).padStart(5, '0') + '</td><td>' + (esc(r.supplier_name) || '<span style="color:var(--text-3)">—</span>') + '</td><td class="num">' + fmt(r.total) + '</td><td class="num" style="color:' + (r.due_amount > 0 ? 'var(--warn)' : 'var(--text-3)') + '">' + (r.due_amount > 0 ? fmt(r.due_amount) : '—') + '</td></tr>';
+    var delBtn = isManager ? '<button class="del-btn" title="Delete purchase & reduce stock" onclick="event.stopPropagation();deletePurchase(' + r.id + ')"><i class="ti ti-trash"></i></button>' : '';
+    return '<tr class="clickable-row" onclick="viewPurchase(' + i + ')"><td>' + r.date + '</td><td>#' + String(r.purchase_no || 0).padStart(5, '0') + '</td><td>' + (esc(r.supplier_name) || '<span style="color:var(--text-3)">—</span>') + '</td><td class="num">' + fmt(r.total) + '</td><td class="num" style="color:' + (r.due_amount > 0 ? 'var(--warn)' : 'var(--text-3)') + '">' + (r.due_amount > 0 ? fmt(r.due_amount) : '—') + '</td><td>' + delBtn + '</td></tr>';
   }).join('');
   document.getElementById('purchaselist-total-val').textContent = fmt(rows.reduce(function (s, r) { return s + Number(r.total); }, 0));
+}
+
+function deletePurchase(id) {
+  if (!confirm('Delete this purchase?\n\nThis will:\n• Remove all items from your stock\n• Clear associated supplier dues\n\nThis cannot be undone.')) return;
+  deleteRow('purchases', id, function () { toast('Purchase deleted — stock reduced', 'ok'); renderPurchaseListPage(); });
 }
 
 async function viewPurchase(idx) {
@@ -2663,9 +2670,15 @@ async function renderSalesReturnsPage() {
     return;
   }
   tb.innerHTML = rows.map(function (r) {
-    return '<tr><td>' + r.date + '</td><td>' + (r.bill_no ? '#' + r.bill_no : '—') + '</td><td>' + esc(r.description) + '</td><td class="num">' + r.quantity + '</td><td class="num" style="color:var(--warn)">' + fmt(r.amount) + '</td></tr>';
+    var delBtn = isManager ? '<button class="del-btn" title="Delete & undo restock" onclick="deleteSalesReturn(' + r.id + ')"><i class="ti ti-trash"></i></button>' : '';
+    return '<tr><td>' + r.date + '</td><td>' + (r.bill_no ? '#' + r.bill_no : '—') + '</td><td>' + esc(r.description) + '</td><td class="num">' + r.quantity + '</td><td class="num" style="color:var(--warn)">' + fmt(r.amount) + '</td><td>' + delBtn + '</td></tr>';
   }).join('');
   document.getElementById('salesreturns-total-val').textContent = fmt(rows.reduce(function (s, r) { return s + Number(r.amount); }, 0));
+}
+
+function deleteSalesReturn(id) {
+  if (!confirm('Delete this return?\n\nThis will undo the restock — the product quantity will be reduced back.')) return;
+  deleteRow('sales-returns', id, function () { toast('Return deleted — stock reversed', 'ok'); renderSalesReturnsPage(); });
 }
 
 // ───────── Purchase Returns ─────────
@@ -2727,9 +2740,15 @@ async function renderPurchaseReturnsPage() {
     return;
   }
   tb.innerHTML = rows.map(function (r) {
-    return '<tr><td>' + r.date + '</td><td>' + (esc(r.supplier_name) || '—') + '</td><td>' + esc(r.description) + '</td><td class="num">' + r.quantity + '</td><td class="num" style="color:var(--warn)">' + fmt(r.amount) + '</td></tr>';
+    var delBtn = isManager ? '<button class="del-btn" title="Delete & restore stock" onclick="deletePurchaseReturn(' + r.id + ')"><i class="ti ti-trash"></i></button>' : '';
+    return '<tr><td>' + r.date + '</td><td>' + (esc(r.supplier_name) || '—') + '</td><td>' + esc(r.description) + '</td><td class="num">' + r.quantity + '</td><td class="num" style="color:var(--warn)">' + fmt(r.amount) + '</td><td>' + delBtn + '</td></tr>';
   }).join('');
   document.getElementById('purchasereturns-total-val').textContent = fmt(rows.reduce(function (s, r) { return s + Number(r.amount); }, 0));
+}
+
+function deletePurchaseReturn(id) {
+  if (!confirm('Delete this purchase return?\n\nThis will remove the returned item from stock again.')) return;
+  deleteRow('purchase-returns', id, function () { toast('Purchase return deleted — stock adjusted', 'ok'); renderPurchaseReturnsPage(); });
 }
 
 // ───────── Reports ─────────
@@ -3269,10 +3288,12 @@ async function renderExchangeList() {
   if (!tb) return;
   if (!rows.length) { tb.innerHTML = '<tr><td colspan="6" class="empty-state">No exchanges yet.</td></tr>'; return; }
   window.__exchangeRows = rows;
+  var isManager = currentRole === 'manager';
   tb.innerHTML = rows.map(function (r, i) {
     var diff = Number(r.price_diff || 0);
     var diffStr = (diff >= 0 ? '+' : '') + fmt(diff);
     var diffColor = diff > 0 ? 'var(--ok)' : diff < 0 ? 'var(--danger)' : 'var(--text-2)';
+    var delBtn = isManager ? '<button class="del-btn" title="Delete & reverse exchange" onclick="event.stopPropagation();deleteExchange(' + r.id + ')"><i class="ti ti-trash"></i></button>' : '';
     return '<tr class="clickable-row" onclick="viewExchangeDetail(window.__exchangeRows[' + i + '])">' +
       '<td>' + r.date + '</td>' +
       '<td>' + (r.original_bill_no ? '#' + r.original_bill_no : '—') + '</td>' +
@@ -3280,8 +3301,14 @@ async function renderExchangeList() {
       '<td><span style="color:var(--danger)">↩</span> ' + esc(r.original_desc) + ' ×' + r.original_qty + '</td>' +
       '<td><span style="color:var(--ok)">↪</span> ' + esc(r.new_desc) + ' ×' + r.new_qty + '</td>' +
       '<td class="num" style="font-weight:700;color:' + diffColor + '">' + diffStr + '</td>' +
+      '<td>' + delBtn + '</td>' +
       '</tr>';
   }).join('');
+}
+
+function deleteExchange(id) {
+  if (!confirm('Delete this exchange?\n\nThis will reverse the stock swap:\n• New item returned to stock\n• Original item removed from stock')) return;
+  deleteRow('exchanges', id, function () { toast('Exchange deleted — stock reversed', 'ok'); renderExchangeList(); });
 }
 
 function viewExchangeDetail(r) {
