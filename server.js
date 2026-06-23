@@ -764,7 +764,10 @@ const routes = {
       return s;
     }, 0);
     const netSales = totalSales - totalReturns + totalExchangeDiff;
-    send(res, 200, { totalSales: netSales, totalExpenses, totalCOGS: cogs, totalReturns, totalExchangeDiff, grossProfit: netSales - cogs, netProfit: netSales - cogs - totalExpenses, totalDues: sum(dues), totalDuePaid: sum(duePaid), productCount: (products || []).length, lowStockCount: (products || []).filter(p => p.quantity <= 5).length });
+    const grossDues = sum(dues);
+    const totalDuePaidSum = sum(duePaid);
+    const netOutstandingDues = Math.max(0, grossDues - totalDuePaidSum);
+    send(res, 200, { totalSales: netSales, totalExpenses, totalCOGS: cogs, totalReturns, totalExchangeDiff, grossProfit: netSales - cogs, netProfit: netSales - cogs - totalExpenses, totalDues: netOutstandingDues, grossDues, totalDuePaid: totalDuePaidSum, productCount: (products || []).length, lowStockCount: (products || []).filter(p => p.quantity <= 5).length });
   }
 };
 

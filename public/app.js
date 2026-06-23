@@ -244,6 +244,7 @@ const PAGE_RENDERERS = {
   purchasereturns: renderPurchaseReturnsPage,
   suppliers: renderSuppliersPage,
   expenses: renderExpensePage,
+  cashflow: renderCashFlowPage,
   dues: function () { navigateTo('duepaid'); },
   dueentry: function () { navigateTo('duepaid'); },
   duepaid: renderDuePaidPage,
@@ -2172,8 +2173,8 @@ async function renderDashboard() {
   var inRange = function (d) { return d >= fromDate && d <= toDate; };
 
 
-  const results = await Promise.all([apiGet('/sales'), apiGet('/expenses'), apiGet('/dues'), apiGet('/purchases'), apiGet('/sales-returns'), apiGet('/exchanges')]);
-  const allSales = results[0], allExpenses = results[1], allDues = results[2], allPurchases = results[3], allReturns = results[4], allExchanges = results[5];
+  const results = await Promise.all([apiGet('/sales'), apiGet('/expenses'), apiGet('/dues'), apiGet('/purchases'), apiGet('/sales-returns'), apiGet('/exchanges'), apiGet('/due-paid'), apiGet('/purchases')]);
+  const allSales = results[0], allExpenses = results[1], allDues = results[2], allPurchases = results[3], allReturns = results[4], allExchanges = results[5], allDuePaid = results[6];
 
   // Filter to selected period
   const sales = allSales.filter(function (r) { return inRange(r.date); });
@@ -2181,25 +2182,42 @@ async function renderDashboard() {
   const purchases = allPurchases.filter(function (r) { return inRange(r.date); });
   const returns = (allReturns || []).filter(function (r) { return inRange(r.date); });
   const exchanges = (allExchanges || []).filter(function (r) { return inRange(r.date); });
+  const duePaid = (allDuePaid || []).filter(function (r) { return inRange(r.date); });
 
-  const grossSales = sales.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  // ── Core accounting calculations ──
+  const grossSales   = sales.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
   const totalReturns = returns.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
-  // Exchange price diff: positive = customer paid more (adds to sales), negative = refund (subtracts)
   const totalExchangeDiff = exchanges.reduce(function (s, r) { return s + Number(r.price_diff || 0); }, 0);
-  // Net sales = gross sales − returns + exchange differences
-  const totalSales = grossSales - totalReturns + totalExchangeDiff;
-  const totalExp = expenses.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  const netRevenue   = grossSales - totalReturns + totalExchangeDiff;
+
+  // Outstanding dues: ALL time (gross dues created − all payments ever made)
+  const allGrossDues = allDues.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  const allDuePaidTotal = (allDuePaid || []).reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  const netOutstandingDues = Math.max(0, allGrossDues - allDuePaidTotal);
+
+  const totalExp     = expenses.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
   const totalPurchases = purchases.reduce(function (s, r) { return s + Number(r.total || 0); }, 0);
-  const totalDues = allDues.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
-  const profit = totalSales - totalExp - totalPurchases;
+
+  // ── Cash Flow ──
+  // Cash collected = net revenue − still-outstanding dues
+  // Outstanding dues are ALL-TIME (not period), so adjust:
+  const periodGrossDues = allDues.filter(function (r) { return inRange(r.date); }).reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  const periodDuePaidCollected = duePaid.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  const cashFromSales = netRevenue - periodGrossDues; // collected immediately from sales
+  const cashCollected = cashFromSales + periodDuePaidCollected; // + due payments received this period
+  const refunds = totalReturns + Math.max(0, -totalExchangeDiff); // cash given back
+  const cashOut = totalExp + refunds;
+  const netCash = cashCollected - cashOut;
+
+  const profit = netRevenue - totalExp - totalPurchases;
   var periodLabel = fromDate === toDate ? fromDate : fromDate + ' → ' + toDate;
 
-  // Hero gradient cards (period-filtered, net of returns/exchanges)
+  // Hero gradient cards
   document.getElementById('dash-metrics').innerHTML =
-    '<div class="metric-card grad grad-blue"><div class="label">Net sales <span style="font-size:10px;opacity:0.8">(' + periodLabel + ')</span></div><div class="value">' + fmt(totalSales) + '</div></div>' +
-    '<div class="metric-card grad grad-navy"><div class="label">Purchases (' + periodLabel + ')</div><div class="value">' + fmt(totalPurchases) + '</div></div>' +
-    '<div class="metric-card grad grad-cyan"><div class="label">Net profit (' + periodLabel + ')</div><div class="value">' + fmt(profit) + '</div></div>' +
-    '<div class="metric-card grad grad-teal"><div class="label">Outstanding dues (all time)</div><div class="value">' + fmt(totalDues) + '</div></div>';
+    '<div class="metric-card grad grad-blue"><div class="label">Net Revenue <span style="font-size:10px;opacity:0.8">(' + periodLabel + ')</span></div><div class="value">' + fmt(netRevenue) + '</div></div>' +
+    '<div class="metric-card grad grad-navy"><div class="label">Net Cash (' + periodLabel + ')</div><div class="value">' + fmt(netCash) + '</div></div>' +
+    '<div class="metric-card grad grad-cyan"><div class="label">Net Profit (' + periodLabel + ')</div><div class="value">' + fmt(profit) + '</div></div>' +
+    '<div class="metric-card grad grad-teal"><div class="label">Outstanding Dues (all time)</div><div class="value">' + fmt(netOutstandingDues) + '</div></div>';
 
   // Summary mini cards row
   function summaryCard(icon, color, label, val) {
@@ -2207,13 +2225,12 @@ async function renderDashboard() {
   }
   var sumEl = document.getElementById('dash-summary');
   if (sumEl) sumEl.innerHTML =
-    summaryCard('ti-receipt', '#3b82f6', 'Sale Invoices (' + periodLabel + ')', sales.length) +
-    summaryCard('ti-truck-delivery', '#8b5cf6', 'Purchases (' + periodLabel + ')', purchases.length) +
-    summaryCard('ti-coin', '#10b981', 'Gross Sales', fmt(grossSales)) +
+    summaryCard('ti-coin', '#3b82f6', 'Gross Sales', fmt(grossSales)) +
     summaryCard('ti-arrow-back-up', '#ef4444', 'Returns', fmt(totalReturns)) +
     summaryCard('ti-switch-3', totalExchangeDiff >= 0 ? '#10b981' : '#f59e0b', 'Exchange diff', (totalExchangeDiff >= 0 ? '+' : '') + fmt(totalExchangeDiff)) +
+    summaryCard('ti-cash', '#10b981', 'Cash collected', fmt(cashCollected)) +
     summaryCard('ti-receipt-2', '#ef4444', 'Expenses', fmt(totalExp)) +
-    summaryCard('ti-clock', '#f59e0b', 'Customer Dues', fmt(totalDues));
+    summaryCard('ti-clock', '#f59e0b', 'Outstanding dues', fmt(netOutstandingDues));
 
   // 30-day trend — aggregate by day
   var now = new Date();
@@ -2265,7 +2282,7 @@ async function renderDashboard() {
     if (r.cost_price != null && r.quantity) return s + Number(r.cost_price) * Number(r.quantity);
     return s;
   }, 0);
-  var netProfit = Math.max(0, totalSales - cogs - totalExp);
+  var netProfit = Math.max(0, netRevenue - cogs - totalExp);
 
   if (donutChart) donutChart.destroy();
   var donutCanvas = document.getElementById('donutChart');
@@ -2274,7 +2291,7 @@ async function renderDashboard() {
       type: 'doughnut',
       data: {
         labels: ['COGS', 'Expenses', 'Net profit', 'Customer dues'],
-        datasets: [{ data: [cogs, totalExp, netProfit, totalDues], backgroundColor: ['#8b5cf6', '#ef4444', '#10b981', '#f59e0b'], borderWidth: 0, hoverOffset: 6 }]
+        datasets: [{ data: [cogs, totalExp, netProfit, netOutstandingDues], backgroundColor: ['#8b5cf6', '#ef4444', '#10b981', '#f59e0b'], borderWidth: 0, hoverOffset: 6 }]
       },
       options: {
         responsive: true, maintainAspectRatio: false, cutout: '65%',
@@ -3273,6 +3290,135 @@ function viewExchangeDetail(r) {
 function clearExchFilter() {
   ['exchlist-search', 'exchlist-from', 'exchlist-to'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
   renderExchangeList();
+}
+
+// ═══════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════
+//  CASH FLOW PAGE
+// ═══════════════════════════════════════════════════════
+
+var __cfPeriod = 'today';
+
+function setCFPeriod(period) {
+  __cfPeriod = period;
+  document.querySelectorAll('[id^="cf-"]').forEach(function (b) { if (b.tagName === 'BUTTON') b.classList.remove('active'); });
+  var btn = document.getElementById('cf-' + period);
+  if (btn) btn.classList.add('active');
+  var today = new Date().toISOString().slice(0, 10);
+  var fromDate = today, toDate = today;
+  if (period === '7d') { var d = new Date(); d.setDate(d.getDate() - 6); fromDate = d.toISOString().slice(0, 10); }
+  if (period === '1m') { var d2 = new Date(); d2.setMonth(d2.getMonth() - 1); fromDate = d2.toISOString().slice(0, 10); }
+  if (period === '1y') { var d3 = new Date(); d3.setFullYear(d3.getFullYear() - 1); fromDate = d3.toISOString().slice(0, 10); }
+  if (period === 'all') { fromDate = '2000-01-01'; }
+  var fromEl = document.getElementById('cf-from'); if (fromEl) fromEl.value = fromDate;
+  var toEl = document.getElementById('cf-to'); if (toEl) toEl.value = toDate;
+  renderCashFlowPage();
+}
+
+async function renderCashFlowPage() {
+  var fromEl = document.getElementById('cf-from');
+  var toEl = document.getElementById('cf-to');
+  var today = new Date().toISOString().slice(0, 10);
+  if (!fromEl.value) { fromEl.value = today; toEl.value = today; }
+  var from = fromEl.value, to = toEl.value;
+  var inRange = function (d) { return d >= from && d <= to; };
+  var content = document.getElementById('cashflow-content');
+  content.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-2)"><i class="ti ti-refresh"></i> Calculating...</div>';
+
+  var results = await Promise.all([
+    apiGet('/sales'), apiGet('/expenses'), apiGet('/dues'), apiGet('/due-paid'),
+    apiGet('/sales-returns'), apiGet('/exchanges'), apiGet('/purchases')
+  ]);
+  var allSales = results[0], allExpenses = results[1], allDues = results[2], allDuePaid = results[3],
+      allReturns = results[4], allExchanges = results[5], allPurchases = results[6];
+
+  var sales     = allSales.filter(function (r) { return inRange(r.date); });
+  var expenses  = allExpenses.filter(function (r) { return inRange(r.date); });
+  var returns   = allReturns.filter(function (r) { return inRange(r.date); });
+  var exchanges = allExchanges.filter(function (r) { return inRange(r.date); });
+  var duePaid   = allDuePaid.filter(function (r) { return inRange(r.date); });
+  var periodDues = allDues.filter(function (r) { return inRange(r.date); });
+
+  // ── Revenue ──
+  var grossSales     = sales.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  var totalReturns   = returns.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  var exchangeDiff   = exchanges.reduce(function (s, r) { return s + Number(r.price_diff || 0); }, 0);
+  var netRevenue     = grossSales - totalReturns + exchangeDiff;
+
+  // ── Cash In ──
+  var duesCreated    = periodDues.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  var directCash     = netRevenue - duesCreated; // collected at point of sale
+  var dueCollected   = duePaid.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  var totalCashIn    = directCash + dueCollected;
+
+  // ── Cash Out ──
+  var totalExpenses  = expenses.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  var refundsGiven   = totalReturns + Math.max(0, -exchangeDiff); // cash given back
+  var totalCashOut   = totalExpenses + refundsGiven;
+
+  // ── Net Position ──
+  var netCash = totalCashIn - totalCashOut;
+
+  // ── Outstanding (all time) ──
+  var allGrossDues   = allDues.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  var allDuePaidTot  = allDuePaid.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
+  var netOutstanding = Math.max(0, allGrossDues - allDuePaidTot);
+
+  var periodLabel = from === to ? from : from + ' → ' + to;
+
+  function cfRow(label, value, color, indent, bold) {
+    var col = color || 'var(--text)';
+    var sign = (value > 0 && color === 'var(--ok)') ? '+' : '';
+    return '<div class="cf-row' + (bold ? ' cf-row-total' : '') + (indent ? ' cf-row-indent' : '') + '">' +
+      '<span class="cf-label">' + label + '</span>' +
+      '<span class="cf-value" style="color:' + col + '">' + sign + fmt(value) + '</span>' +
+      '</div>';
+  }
+  function cfDivider(title) {
+    return '<div class="cf-divider">' + title + '</div>';
+  }
+
+  content.innerHTML =
+    '<div class="cf-period-note">Period: <strong>' + periodLabel + '</strong></div>' +
+    '<div class="cf-columns">' +
+
+    // LEFT: Revenue Statement
+    '<div class="detail-card cf-card">' +
+    '<div class="detail-card-header"><i class="ti ti-chart-bar"></i> Revenue Statement</div>' +
+    '<div class="cf-body">' +
+    cfRow('Gross Sales', grossSales) +
+    cfRow('Sales Returns', -totalReturns, 'var(--danger)', true) +
+    cfRow('Exchange Difference', exchangeDiff, exchangeDiff >= 0 ? 'var(--ok)' : 'var(--danger)', true) +
+    cfRow('Net Revenue', netRevenue, netRevenue >= 0 ? 'var(--ok)' : 'var(--danger)', false, true) +
+    '</div></div>' +
+
+    // MIDDLE: Cash Flow
+    '<div class="detail-card cf-card">' +
+    '<div class="detail-card-header"><i class="ti ti-cash"></i> Cash Flow</div>' +
+    '<div class="cf-body">' +
+    cfDivider('Cash In') +
+    cfRow('Collected at sale', directCash, 'var(--ok)', true) +
+    cfRow('Due payments received', dueCollected, 'var(--ok)', true) +
+    cfRow('Total Cash In', totalCashIn, 'var(--ok)', false, true) +
+    cfDivider('Cash Out') +
+    cfRow('Expenses paid', totalExpenses, 'var(--danger)', true) +
+    cfRow('Refunds given', refundsGiven, 'var(--danger)', true) +
+    cfRow('Total Cash Out', totalCashOut, 'var(--danger)', false, true) +
+    cfDivider('') +
+    cfRow('NET CASH POSITION', netCash, netCash >= 0 ? 'var(--ok)' : 'var(--danger)', false, true) +
+    '</div></div>' +
+
+    // RIGHT: Outstanding
+    '<div class="detail-card cf-card">' +
+    '<div class="detail-card-header"><i class="ti ti-clock"></i> Receivables (All time)</div>' +
+    '<div class="cf-body">' +
+    cfRow('Total dues created', allGrossDues) +
+    cfRow('Total dues collected', allDuePaidTot, 'var(--ok)', true) +
+    cfRow('Net outstanding', netOutstanding, netOutstanding > 0 ? 'var(--warn)' : 'var(--ok)', false, true) +
+    (netOutstanding > 0 ? '<div style="font-size:11.5px;color:var(--text-2);padding:12px 16px;line-height:1.5">Tk ' + netOutstanding.toLocaleString('en-US', {minimumFractionDigits:2}) + ' is owed by customers and not yet collected.</div>' : '<div style="font-size:12px;color:var(--ok);padding:12px 16px"><i class="ti ti-circle-check"></i> All dues fully collected!</div>') +
+    '</div></div>' +
+    '</div>';
 }
 
 // ═══════════════════════════════════════════════════════

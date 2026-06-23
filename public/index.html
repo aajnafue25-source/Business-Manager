@@ -118,6 +118,7 @@
     </div>
 
     <button data-page="expenses"><i class="ti ti-receipt"></i><span>Expenses</span></button>
+    <button data-page="cashflow"><i class="ti ti-cash"></i><span>Cash Flow</span></button>
     <div class="nav-group">
       <button class="nav-group-btn" data-page="duepaid" data-default="duepaid"><i class="ti ti-clock"></i><span>Dues</span><i class="ti ti-chevron-down nav-caret"></i></button>
       <div class="nav-dropdown">
@@ -620,6 +621,22 @@
         </div>
         <div class="total-row"><span>Total</span><span id="exp-total-val">Tk 0</span></div>
       </div>
+    </section>
+
+    <!-- CASH FLOW -->
+    <section id="page-cashflow" class="page">
+      <h1 class="page-title"><i class="ti ti-cash"></i> Cash Flow</h1>
+      <div class="filter-bar">
+        <button class="dash-period-btn active" id="cf-today" onclick="setCFPeriod('today')">Today</button>
+        <button class="dash-period-btn" id="cf-7d" onclick="setCFPeriod('7d')">7 Days</button>
+        <button class="dash-period-btn" id="cf-1m" onclick="setCFPeriod('1m')">1 Month</button>
+        <button class="dash-period-btn" id="cf-1y" onclick="setCFPeriod('1y')">1 Year</button>
+        <button class="dash-period-btn" id="cf-all" onclick="setCFPeriod('all')">All time</button>
+        <input type="date" id="cf-from" class="dash-date-input" onchange="renderCashFlowPage()" />
+        <span class="filter-to">to</span>
+        <input type="date" id="cf-to" class="dash-date-input" onchange="renderCashFlowPage()" />
+      </div>
+      <div id="cashflow-content" style="margin-top:16px"></div>
     </section>
 
     <!-- DUE PAYMENT (combined: outstanding list + payment form + payment history) -->
