@@ -78,18 +78,24 @@ async function getNextBarcode(name) {
 }
 
 // ---------- Sessions ----------
-const sessions = new Map();
-function createSession(data) {
+// ---------- Sessions (Supabase-backed — survives server restarts) ----------
+async function createSession(data) {
   const token = crypto.randomBytes(32).toString('hex');
-  sessions.set(token, { ...data, created: Date.now() });
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  await sb('POST', 'sessions', { body: { token, data: JSON.stringify(data), expires_at: expiresAt } });
   return token;
 }
-function getSession(token) {
+async function getSession(token) {
   if (!token) return null;
-  const s = sessions.get(token);
-  if (!s) return null;
-  if (Date.now() - s.created > 7 * 24 * 60 * 60 * 1000) { sessions.delete(token); return null; }
-  return s;
+  try {
+    const rows = await sb('GET', 'sessions', { query: `token=eq.${encodeURIComponent(token)}&expires_at=gt.${new Date().toISOString()}` });
+    if (!rows || !rows.length) return null;
+    return JSON.parse(rows[0].data);
+  } catch (e) { return null; }
+}
+async function deleteSession(token) {
+  if (!token) return;
+  try { await sb('DELETE', 'sessions', { query: `token=eq.${encodeURIComponent(token)}` }); } catch (e) {}
 }
 function getToken(req) {
   const cookie = req.headers.cookie || '';
@@ -175,6 +181,23 @@ function serveStatic(req, res, urlPath) {
   });
 }
 
+// ---------- Audit log ----------
+// Writes a record of every important action. Never throws — logging failure must never break a real request.
+async function audit(session, action, table, recordId, detail = '') {
+  try {
+    await sb('POST', 'audit_log', { body: {
+      user_id:    session ? session.businessId : null,
+      username:   session ? session.username   : 'system',
+      role:       session ? session.role       : 'system',
+      action,           // 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT'
+      table_name: table,
+      record_id:  recordId ? String(recordId) : null,
+      detail:     detail ? String(detail).slice(0, 500) : null,
+      created_at: new Date().toISOString()
+    }});
+  } catch (e) { console.error('[audit]', e.message); }
+}
+
 function isExpired(user) {
   if (!user.expires_at) return false;
   return new Date(user.expires_at).getTime() < Date.now();
@@ -194,7 +217,7 @@ async function handleAuth(method, pathname, req, res) {
     const approvedAt = isAdmin ? new Date().toISOString() : null;
     await sb('POST', 'users', { body: { id, username: b.username, phone: b.phone, password_hash: hashPassword(b.password), status, is_admin: isAdmin, approved_at: approvedAt, expires_at: null } });
     if (isAdmin) {
-      const token = createSession({ businessId: id, role: 'manager', username: b.username, isAdmin: true });
+      const token = await createSession({ businessId: id, role: 'manager', username: b.username, isAdmin: true });
       return send(res, 200, { ok: true, username: b.username, status: 'approved', isAdmin: true }, { 'Set-Cookie': buildSessionCookie(token, req) });
     }
     return send(res, 200, { ok: true, status: 'pending' });
@@ -215,7 +238,8 @@ async function handleAuth(method, pathname, req, res) {
     if (user.blocked || isExpired(user)) return send(res, 403, { error: 'expired' });
     recordLoginSuccess(lockKey);
     if (isLegacyHash(user.password_hash)) await sb('PATCH', 'users', { query: `id=eq.${user.id}`, body: { password_hash: hashPassword(b.password) } });
-    const token = createSession({ businessId: user.id, role: 'manager', username: user.username, isAdmin: user.is_admin });
+    const token = await createSession({ businessId: user.id, role: 'manager', username: user.username, isAdmin: user.is_admin });
+    await audit({ businessId: user.id, username: user.username, role: 'manager' }, 'LOGIN', 'users', user.id, 'manager login');
     return send(res, 200, { ok: true, username: user.username, isAdmin: user.is_admin, role: 'manager' }, { 'Set-Cookie': buildSessionCookie(token, req) });
   }
 
@@ -235,30 +259,35 @@ async function handleAuth(method, pathname, req, res) {
     if (biz.blocked || isExpired(biz)) return send(res, 403, { error: 'expired' });
     recordLoginSuccess(lockKey);
     if (isLegacyHash(staffUser.password_hash)) await sb('PATCH', 'staff', { query: `id=eq.${staffUser.id}`, body: { password_hash: hashPassword(b.password) } });
-    const token = createSession({ businessId: biz.id, role: staffUser.role, staffId: staffUser.id, username: staffUser.name, isAdmin: false });
+    const token = await createSession({ businessId: biz.id, role: staffUser.role, staffId: staffUser.id, username: staffUser.name, isAdmin: false });
+    await audit({ businessId: biz.id, username: staffUser.name, role: staffUser.role }, 'LOGIN', 'staff', staffUser.id, 'staff login');
     return send(res, 200, { ok: true, username: staffUser.name, role: staffUser.role, isAdmin: false }, { 'Set-Cookie': buildSessionCookie(token, req) });
   }
 
   if (method === 'POST' && pathname === '/api/auth/logout') {
     const token = getToken(req);
-    if (token) sessions.delete(token);
+    if (token) {
+      const s = await getSession(token);
+      if (s) await audit(s, 'LOGOUT', 'sessions', null, 'user logout');
+      await deleteSession(token);
+    }
     return send(res, 200, { ok: true }, { 'Set-Cookie': buildSessionCookie('', req, 0) });
   }
 
   if (method === 'GET' && pathname === '/api/auth/me') {
     const token = getToken(req);
-    const session = getSession(token);
+    const session = await getSession(token);
     if (!session) return send(res, 401, { error: 'Not logged in' });
     const bizRows = await sb('GET', 'users', { query: `id=eq.${session.businessId}` });
     const biz = bizRows && bizRows[0];
     if (!biz) return send(res, 401, { error: 'Not logged in' });
-    if (biz.blocked || isExpired(biz)) { sessions.delete(token); return send(res, 403, { error: 'expired' }); }
+    if (biz.blocked || isExpired(biz)) { await deleteSession(token); return send(res, 403, { error: 'expired' }); }
     return send(res, 200, { username: session.username, isAdmin: session.isAdmin, role: session.role, businessId: session.businessId, daysLeft: biz.expires_at ? Math.max(0, Math.ceil((new Date(biz.expires_at).getTime() - Date.now()) / 86400000)) : null });
   }
 
   if (method === 'POST' && pathname === '/api/auth/change-password') {
     const token = getToken(req);
-    const session = getSession(token);
+    const session = await getSession(token);
     if (!session) return send(res, 401, { error: 'Not logged in' });
     const b = await readBody(req);
     if (!b.currentPassword || !b.newPassword) return send(res, 400, { error: 'Current and new password required' });
@@ -365,6 +394,7 @@ async function handleStaff(method, pathname, req, res, session) {
 
   if (method === 'DELETE' && pathname.startsWith('/api/staff/')) {
     const id = pathname.split('/').pop();
+    await audit(session, 'DELETE', 'staff', id);
     await sb('DELETE', 'staff', { query: `id=eq.${id}&business_user_id=eq.${session.businessId}` });
     return send(res, 200, { ok: true });
   }
@@ -389,6 +419,7 @@ async function handleStaff(method, pathname, req, res, session) {
   }
   if (method === 'DELETE' && pathname.startsWith('/api/attendance/')) {
     const id = pathname.split('/').pop();
+    await audit(session, 'DELETE', 'attendance', id);
     await sb('DELETE', 'attendance', { query: `id=eq.${id}&user_id=eq.${session.businessId}` });
     return send(res, 200, { ok: true });
   }
@@ -924,7 +955,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const token = getToken(req);
-      const session = getSession(token);
+      const session = await getSession(token);
       if (!session) return send(res, 401, { error: 'Not logged in' });
 
       if (pathname.startsWith('/api/admin/')) {
@@ -1014,6 +1045,7 @@ const server = http.createServer(async (req, res) => {
           return send(res, 400, { error: 'Cannot edit this record type' });
         }
         if (dyn.type === 'delete') {
+          await audit(session, 'DELETE', dyn.table, dyn.id);
           // ── SALES (bill cascade) ──
           if (dyn.table === 'sales') {
             const saleRow = await sb('GET', 'sales', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}` });
