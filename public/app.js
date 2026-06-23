@@ -1303,27 +1303,33 @@ async function renderDuePaidPage() {
   // Load outstanding dues at the top
   renderDueEntryList();
 
-  // Wire customer search — auto-fills outstanding due
+  // Wire customer search — auto-fills NET outstanding due (gross dues minus payments)
   wireSearchPicker('dpaid-customer-search', 'dpaid-customer-results', searchCustomersApi, renderCustomerSearchItem, async function (c) {
     document.getElementById('dpaid-customer-id').value = c.id;
     document.getElementById('dpaid-party').value = c.name;
     document.getElementById('dpaid-customer-search').value = c.name + (c.phone ? ' — ' + c.phone : '');
-    // Fetch this customer's outstanding dues
-    const allDues = await apiGet('/dues');
-    const customerDues = allDues.filter(function (d) { return d.customer_id === c.id || (d.party || '').toLowerCase() === c.name.toLowerCase(); });
-    const totalDue = customerDues.reduce(function (s, d) { return s + Number(d.amount); }, 0);
-    __customerOutstandingDue = totalDue;
+    // Fetch this customer's dues AND payments
+    const [allDues, allPaid] = await Promise.all([apiGet('/dues'), apiGet('/due-paid')]);
+    const nameLower = (c.name || '').toLowerCase();
+    const customerDues = allDues.filter(function (d) { return d.customer_id === c.id || (d.party || '').toLowerCase() === nameLower; });
+    const customerPaid = allPaid.filter(function (p) { return (p.customer_id && p.customer_id === c.id) || (p.party || '').toLowerCase() === nameLower; });
+    const grossDue = customerDues.reduce(function (s, d) { return s + Number(d.amount); }, 0);
+    const totalPaid = customerPaid.reduce(function (s, p) { return s + Number(p.amount); }, 0);
+    const netDue = Math.max(0, grossDue - totalPaid);
+    __customerOutstandingDue = netDue;
     const infoBox = document.getElementById('dpaid-outstanding-info');
-    if (totalDue > 0) {
+    if (netDue > 0.009) {
       infoBox.style.display = 'block';
-      infoBox.innerHTML = '<div style="font-size:12px;color:var(--ok);margin-bottom:6px"><i class="ti ti-check"></i> Found ' + customerDues.length + ' outstanding due(s)</div>' +
-        customerDues.map(function (d) { return '<div class="due-item"><span>' + d.date + ' — ' + esc(d.note || 'Due') + '</span><span>' + fmt(d.amount) + '</span></div>'; }).join('') +
-        '<div style="border-top:1px solid var(--ok);margin-top:6px;padding-top:6px;display:flex;justify-content:space-between;font-weight:700"><span>Total outstanding</span><span>' + fmt(totalDue) + '</span></div>';
-      if (__duePaidMode === 'full') document.getElementById('dpaid-amount').value = totalDue.toFixed(2);
+      infoBox.innerHTML = '<div style="font-size:12px;color:var(--ok);margin-bottom:6px"><i class="ti ti-check"></i> Outstanding balance for ' + esc(c.name) + '</div>' +
+        '<div class="due-item"><span>Total dues</span><span>' + fmt(grossDue) + '</span></div>' +
+        (totalPaid > 0 ? '<div class="due-item" style="color:var(--text-2)"><span>Already paid</span><span>-' + fmt(totalPaid) + '</span></div>' : '') +
+        '<div style="border-top:1px solid var(--ok);margin-top:6px;padding-top:6px;display:flex;justify-content:space-between;font-weight:700"><span>Remaining due</span><span>' + fmt(netDue) + '</span></div>';
+      if (__duePaidMode === 'full') document.getElementById('dpaid-amount').value = netDue.toFixed(2);
     } else {
       infoBox.style.display = 'block';
-      infoBox.innerHTML = '<div style="color:var(--text-2);font-size:13px"><i class="ti ti-check"></i> No outstanding dues for this customer.</div>';
+      infoBox.innerHTML = '<div style="color:var(--text-2);font-size:13px"><i class="ti ti-check"></i> No outstanding dues for this customer' + (totalPaid > 0 ? ' (fully paid)' : '') + '.</div>';
       __customerOutstandingDue = 0;
+      if (__duePaidMode === 'full') document.getElementById('dpaid-amount').value = '';
     }
   }, { showOnEmpty: false });
   renderDuePaidList();
