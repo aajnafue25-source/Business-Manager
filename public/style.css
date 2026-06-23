@@ -82,6 +82,12 @@
 .ti-shopping-cart::before       { content: "\f07a"; }  /* cart-shopping */
 .ti-home::before                { content: "\f015"; }  /* house */
 .ti-product::before             { content: "\f466"; }  /* box */
+.ti-calendar-check::before      { content: "\f274"; }  /* calendar-check */
+.ti-chart-bar::before           { content: "\f080"; }  /* chart-bar */
+.ti-download::before            { content: "\f019"; }  /* download */
+
+/* Attendance form grid */
+.att-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
 .ti-switch-3::before            { content: "\f362"; }  /* right-left (exchange) */
 .ti-tag::before                 { content: "\f02b"; }  /* tag */
 .ti-bookmark::before            { content: "\f02e"; }  /* bookmark */

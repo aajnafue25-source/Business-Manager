@@ -138,6 +138,15 @@
 
     <button data-page="reports"><i class="ti ti-report-analytics"></i><span>Reports</span></button>
 
+    <div class="nav-group" id="nav-group-staff" style="display:none">
+      <button class="nav-group-btn" data-page="staff" data-default="staff"><i class="ti ti-users-group"></i><span>Staff</span><i class="ti ti-chevron-down nav-caret"></i></button>
+      <div class="nav-dropdown">
+        <button data-page="staff"><i class="ti ti-users-group"></i>Manage Staff</button>
+        <button data-page="attendance"><i class="ti ti-calendar-check"></i>Attendance</button>
+        <button data-page="staffsales"><i class="ti ti-chart-bar"></i>Staff Sales</button>
+      </div>
+    </div>
+
   </nav>
 
   <main id="main">
@@ -245,6 +254,11 @@
           </div>
           <!-- Outstanding due notice for selected customer -->
           <div id="cart-customer-due-notice" class="cart-due-notice" style="display:none"></div>
+          <!-- Salesman dropdown -->
+          <div class="pos-field-group">
+            <label class="pos-label">Salesman</label>
+            <select id="cart-salesman" class="pos-input"><option value="">— Walk-in / self —</option></select>
+          </div>
 
           <!-- Manual custom item row (collapsed by default) -->
           <details class="pos-custom-item">
@@ -908,6 +922,70 @@
         </table>
         </div>
       </div>
+    </section>
+
+    <!-- ATTENDANCE -->
+    <section id="page-attendance" class="page">
+      <h1 class="page-title"><i class="ti ti-calendar-check"></i> Attendance</h1>
+      <div class="filter-bar" style="margin-bottom:16px">
+        <input type="date" id="att-date" onchange="renderAttendancePage()" />
+        <input type="text" id="att-search" placeholder="🔍 Search staff..." oninput="renderAttendancePage()" style="flex:1" />
+        <button class="btn-filter" onclick="renderAttendancePage()">Load</button>
+      </div>
+      <!-- Quick add for today -->
+      <div class="entry-section" style="margin-bottom:18px" id="att-form-section">
+        <h3><i class="ti ti-plus" style="color:var(--ok)"></i> Add attendance entry</h3>
+        <div class="att-form-grid">
+          <div class="form-row"><label>Staff member</label>
+            <select id="att-staff-select"><option value="">— Select staff —</option></select>
+          </div>
+          <div class="form-row"><label>Status</label>
+            <select id="att-status">
+              <option value="present">Present</option>
+              <option value="late">Late</option>
+              <option value="absent">Absent</option>
+              <option value="leave">Leave</option>
+            </select>
+          </div>
+          <div class="form-row"><label>Entry time</label><input type="time" id="att-entry" /></div>
+          <div class="form-row"><label>Exit time</label><input type="time" id="att-exit" /></div>
+          <div class="form-row"><label>Lunch out</label><input type="time" id="att-lunch-out" /></div>
+          <div class="form-row"><label>Lunch in</label><input type="time" id="att-lunch-in" /></div>
+          <div class="form-row"><label>Note</label><input type="text" id="att-note" placeholder="Optional note" /></div>
+        </div>
+        <button class="btn-save" onclick="addAttendance()"><i class="ti ti-calendar-check"></i> Save attendance</button>
+      </div>
+      <div class="list-card" style="margin-bottom:18px">
+        <div class="list-header"><i class="ti ti-list"></i> Attendance records</div>
+        <div class="table-scroll">
+          <table><thead><tr><th>Date</th><th>Staff</th><th>Status</th><th>Entry</th><th>Exit</th><th>Lunch out</th><th>Lunch in</th><th>Note</th><th></th></tr></thead>
+          <tbody id="attendance-tbody"></tbody></table>
+        </div>
+      </div>
+      <!-- Attendance charts -->
+      <div class="dash-charts-row">
+        <div class="chart-card" style="flex:1">
+          <div class="chart-card-header"><h3>Attendance summary</h3></div>
+          <div class="chart-wrap" style="height:220px"><canvas id="att-chart"></canvas></div>
+        </div>
+        <div class="chart-card" style="flex:1">
+          <div class="chart-card-header"><h3>Late count by staff</h3></div>
+          <div class="chart-wrap" style="height:220px"><canvas id="att-late-chart"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STAFF SALES -->
+    <section id="page-staffsales" class="page">
+      <h1 class="page-title"><i class="ti ti-chart-bar"></i> Staff Sales</h1>
+      <div class="filter-bar">
+        <input type="date" id="ss-from" />
+        <span class="filter-to">to</span>
+        <input type="date" id="ss-to" />
+        <button class="btn-filter" onclick="renderStaffSalesPage()">Filter</button>
+        <button class="btn-clear" onclick="clearSSFilter()">All time</button>
+      </div>
+      <div id="staffsales-content" style="margin-top:16px"></div>
     </section>
 
       <!-- ADMIN -->

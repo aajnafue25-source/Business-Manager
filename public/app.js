@@ -68,6 +68,13 @@ function hideAuthScreen(username, isAdmin, role, daysLeft) {
   const profileStaff = document.getElementById('profile-drop-staff');
   if (profileStaff) profileStaff.style.display = (currentRole === 'manager') ? 'flex' : 'none';
 
+  // Show Staff nav group for managers only
+  const staffNavGroup = document.getElementById('nav-group-staff');
+  if (staffNavGroup) staffNavGroup.style.display = (currentRole === 'manager') ? 'block' : 'none';
+
+  // Load staff into salesman dropdown for all users
+  loadSalesmanDropdown();
+
   const badgeEl = document.getElementById('topbar-days-left');
   if (badgeEl) {
     if (daysLeft != null && !isAdmin) {
@@ -254,7 +261,9 @@ const PAGE_RENDERERS = {
   customers: renderCustomersPage,
   reports: renderReportsPage,
   settings: renderSettingsPage,
-  staff: renderStaffPage
+  staff: renderStaffPage,
+  attendance: renderAttendancePage,
+  staffsales: renderStaffSalesPage,
 };
 
 function navigateTo(page) {
@@ -1163,11 +1172,16 @@ async function checkout() {
   const customerName = document.getElementById('cart-customer-name').value.trim();
   const date = dateOf('cart-date');
 
+  var salesmanSel = document.getElementById('cart-salesman');
+  var salesmanId = salesmanSel ? salesmanSel.value || null : null;
+  var salesmanName = salesmanSel && salesmanSel.value ? salesmanSel.options[salesmanSel.selectedIndex].dataset.name : null;
+
   const res = await apiPost('/checkout', {
     date: date, customer_id: customerId, customerName: customerName,
     amountPaid: amountPaid,
     previousBalance: t.previousBalance,
     discountPct: t.discPct, discountAmt: t.discAmt, vatPct: t.vatPct,
+    salesman_id: salesmanId, salesman_name: salesmanName,
     items: cart.map(function (it) {
       return { product_id: it.product_id, desc: it.desc, quantity: it.quantity, unit_price: it.unit_price, amount: it.amount, cost_price: it.cost_price };
     })
@@ -1176,9 +1190,12 @@ async function checkout() {
   if (res.error) return alert(res.error);
 
   lastBillForPrint = res;
+  lastBillForPrint.salesman_name = salesmanName;
   __cartPreviousBalance = 0;
   hideCartCustomerDue();
   cart = [];
+  var salesmanSelEl = document.getElementById('cart-salesman');
+  if (salesmanSelEl) salesmanSelEl.value = '';
   renderCart();
   selectedCartCustomer = null;
   document.getElementById('cart-customer').value = '';
@@ -2015,6 +2032,7 @@ function buildPosBillHtml(bill, widthMm) {
     '<div style="font-size:12px;margin:2px 0">Bill# ' + billNoStr + '</div>' +
     '<div style="font-size:12px;margin:2px 0">Date  ' + dateStr + '</div>' +
     (bill.customer && bill.customer.name ? '<div style="font-size:12px;margin:2px 0">Customer  ' + esc(bill.customer.name) + '</div>' : '') +
+    (bill.salesman_name ? '<div style="font-size:' + baseFont + ';margin:2px 0">Salesman: ' + esc(bill.salesman_name) + '</div>' : '') +
     (customerPhone ? '<div style="font-size:12px;margin:2px 0">Phone  ' + esc(customerPhone) + '</div>' : '') +
     '<div style="border-top:1px dashed #000;margin:8px 0"></div>' +
     '<table style="width:100%;font-size:' + baseFont + ';border-collapse:collapse;table-layout:fixed">' +
@@ -2096,6 +2114,7 @@ function buildA4InvoiceHtml(bill) {
     '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#888;margin-bottom:4px">Bill To</div>' +
     '<div style="font-weight:700;font-size:14px">' + (bill.customer.name || '') + '</div>' +
     (bill.customer.phone ? '<div style="color:#666;font-size:13px">' + bill.customer.phone + '</div>' : '') +
+    (bill.salesman_name ? '<div style="color:#666;font-size:13px;margin-top:4px">Salesman: ' + esc(bill.salesman_name) + '</div>' : '') +
     '</div>' : '') +
     '<table style="width:100%;border-collapse:collapse;margin-bottom:20px">' +
     '<thead><tr style="background:#f3f7fb">' +
@@ -2866,7 +2885,25 @@ async function renderReportsPage() {
     '</tbody></table></div></div>' +
     '</div>';
 
-  document.getElementById('reports-content').innerHTML = pnlHtml + stockHtml + lowStockHtml + topHtml +
+  // Top sellers (products, categories, brands)
+  var topSellersHtml = '<div class="list-header" style="padding:6px 0 12px"><i class="ti ti-trophy"></i> Top Sellers</div>' +
+    renderTopSellersTables(sales, products);
+
+  // Export buttons (manager only)
+  var exportHtml = '';
+  if (currentRole === 'manager') {
+    exportHtml = '<div class="detail-card" style="margin-bottom:16px"><div class="detail-card-header"><i class="ti ti-download"></i> Export Data (CSV)</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:10px;padding:14px">' +
+      '<button class="btn-secondary" onclick="exportCSV(\'sales\')"><i class="ti ti-receipt"></i> Sales</button>' +
+      '<button class="btn-secondary" onclick="exportCSV(\'purchases\')"><i class="ti ti-truck-delivery"></i> Purchases</button>' +
+      '<button class="btn-secondary" onclick="exportCSV(\'expenses\')"><i class="ti ti-receipt-2"></i> Expenses</button>' +
+      '<button class="btn-secondary" onclick="exportCSV(\'products\')"><i class="ti ti-package"></i> Products</button>' +
+      '<button class="btn-secondary" onclick="exportCSV(\'customers\')"><i class="ti ti-users"></i> Customers</button>' +
+      '</div></div>';
+  }
+
+  document.getElementById('reports-content').innerHTML = exportHtml + pnlHtml + stockHtml + lowStockHtml + topHtml +
+    topSellersHtml +
     '<div class="list-header" style="padding:6px 0 12px"><i class="ti ti-book"></i> Ledgers</div>' + ledgerHtml;
 }
 
@@ -3457,6 +3494,286 @@ async function renderCashFlowPage() {
     (netOutstanding > 0 ? '<div style="font-size:11.5px;color:var(--text-2);padding:12px 16px;line-height:1.5">Tk ' + netOutstanding.toLocaleString('en-US', {minimumFractionDigits:2}) + ' is owed by customers and not yet collected.</div>' : '<div style="font-size:12px;color:var(--ok);padding:12px 16px"><i class="ti ti-circle-check"></i> All dues fully collected!</div>') +
     '</div></div>' +
     '</div>';
+}
+
+// ═══════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════
+//  SALESMAN TRACKING
+// ═══════════════════════════════════════════════════════
+
+async function loadSalesmanDropdown() {
+  var sel = document.getElementById('cart-salesman');
+  if (!sel) return;
+  try {
+    var staff = await apiGet('/staff');
+    var current = sel.value;
+    sel.innerHTML = '<option value="">— Walk-in / self —</option>' +
+      (staff || []).map(function (s) { return '<option value="' + s.id + '" data-name="' + esc(s.name) + '">' + esc(s.name) + '</option>'; }).join('');
+    if (current) sel.value = current;
+  } catch (e) {}
+}
+
+// ═══════════════════════════════════════════════════════
+//  ATTENDANCE SYSTEM
+// ═══════════════════════════════════════════════════════
+
+var __attChart = null, __attLateChart = null;
+
+async function renderAttendancePage() {
+  var dateEl = document.getElementById('att-date');
+  if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+  var dateFilter = dateEl ? dateEl.value : '';
+  var search = (document.getElementById('att-search') ? document.getElementById('att-search').value : '').toLowerCase();
+
+  // Load staff into select
+  var staffSel = document.getElementById('att-staff-select');
+  if (staffSel && staffSel.options.length <= 1) {
+    var staffList = await apiGet('/staff') || [];
+    staffList.forEach(function (s) {
+      var opt = document.createElement('option');
+      opt.value = s.id; opt.dataset.name = s.name; opt.textContent = s.name;
+      staffSel.appendChild(opt);
+    });
+  }
+
+  var allRows = await apiGet('/attendance') || [];
+  var rows = allRows;
+  if (dateFilter) rows = rows.filter(function (r) { return r.date === dateFilter; });
+  if (search) rows = rows.filter(function (r) { return (r.staff_name || '').toLowerCase().includes(search); });
+  rows.sort(function (a, b) { return b.date.localeCompare(a.date) || b.id - a.id; });
+
+  var tb = document.getElementById('attendance-tbody');
+  if (tb) {
+    if (!rows.length) {
+      tb.innerHTML = '<tr><td colspan="9" class="empty-state">No attendance records' + (dateFilter ? ' for ' + dateFilter : '') + '.</td></tr>';
+    } else {
+      window.__attRows = rows;
+      tb.innerHTML = rows.map(function (r, i) {
+        var statusColor = r.status === 'present' ? 'var(--ok)' : r.status === 'late' ? 'var(--warn)' : r.status === 'leave' ? '#6366f1' : 'var(--danger)';
+        var statusLabel = (r.status || 'present').charAt(0).toUpperCase() + (r.status || 'present').slice(1);
+        return '<tr><td>' + r.date + '</td><td style="font-weight:600">' + esc(r.staff_name) + '</td>' +
+          '<td><span style="color:' + statusColor + ';font-weight:600">' + statusLabel + '</span></td>' +
+          '<td>' + (r.entry_time || '—') + '</td><td>' + (r.exit_time || '—') + '</td>' +
+          '<td>' + (r.lunch_out || '—') + '</td><td>' + (r.lunch_in || '—') + '</td>' +
+          '<td style="color:var(--text-2);font-size:12px">' + (esc(r.note) || '') + '</td>' +
+          '<td><button class="del-btn" onclick="deleteRow(\'attendance\',' + r.id + ',renderAttendancePage)"><i class="ti ti-trash"></i></button></td></tr>';
+      }).join('');
+    }
+  }
+
+  // Charts
+  renderAttendanceCharts(allRows);
+}
+
+async function addAttendance() {
+  var staffSel = document.getElementById('att-staff-select');
+  var staffId = staffSel ? staffSel.value : null;
+  var staffName = staffSel && staffSel.value ? staffSel.options[staffSel.selectedIndex].dataset.name : '';
+  if (!staffName) return alert('Please select a staff member.');
+  var dateEl = document.getElementById('att-date');
+  var date = dateEl ? dateEl.value : new Date().toISOString().slice(0, 10);
+  var status = document.getElementById('att-status').value;
+  var entryTime = document.getElementById('att-entry').value;
+  var exitTime = document.getElementById('att-exit').value;
+  var lunchOut = document.getElementById('att-lunch-out').value;
+  var lunchIn = document.getElementById('att-lunch-in').value;
+  var note = document.getElementById('att-note').value;
+  var res = await apiPost('/attendance', { staff_id: staffId, staff_name: staffName, date: date, status: status, entry_time: entryTime || null, exit_time: exitTime || null, lunch_out: lunchOut || null, lunch_in: lunchIn || null, note: note });
+  if (res && res.error) { alert(res.error); return; }
+  // Clear time fields
+  ['att-entry', 'att-exit', 'att-lunch-out', 'att-lunch-in', 'att-note'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('att-staff-select').value = '';
+  toast(staffName + ' attendance saved', 'ok');
+  renderAttendancePage();
+}
+
+function renderAttendanceCharts(rows) {
+  // Summary donut: present/late/absent/leave counts
+  var counts = { present: 0, late: 0, absent: 0, leave: 0 };
+  rows.forEach(function (r) { var s = r.status || 'present'; if (counts[s] !== undefined) counts[s]++; });
+
+  var attCanvas = document.getElementById('att-chart');
+  if (attCanvas) {
+    if (__attChart) __attChart.destroy();
+    __attChart = new Chart(attCanvas.getContext('2d'), {
+      type: 'doughnut',
+      data: { labels: ['Present', 'Late', 'Absent', 'Leave'], datasets: [{ data: [counts.present, counts.late, counts.absent, counts.leave], backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#6366f1'], borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '60%', plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10, boxWidth: 10 } } } }
+    });
+  }
+
+  // Late count per staff
+  var lateCounts = {};
+  rows.filter(function (r) { return r.status === 'late'; }).forEach(function (r) {
+    lateCounts[r.staff_name] = (lateCounts[r.staff_name] || 0) + 1;
+  });
+  var lateNames = Object.keys(lateCounts).sort(function (a, b) { return lateCounts[b] - lateCounts[a]; });
+
+  var lateCanvas = document.getElementById('att-late-chart');
+  if (lateCanvas) {
+    if (__attLateChart) __attLateChart.destroy();
+    __attLateChart = new Chart(lateCanvas.getContext('2d'), {
+      type: 'bar',
+      data: { labels: lateNames.length ? lateNames : ['No data'], datasets: [{ label: 'Late count', data: lateNames.map(function (n) { return lateCounts[n]; }), backgroundColor: '#f59e0b', borderRadius: 6 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  STAFF SALES PAGE
+// ═══════════════════════════════════════════════════════
+
+async function renderStaffSalesPage() {
+  var from = document.getElementById('ss-from') ? document.getElementById('ss-from').value : '';
+  var to = document.getElementById('ss-to') ? document.getElementById('ss-to').value : '';
+  var inRange = function (d) { return (!from || d >= from) && (!to || d <= to); };
+  var content = document.getElementById('staffsales-content');
+  content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-2)">Loading...</div>';
+
+  var rows = await apiGet('/sales');
+  var filtered = rows.filter(function (r) { return inRange(r.date); });
+
+  // Aggregate by salesman
+  var salesmanMap = {};
+  filtered.forEach(function (r) {
+    var name = r.salesman_name || 'Unassigned';
+    if (!salesmanMap[name]) salesmanMap[name] = { name: name, count: 0, bills: new Set(), total: 0 };
+    salesmanMap[name].total += Number(r.amount || 0);
+    salesmanMap[name].count++;
+    if (r.bill_id) salesmanMap[name].bills.add(r.bill_id);
+  });
+
+  var salesmen = Object.values(salesmanMap).sort(function (a, b) { return b.total - a.total; });
+
+  if (!salesmen.length) {
+    content.innerHTML = '<div class="empty-state" style="padding:30px">No sales data for this period. Make sure to select a salesman when creating sales.</div>';
+    return;
+  }
+
+  var totalAll = salesmen.reduce(function (s, x) { return s + x.total; }, 0);
+  content.innerHTML = '<div class="list-card">' +
+    '<div class="list-header"><i class="ti ti-chart-bar"></i> Sales by salesman' + (from || to ? ' (' + (from || '…') + ' → ' + (to || '…') + ')' : '') + '</div>' +
+    '<div class="table-scroll"><table><thead><tr><th>Salesman</th><th class="num">Bills</th><th class="num">Items sold</th><th class="num">Total sales</th><th class="num">Share</th></tr></thead><tbody>' +
+    salesmen.map(function (s) {
+      var share = totalAll > 0 ? ((s.total / totalAll) * 100).toFixed(1) : '0.0';
+      var barWidth = totalAll > 0 ? Math.round((s.total / totalAll) * 100) : 0;
+      return '<tr><td style="font-weight:700">' + esc(s.name) + '</td>' +
+        '<td class="num">' + s.bills.size + '</td>' +
+        '<td class="num">' + s.count + '</td>' +
+        '<td class="num" style="color:var(--ok);font-weight:700">' + fmt(s.total) + '</td>' +
+        '<td class="num"><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden"><div style="width:' + barWidth + '%;height:100%;background:var(--grad-cyan);border-radius:4px"></div></div>' + share + '%</div></td></tr>';
+    }).join('') +
+    '</tbody><tfoot><tr style="font-weight:700;border-top:2px solid var(--border)"><td>Total</td><td class="num"></td><td class="num">' + filtered.length + '</td><td class="num">' + fmt(totalAll) + '</td><td class="num">100%</td></tr></tfoot></table></div></div>';
+}
+
+function clearSSFilter() {
+  var from = document.getElementById('ss-from'); if (from) from.value = '';
+  var to = document.getElementById('ss-to'); if (to) to.value = '';
+  renderStaffSalesPage();
+}
+
+// ═══════════════════════════════════════════════════════
+//  REPORTS — Top Products / Categories / Brands
+// ═══════════════════════════════════════════════════════
+
+function renderTopSellersTables(sales, products) {
+  // Map product_id to product metadata
+  var prodMap = {};
+  (products || []).forEach(function (p) { prodMap[p.id] = p; });
+
+  var byProduct = {}, byCategory = {}, byBrand = {};
+
+  sales.forEach(function (r) {
+    var pid = r.product_id;
+    var pname = r.desc || r.description || 'Custom item';
+    var prod = pid ? prodMap[pid] : null;
+    var cat = prod ? (prod.category_name || 'Uncategorized') : 'Uncategorized';
+    var brand = prod ? (prod.brand_name || 'No brand') : 'No brand';
+    var amt = Number(r.amount || 0);
+    var qty = Number(r.quantity || 0);
+
+    if (!byProduct[pname]) byProduct[pname] = { name: pname, qty: 0, total: 0 };
+    byProduct[pname].qty += qty; byProduct[pname].total += amt;
+
+    if (!byCategory[cat]) byCategory[cat] = { name: cat, total: 0 };
+    byCategory[cat].total += amt;
+
+    if (!byBrand[brand]) byBrand[brand] = { name: brand, total: 0 };
+    byBrand[brand].total += amt;
+  });
+
+  function topTable(title, icon, data, key) {
+    var sorted = Object.values(data).sort(function (a, b) { return b.total - a.total; }).slice(0, 8);
+    var maxVal = sorted.length ? sorted[0].total : 1;
+    return '<div class="detail-card" style="margin-bottom:16px">' +
+      '<div class="detail-card-header"><i class="ti ' + icon + '"></i> ' + title + '</div>' +
+      '<div class="table-scroll"><table><thead><tr><th>' + key + '</th>' + (title.includes('Product') ? '<th class="num">Qty</th>' : '') + '<th class="num">Revenue</th><th style="width:120px"></th></tr></thead><tbody>' +
+      sorted.map(function (x, i) {
+        var bar = Math.round((x.total / maxVal) * 100);
+        return '<tr><td><span style="color:var(--text-3);font-size:11px;margin-right:6px">#' + (i + 1) + '</span>' + esc(x.name) + '</td>' +
+          (title.includes('Product') ? '<td class="num">' + x.qty + '</td>' : '') +
+          '<td class="num" style="color:var(--ok);font-weight:700">' + fmt(x.total) + '</td>' +
+          '<td><div style="height:7px;background:var(--border);border-radius:4px;overflow:hidden"><div style="width:' + bar + '%;height:100%;background:var(--grad-cyan);border-radius:4px"></div></div></td></tr>';
+      }).join('') +
+      '</tbody></table></div></div>';
+  }
+
+  return '<div class="cf-columns">' +
+    topTable('Best-selling products', 'ti-package', byProduct, 'Product') +
+    topTable('Top categories', 'ti-tag', byCategory, 'Category') +
+    topTable('Top brands', 'ti-bookmark', byBrand, 'Brand') +
+    '</div>';
+}
+
+// ═══════════════════════════════════════════════════════
+//  CSV EXPORT (#7) — Manager only
+// ═══════════════════════════════════════════════════════
+
+function downloadCSV(filename, rows, headers) {
+  if (!rows || !rows.length) { toast('No data to export'); return; }
+  var csvRows = [headers.join(',')];
+  rows.forEach(function (r) {
+    csvRows.push(headers.map(function (h) {
+      var val = r[h] != null ? String(r[h]) : '';
+      return '"' + val.replace(/"/g, '""') + '"';
+    }).join(','));
+  });
+  var blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  toast('Exported ' + rows.length + ' rows', 'ok');
+}
+
+async function exportCSV(type) {
+  if (currentRole !== 'manager') { alert('Only managers can export data.'); return; }
+  var data, filename, headers;
+  if (type === 'sales') {
+    data = await apiGet('/sales');
+    headers = ['date', 'bill_no', 'customer_name', 'description', 'quantity', 'unit_price', 'amount', 'salesman_name'];
+    filename = 'bizsheba-sales-' + new Date().toISOString().slice(0,10) + '.csv';
+  } else if (type === 'purchases') {
+    data = await apiGet('/purchases');
+    headers = ['date', 'purchase_no', 'supplier_name', 'total', 'amount_paid', 'due_amount'];
+    filename = 'bizsheba-purchases-' + new Date().toISOString().slice(0,10) + '.csv';
+  } else if (type === 'expenses') {
+    data = await apiGet('/expenses');
+    data = data.map(function (r) { return { ...r, desc: r.desc || r.description }; });
+    headers = ['date', 'desc', 'amount'];
+    filename = 'bizsheba-expenses-' + new Date().toISOString().slice(0,10) + '.csv';
+  } else if (type === 'products') {
+    data = await apiGet('/products');
+    headers = ['name', 'barcode', 'quantity', 'unit', 'purchase_price', 'sell_price', 'category_name', 'brand_name'];
+    filename = 'bizsheba-products-' + new Date().toISOString().slice(0,10) + '.csv';
+  } else if (type === 'customers') {
+    data = await apiGet('/customers');
+    headers = ['name', 'phone', 'address'];
+    filename = 'bizsheba-customers-' + new Date().toISOString().slice(0,10) + '.csv';
+  }
+  downloadCSV(filename, data, headers);
 }
 
 // ═══════════════════════════════════════════════════════

@@ -260,12 +260,14 @@ async function handleAdmin(method, pathname, req, res, session) {
 
 // ---------- Staff management (manager only) ----------
 async function handleStaff(method, pathname, req, res, session) {
-  if (session.role !== 'manager') return send(res, 403, { error: 'Manager only' });
-
+  // Sales role can read staff list (for salesman dropdown)
   if (method === 'GET' && pathname === '/api/staff') {
-    const rows = await sb('GET', 'staff', { query: `business_user_id=eq.${session.businessId}&order=id.desc` });
+    const rows = await sb('GET', 'staff', { query: `business_user_id=eq.${session.businessId}&order=name.asc` });
     return send(res, 200, (rows || []).map(s => ({ id: s.id, name: s.name, phone: s.phone, role: s.role })));
   }
+
+  // Everything else requires manager
+  if (session.role !== 'manager') return send(res, 403, { error: 'Manager only' });
 
   if (method === 'POST' && pathname === '/api/staff') {
     const b = await readBody(req);
@@ -290,6 +292,30 @@ async function handleStaff(method, pathname, req, res, session) {
   if (method === 'DELETE' && pathname.startsWith('/api/staff/')) {
     const id = pathname.split('/').pop();
     await sb('DELETE', 'staff', { query: `id=eq.${id}&business_user_id=eq.${session.businessId}` });
+    return send(res, 200, { ok: true });
+  }
+
+  // ── Attendance ──
+  if (method === 'GET' && pathname === '/api/attendance') {
+    const rows = await sb('GET', 'attendance', { query: bizQuery(session, 'order=id.desc') });
+    return send(res, 200, rows || []);
+  }
+  if (method === 'POST' && pathname === '/api/attendance') {
+    const b = await readBody(req);
+    if (!b.staff_name || !b.date) return send(res, 400, { error: 'staff_name and date required' });
+    const id = await getNextId();
+    await sb('POST', 'attendance', { body: { id, user_id: session.businessId, staff_id: b.staff_id || null, staff_name: b.staff_name, date: b.date, entry_time: b.entry_time || null, exit_time: b.exit_time || null, lunch_out: b.lunch_out || null, lunch_in: b.lunch_in || null, status: b.status || 'present', note: b.note || '' } });
+    return send(res, 200, { id });
+  }
+  if (method === 'PATCH' && pathname.startsWith('/api/attendance/')) {
+    const id = pathname.split('/').pop();
+    const b = await readBody(req);
+    await sb('PATCH', 'attendance', { query: `id=eq.${id}&user_id=eq.${session.businessId}`, body: { entry_time: b.entry_time || null, exit_time: b.exit_time || null, lunch_out: b.lunch_out || null, lunch_in: b.lunch_in || null, status: b.status || 'present', note: b.note || '' } });
+    return send(res, 200, { ok: true });
+  }
+  if (method === 'DELETE' && pathname.startsWith('/api/attendance/')) {
+    const id = pathname.split('/').pop();
+    await sb('DELETE', 'attendance', { query: `id=eq.${id}&user_id=eq.${session.businessId}` });
     return send(res, 200, { ok: true });
   }
 
@@ -362,7 +388,7 @@ const routes = {
         }
       }
       const rowId = await getNextId();
-      const row = { id: rowId, user_id: session.businessId, date: b.date, description: it.desc, amount, product_id: it.product_id || null, quantity: qty, unit_price: unitPrice, cost_price: costPrice, bill_id: billId, bill_no: billNo, customer_id: b.customer_id || null, customer_phone: customerPhone, customer_name: customerName, discount_pct: discountPct, discount_amount: discountAmt, vat_pct: vatPct, vat_amount: 0 };
+      const row = { id: rowId, user_id: session.businessId, date: b.date, description: it.desc, amount, product_id: it.product_id || null, quantity: qty, unit_price: unitPrice, cost_price: costPrice, bill_id: billId, bill_no: billNo, customer_id: b.customer_id || null, customer_phone: customerPhone, customer_name: customerName, discount_pct: discountPct, discount_amount: discountAmt, vat_pct: vatPct, vat_amount: 0, salesman_id: b.salesman_id || null, salesman_name: b.salesman_name || null };
       await sb('POST', 'sales', { body: row });
       saleRows.push({ ...row, desc: row.description });
       subtotal += amount;
@@ -818,7 +844,7 @@ const server = http.createServer(async (req, res) => {
         if (handled !== null) return;
       }
 
-      if (pathname.startsWith('/api/staff')) {
+      if (pathname.startsWith('/api/staff') || pathname.startsWith('/api/attendance')) {
         const handled = await handleStaff(req.method, pathname, req, res, session);
         if (handled !== null) return;
       }
