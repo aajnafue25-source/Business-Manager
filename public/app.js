@@ -238,6 +238,7 @@ const PAGE_RENDERERS = {
   saleslist: renderSalesListPage,
   saledetail: renderSaleDetailPage,
   salesreturns: renderSalesReturnsPage,
+  exchanges: renderExchangesPage,
   purchases: function () { setupPurchasePage(); renderPurchasePage(); },
   purchaselist: renderPurchaseListPage,
   purchasereturns: renderPurchaseReturnsPage,
@@ -576,11 +577,18 @@ async function renderSaleDetailPage() {
   var customerName = esc(r.customer_name) || 'Walk-in customer';
   var customerPhone = r.customer_phone || '';
 
-  var itemsHtml = billItems.map(function (it) {
-    return '<tr><td>' + esc(it.desc || it.description || '') + '</td>' +
+  // Store items globally for return/exchange access
+  window.__currentBillItems = billItems;
+  window.__currentBillData = { billId: r.bill_id, billNo: r.bill_no, customerId: r.customer_id, customerName: r.customer_name };
+
+  var itemsHtml = billItems.map(function (it, idx) {
+    return '<tr>' +
+      '<td>' + esc(it.desc || it.description || '') + '</td>' +
       '<td class="num">' + (it.quantity != null ? it.quantity : '\u2014') + '</td>' +
       '<td class="num">' + (it.unit_price != null ? fmt(it.unit_price) : '\u2014') + '</td>' +
-      '<td class="num" style="font-weight:700;color:var(--ok)">' + fmt(it.amount) + '</td></tr>';
+      '<td class="num" style="font-weight:700;color:var(--ok)">' + fmt(it.amount) + '</td>' +
+      '<td style="white-space:nowrap"><button class="btn-secondary" style="font-size:11.5px;padding:5px 10px;color:var(--warn);border-color:var(--warn)" onclick="addItemToReturn(' + idx + ')"><i class="ti ti-arrow-back-up"></i> Return</button></td>' +
+      '</tr>';
   }).join('');
 
   content.innerHTML =
@@ -593,10 +601,23 @@ async function renderSaleDetailPage() {
     '<div class="detail-meta-item"><span class="detail-meta-label">Customer</span><span class="detail-meta-val">' + customerName + '</span></div>' +
     (customerPhone ? '<div class="detail-meta-item"><span class="detail-meta-label">Phone</span><span class="detail-meta-val">' + esc(customerPhone) + '</span></div>' : '') +
     '</div></div>' +
-    '<div class="detail-card"><div class="detail-card-header"><i class="ti ti-list"></i> Items (' + billItems.length + ')</div>' +
-    '<div class="table-scroll"><table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Amount</th></tr></thead>' +
+    '<div class="detail-card"><div class="detail-card-header"><i class="ti ti-list"></i> Items (' + billItems.length + ') <span style="font-size:12px;color:var(--text-2);font-weight:400">— click Return to return an item</span></div>' +
+    '<div class="table-scroll"><table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Amount</th><th></th></tr></thead>' +
     '<tbody>' + itemsHtml + '</tbody></table></div></div>' +
+
+    // Pending returns section (hidden until items added)
+    '<div id="pending-returns-section" style="display:none">' +
+    '<div class="detail-card" style="margin-top:16px;border-color:var(--warn)">' +
+    '<div class="detail-card-header" style="background:var(--warn-bg);color:var(--warn)"><i class="ti ti-arrow-back-up"></i> Pending returns — save when ready</div>' +
+    '<div class="table-scroll"><table><thead><tr><th>Item</th><th class="num">Return qty</th><th class="num">Unit price</th><th class="num">Refund</th><th></th></tr></thead>' +
+    '<tbody id="pending-returns-tbody"></tbody></table></div>' +
+    '<div style="padding:14px;display:flex;gap:10px;align-items:center">' +
+    '<div style="flex:1"><label style="font-size:12px;font-weight:600;color:var(--text-2)">Note (reason)</label><input type="text" id="return-note" placeholder="Reason for return" style="display:block;width:100%;margin-top:4px;padding:8px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface-2);color:var(--text)" /></div>' +
     '</div>' +
+    '<div style="padding:0 14px 14px"><button class="btn-save" onclick="saveInlineReturns()"><i class="ti ti-arrow-back-up"></i> Save returns &amp; restock</button></div>' +
+    '</div></div>' +
+    '</div>' +
+
     '<div class="detail-sidebar">' +
     '<div class="detail-card detail-summary-card">' +
     '<div class="detail-card-header"><i class="ti ti-coin"></i> Summary</div>' +
@@ -607,15 +628,93 @@ async function renderSaleDetailPage() {
     '<div class="detail-card"><div class="detail-card-header"><i class="ti ti-bolt"></i> Actions</div>' +
     '<div class="detail-actions-grid">' +
     (r.bill_id ? '<button class="detail-action-btn detail-action-print" onclick="renderSaleDetailPrint()"><i class="ti ti-printer"></i><span>Print Bill</span></button>' : '') +
-    '<button class="detail-action-btn detail-action-return" onclick="renderSaleDetailReturn()"><i class="ti ti-arrow-back-up"></i><span>Return / Exchange</span></button>' +
+    (r.bill_id ? '<button class="detail-action-btn" style="background:linear-gradient(135deg,#7c3aed,#8b5cf6)" onclick="openExchangeFromBill()"><i class="ti ti-switch-3"></i><span>Exchange</span></button>' : '') +
     (isManager ? '<button class="detail-action-btn detail-action-edit" onclick="renderSaleDetailEdit()"><i class="ti ti-pencil"></i><span>Edit</span></button>' : '') +
     (isManager ? '<button class="detail-action-btn detail-action-delete" onclick="renderSaleDetailDelete()"><i class="ti ti-trash"></i><span>Delete</span></button>' : '') +
     '</div></div>' +
     '</div></div>';
+
+  // Init pending returns
+  window.__pendingReturns = [];
+}
+
+// ───────── Inline return helpers ─────────
+var __pendingReturns = [];
+
+function addItemToReturn(itemIdx) {
+  var item = (window.__currentBillItems || [])[itemIdx];
+  if (!item) return;
+  // Check if already in pending list
+  var already = __pendingReturns.find(function (p) { return p.itemIdx === itemIdx; });
+  if (already) { toast('Item already in return list'); return; }
+  var unitPrice = item.unit_price != null ? Number(item.unit_price) : Number(item.amount) / (Number(item.quantity) || 1);
+  __pendingReturns.push({ itemIdx: itemIdx, desc: item.desc || item.description, quantity: Number(item.quantity) || 1, maxQty: Number(item.quantity) || 1, unitPrice: unitPrice, productId: item.product_id || null, amount: Number(item.amount) || 0 });
+  renderPendingReturns();
+  document.getElementById('pending-returns-section').style.display = 'block';
+}
+
+function removePendingReturn(idx) {
+  __pendingReturns.splice(idx, 1);
+  renderPendingReturns();
+  if (!__pendingReturns.length) document.getElementById('pending-returns-section').style.display = 'none';
+}
+
+function renderPendingReturns() {
+  var tb = document.getElementById('pending-returns-tbody');
+  if (!tb) return;
+  tb.innerHTML = __pendingReturns.map(function (p, i) {
+    var refund = p.quantity * p.unitPrice;
+    return '<tr>' +
+      '<td>' + esc(p.desc) + '</td>' +
+      '<td class="num"><input type="number" value="' + p.quantity + '" min="1" max="' + p.maxQty + '" style="width:70px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;text-align:center;background:var(--surface-2);color:var(--text)" onchange="updateReturnQty(' + i + ',this.value)" /></td>' +
+      '<td class="num">' + fmt(p.unitPrice) + '</td>' +
+      '<td class="num" style="color:var(--ok);font-weight:700">' + fmt(refund) + '</td>' +
+      '<td><button class="del-btn" onclick="removePendingReturn(' + i + ')"><i class="ti ti-trash"></i></button></td>' +
+      '</tr>';
+  }).join('');
+}
+
+function updateReturnQty(idx, val) {
+  var p = __pendingReturns[idx];
+  if (!p) return;
+  var qty = Math.min(Math.max(1, parseInt(val) || 1), p.maxQty);
+  p.quantity = qty;
+  renderPendingReturns();
+}
+
+async function saveInlineReturns() {
+  if (!__pendingReturns.length) return alert('No items in return list.');
+  var note = document.getElementById('return-note') ? document.getElementById('return-note').value.trim() : '';
+  var billData = window.__currentBillData || {};
+  var r = window.__currentSaleRow;
+  var date = (r && r.date) || new Date().toISOString().slice(0, 10);
+  var errors = [];
+  for (var i = 0; i < __pendingReturns.length; i++) {
+    var p = __pendingReturns[i];
+    var res = await apiPost('/sales-returns', {
+      date: date, product_id: p.productId, desc: p.desc, quantity: p.quantity,
+      unit_price: p.unitPrice, amount: p.quantity * p.unitPrice,
+      bill_no: billData.billNo || null, bill_id: billData.billId || null,
+      customer_id: billData.customerId || null, note: note || 'Return from Bill #' + (billData.billNo || '')
+    });
+    if (res && res.error) errors.push(p.desc + ': ' + res.error);
+  }
+  if (errors.length) { alert('Some returns failed:\n' + errors.join('\n')); return; }
+  __pendingReturns = [];
+  toast(__pendingReturns.length + ' items returned & restocked', 'ok');
+  toast('Returns saved — stock restocked', 'ok');
+  navigateTo('salesreturns');
+}
+
+function openExchangeFromBill() {
+  var r = window.__currentSaleRow;
+  if (!r || !r.bill_id) return;
+  window.__exchangeSourceBill = window.__currentBillData;
+  window.__exchangeSourceBillItems = window.__currentBillItems;
+  navigateTo('exchanges');
 }
 
 function renderSaleDetailPrint() { var r = window.__currentSaleRow; if (r) printSaleBillFromRow(r); }
-function renderSaleDetailReturn() { var r = window.__currentSaleRow; if (r) openQuickReturnModal(r); }
 function renderSaleDetailEdit() { var r = window.__currentSaleRow; if (r) editSaleEntry(r); }
 function renderSaleDetailDelete() {
   var r = window.__currentSaleRow;
@@ -2912,6 +3011,256 @@ function addPurchaseItem() {
   if (brandEl) brandEl.value = '';
   renderPurchaseCart();
 }
+
+// ═══════════════════════════════════════════════════════
+//  EXCHANGE SYSTEM
+// ═══════════════════════════════════════════════════════
+
+var __pendingExchanges = [];
+var __exchangeBillData = null;
+
+async function renderExchangesPage() {
+  var excDateEl = document.getElementById('exc-date');
+  if (excDateEl && !excDateEl.value) excDateEl.value = new Date().toISOString().slice(0, 10);
+
+  // If arriving from sale detail "Exchange" button, pre-load that bill
+  if (window.__exchangeSourceBill && window.__exchangeSourceBillItems) {
+    loadBillIntoExchangePage(window.__exchangeSourceBill, window.__exchangeSourceBillItems);
+    window.__exchangeSourceBill = null;
+    window.__exchangeSourceBillItems = null;
+  }
+  renderExchangeList();
+}
+
+async function searchExchangeBill() {
+  var query = (document.getElementById('exc-bill-search').value || '').toLowerCase().trim();
+  if (query.length < 1) { document.getElementById('exc-bill-results').innerHTML = ''; return; }
+  var rows = await apiGet('/sales');
+  // Group into bills
+  var bills = groupSalesIntoBills(rows);
+  var matches = bills.filter(function (b) {
+    return (b.bill_no ? String(b.bill_no) : '').includes(query) ||
+      (b.customer_name || '').toLowerCase().includes(query);
+  }).slice(0, 8);
+  var resultsEl = document.getElementById('exc-bill-results');
+  if (!matches.length) { resultsEl.innerHTML = '<div class="empty-state" style="padding:12px">No bills found.</div>'; return; }
+  resultsEl.innerHTML = matches.map(function (b) {
+    var safeBill = JSON.stringify({ billId: b.bill_id, billNo: b.bill_no, customerId: b.customer_id, customerName: b.customer_name }).replace(/"/g, '&quot;');
+    var safeItems = JSON.stringify(b.items).replace(/"/g, '&quot;');
+    return '<div class="exc-bill-result-item" onclick="loadBillIntoExchangePage(' + safeBill + ',' + safeItems + ')">' +
+      '<strong>Bill #' + (b.bill_no || '—') + '</strong> · ' + b.date +
+      (b.customer_name ? ' · ' + esc(b.customer_name) : ' · Walk-in') +
+      ' · ' + fmt(b.total) + ' (' + b.items.length + ' item' + (b.items.length > 1 ? 's' : '') + ')' +
+      '</div>';
+  }).join('');
+}
+
+function loadBillIntoExchangePage(billData, items) {
+  __exchangeBillData = billData;
+  window.__exchangeBillItems = items;
+  __pendingExchanges = [];
+  var panel = document.getElementById('exc-bill-panel');
+  var pendingSection = document.getElementById('exc-pending-section');
+  if (panel) panel.style.display = 'block';
+  if (pendingSection) pendingSection.style.display = 'none';
+  var header = document.getElementById('exc-bill-header');
+  if (header) header.innerHTML = '<i class="ti ti-receipt"></i> Bill #' + (billData.billNo || '—') + (billData.customerName ? ' · ' + esc(billData.customerName) : '');
+  var resultsEl = document.getElementById('exc-bill-results');
+  if (resultsEl) resultsEl.innerHTML = '';
+  var searchEl = document.getElementById('exc-bill-search');
+  if (searchEl) searchEl.value = 'Bill #' + (billData.billNo || '—') + (billData.customerName ? ' · ' + billData.customerName : '');
+  renderExchangeBillItems(items);
+}
+
+function renderExchangeBillItems(items) {
+  var tb = document.getElementById('exc-bill-items');
+  if (!tb) return;
+  tb.innerHTML = (items || []).map(function (it, idx) {
+    var unitPrice = it.unit_price != null ? Number(it.unit_price) : (Number(it.amount) / (Number(it.quantity) || 1));
+    var alreadyPending = __pendingExchanges.some(function (p) { return p.origIdx === idx; });
+    return '<tr>' +
+      '<td>' + esc(it.desc || it.description || '') + '</td>' +
+      '<td class="num">' + (it.quantity || 1) + '</td>' +
+      '<td class="num">' + fmt(unitPrice) + '</td>' +
+      '<td class="num">' + fmt(it.amount) + '</td>' +
+      '<td><button class="btn-secondary" style="font-size:11.5px;padding:5px 10px;' + (alreadyPending ? 'opacity:0.4' : 'color:var(--accent);border-color:var(--accent)') + '" onclick="addItemToExchange(' + idx + ')" ' + (alreadyPending ? 'disabled' : '') + '><i class="ti ti-switch-3"></i> Exchange</button></td>' +
+      '</tr>';
+  }).join('');
+}
+
+function addItemToExchange(itemIdx) {
+  var item = (window.__exchangeBillItems || [])[itemIdx];
+  if (!item) return;
+  var unitPrice = item.unit_price != null ? Number(item.unit_price) : (Number(item.amount) / (Number(item.quantity) || 1));
+  __pendingExchanges.push({
+    origIdx: itemIdx,
+    origProductId: item.product_id || null,
+    origDesc: item.desc || item.description || '',
+    origQty: Number(item.quantity) || 1,
+    origPrice: unitPrice,
+    newProductId: null, newDesc: '', newQty: 1, newPrice: 0
+  });
+  renderExchangeBillItems(window.__exchangeBillItems); // refresh to show disabled state
+  renderPendingExchanges();
+  document.getElementById('exc-pending-section').style.display = 'block';
+}
+
+function removeExchangeItem(idx) {
+  __pendingExchanges.splice(idx, 1);
+  renderExchangeBillItems(window.__exchangeBillItems);
+  renderPendingExchanges();
+  if (!__pendingExchanges.length) document.getElementById('exc-pending-section').style.display = 'none';
+}
+
+function updateExchangeField(idx, field, value) {
+  if (!__pendingExchanges[idx]) return;
+  __pendingExchanges[idx][field] = value;
+  renderPendingExchanges();
+}
+
+function renderPendingExchanges() {
+  var tb = document.getElementById('exc-pending-tbody');
+  var netDiff = 0;
+  if (tb) tb.innerHTML = __pendingExchanges.map(function (p, i) {
+    var diff = (p.newPrice * p.newQty) - (p.origPrice * p.origQty);
+    netDiff += diff;
+    var diffColor = diff > 0 ? 'var(--ok)' : diff < 0 ? 'var(--danger)' : 'var(--text-2)';
+    var diffStr = (diff >= 0 ? '+' : '') + fmt(diff);
+    return '<tr>' +
+      '<td style="font-size:12.5px">' + esc(p.origDesc) + '</td>' +
+      '<td class="num">' + p.origQty + '</td>' +
+      '<td class="num">' + fmt(p.origPrice) + '</td>' +
+      '<td><div class="search-pick-wrap" style="min-width:160px">' +
+        '<input type="text" class="search-pick-input" id="exc-new-search-' + i + '" placeholder="Search replacement..." autocomplete="off" oninput="searchExchangeNewProduct(' + i + ',this.value)" />' +
+        '<div id="exc-new-results-' + i + '" class="search-pick-results"></div>' +
+      '</div>' +
+      (p.newDesc ? '<div style="font-size:11.5px;color:var(--ok);margin-top:3px"><i class="ti ti-check"></i> ' + esc(p.newDesc) + '</div>' : '') +
+      '</td>' +
+      '<td class="num"><input type="number" value="' + p.newQty + '" min="1" style="width:60px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;text-align:center;background:var(--surface-2);color:var(--text)" onchange="updateExchangeField(' + i + ',\'newQty\',+this.value||1);updateExchangeField(' + i + ',\'newQty\',+this.value||1)" /></td>' +
+      '<td class="num"><input type="number" value="' + p.newPrice + '" min="0" step="0.01" style="width:80px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;text-align:center;background:var(--surface-2);color:var(--text)" onchange="updateExchangeField(' + i + ',\'newPrice\',+this.value||0)" /></td>' +
+      '<td class="num" style="font-weight:700;color:' + diffColor + '">' + diffStr + '</td>' +
+      '<td><button class="del-btn" onclick="removeExchangeItem(' + i + ')"><i class="ti ti-trash"></i></button></td>' +
+      '</tr>';
+  }).join('');
+  var netEl = document.getElementById('exc-net-diff-val');
+  if (netEl) {
+    netEl.textContent = (netDiff >= 0 ? '+' : '') + fmt(netDiff);
+    netEl.style.color = netDiff > 0 ? 'var(--ok)' : netDiff < 0 ? 'var(--danger)' : 'var(--text-2)';
+  }
+  var netRow = document.getElementById('exc-net-diff-row');
+  if (netRow) {
+    var label = netRow.querySelector('span');
+    if (label) label.textContent = netDiff > 0 ? 'Customer pays (net)' : netDiff < 0 ? 'Refund to customer (net)' : 'No price difference';
+  }
+}
+
+async function searchExchangeNewProduct(exchIdx, query) {
+  var resultsEl = document.getElementById('exc-new-results-' + exchIdx);
+  if (!resultsEl) return;
+  if (!query || query.length < 1) { resultsEl.style.display = 'none'; return; }
+  var prods = await searchProductsApi(query);
+  if (!prods || !prods.length) { resultsEl.innerHTML = '<div class="search-pick-empty">No products found</div>'; resultsEl.style.display = 'block'; return; }
+  resultsEl.innerHTML = prods.slice(0, 6).map(function (p) {
+    return '<div class="search-pick-item" onmousedown="selectExchangeNewProduct(' + exchIdx + ',' + JSON.stringify(p).replace(/"/g, '&quot;') + ')">' +
+      '<div class="spi-name">' + esc(p.name) + '</div>' +
+      '<div class="spi-meta">Stock: ' + p.quantity + ' · Sell: ' + fmt(p.sell_price) + '</div>' +
+      '</div>';
+  }).join('');
+  resultsEl.style.display = 'block';
+}
+
+function selectExchangeNewProduct(exchIdx, p) {
+  var ex = __pendingExchanges[exchIdx];
+  if (!ex) return;
+  ex.newProductId = p.id;
+  ex.newDesc = p.name;
+  ex.newPrice = Number(p.sell_price) || 0;
+  var searchEl = document.getElementById('exc-new-search-' + exchIdx);
+  if (searchEl) searchEl.value = p.name;
+  var resultsEl = document.getElementById('exc-new-results-' + exchIdx);
+  if (resultsEl) resultsEl.style.display = 'none';
+  renderPendingExchanges();
+}
+
+async function saveExchanges() {
+  if (!__pendingExchanges.length) return alert('No items to exchange.');
+  var invalid = __pendingExchanges.filter(function (p) { return !p.newDesc; });
+  if (invalid.length) return alert('Please select a replacement product for all exchange items.');
+  var billData = __exchangeBillData || {};
+  var date = document.getElementById('exc-date') ? document.getElementById('exc-date').value : new Date().toISOString().slice(0, 10);
+  var note = document.getElementById('exc-note') ? document.getElementById('exc-note').value : '';
+  for (var i = 0; i < __pendingExchanges.length; i++) {
+    var ex = __pendingExchanges[i];
+    var res = await apiPost('/exchanges', {
+      date: date, original_bill_id: billData.billId, original_bill_no: billData.billNo,
+      customer_name: billData.customerName, customer_id: billData.customerId,
+      original_product_id: ex.origProductId, original_desc: ex.origDesc, original_qty: ex.origQty, original_price: ex.origPrice,
+      new_product_id: ex.newProductId, new_desc: ex.newDesc, new_qty: ex.newQty, new_price: ex.newPrice,
+      note: note
+    });
+    if (res && res.error) { alert('Error: ' + res.error); return; }
+  }
+  toast('Exchanges saved — stock updated', 'ok');
+  __pendingExchanges = [];
+  renderExchangeList();
+  document.getElementById('exc-bill-panel').style.display = 'none';
+  document.getElementById('exc-pending-section').style.display = 'none';
+  document.getElementById('exc-bill-search').value = '';
+}
+
+async function renderExchangeList() {
+  var search = (document.getElementById('exchlist-search') ? document.getElementById('exchlist-search').value : '').toLowerCase();
+  var from = document.getElementById('exchlist-from') ? document.getElementById('exchlist-from').value : '';
+  var to = document.getElementById('exchlist-to') ? document.getElementById('exchlist-to').value : '';
+  var rows = await apiGet('/exchanges');
+  rows.sort(function (a, b) { return b.id - a.id; });
+  if (from) rows = rows.filter(function (r) { return r.date >= from; });
+  if (to) rows = rows.filter(function (r) { return r.date <= to; });
+  if (search) rows = rows.filter(function (r) {
+    return (r.customer_name || '').toLowerCase().includes(search) ||
+      (r.original_bill_no ? String(r.original_bill_no) : '').includes(search) ||
+      (r.original_desc || '').toLowerCase().includes(search) ||
+      (r.new_desc || '').toLowerCase().includes(search);
+  });
+  var tb = document.getElementById('exchangelist-tbody');
+  if (!tb) return;
+  if (!rows.length) { tb.innerHTML = '<tr><td colspan="6" class="empty-state">No exchanges yet.</td></tr>'; return; }
+  window.__exchangeRows = rows;
+  tb.innerHTML = rows.map(function (r, i) {
+    var diff = Number(r.price_diff || 0);
+    var diffStr = (diff >= 0 ? '+' : '') + fmt(diff);
+    var diffColor = diff > 0 ? 'var(--ok)' : diff < 0 ? 'var(--danger)' : 'var(--text-2)';
+    return '<tr class="clickable-row" onclick="viewExchangeDetail(window.__exchangeRows[' + i + '])">' +
+      '<td>' + r.date + '</td>' +
+      '<td>' + (r.original_bill_no ? '#' + r.original_bill_no : '—') + '</td>' +
+      '<td>' + (esc(r.customer_name) || '<span style="color:var(--text-3)">Walk-in</span>') + '</td>' +
+      '<td><span style="color:var(--danger)">↩</span> ' + esc(r.original_desc) + ' ×' + r.original_qty + '</td>' +
+      '<td><span style="color:var(--ok)">↪</span> ' + esc(r.new_desc) + ' ×' + r.new_qty + '</td>' +
+      '<td class="num" style="font-weight:700;color:' + diffColor + '">' + diffStr + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+function viewExchangeDetail(r) {
+  var diff = Number(r.price_diff || 0);
+  var diffLabel = diff > 0 ? 'Customer paid extra' : diff < 0 ? 'Refunded to customer' : 'No difference';
+  openViewEntryModal('Exchange — Bill #' + (r.original_bill_no || '—'), [
+    { label: 'Date', value: r.date },
+    { label: 'Customer', value: esc(r.customer_name) || 'Walk-in' },
+    { label: 'Original bill', value: r.original_bill_no ? '#' + r.original_bill_no : '—' },
+    { label: 'Returned item', value: esc(r.original_desc) + ' ×' + r.original_qty + ' @ ' + fmt(r.original_price) },
+    { label: 'New item', value: esc(r.new_desc) + ' ×' + r.new_qty + ' @ ' + fmt(r.new_price) },
+    { label: diffLabel, value: '<span style="font-weight:700;color:' + (diff > 0 ? 'var(--ok)' : diff < 0 ? 'var(--danger)' : 'var(--text-2)') + '">' + (diff >= 0 ? '+' : '') + fmt(diff) + '</span>' },
+    { label: 'Note', value: esc(r.note) || '—' }
+  ]);
+}
+
+function clearExchFilter() {
+  ['exchlist-search', 'exchlist-from', 'exchlist-to'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
+  renderExchangeList();
+}
+
+// ═══════════════════════════════════════════════════════
 
 // ───────── Misc / modal close on Escape ─────────
 document.addEventListener('keydown', function (e) {

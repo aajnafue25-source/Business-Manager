@@ -82,8 +82,17 @@
 .ti-shopping-cart::before       { content: "\f07a"; }  /* cart-shopping */
 .ti-home::before                { content: "\f015"; }  /* house */
 .ti-product::before             { content: "\f466"; }  /* box */
+.ti-switch-3::before            { content: "\f362"; }  /* right-left (exchange) */
+.ti-tag::before                 { content: "\f02b"; }  /* tag */
+.ti-bookmark::before            { content: "\f02e"; }  /* bookmark */
 
 /* ── End icon shim ── */
+
+/* Exchange bill search results */
+.exc-bill-results { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-top: 8px; }
+.exc-bill-result-item { padding: 12px 16px; cursor: pointer; font-size: 13.5px; border-bottom: 1px solid var(--border); transition: background .12s; }
+.exc-bill-result-item:last-child { border-bottom: none; }
+.exc-bill-result-item:hover { background: var(--surface-2); }
 
 :root {
   /* Light theme (default) — blue/teal gradient ERP look */

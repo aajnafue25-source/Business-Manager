@@ -102,6 +102,8 @@
       <div class="nav-dropdown">
         <button data-page="sales"><i class="ti ti-shopping-cart"></i>New Sale</button>
         <button data-page="saleslist"><i class="ti ti-list"></i>Sales List</button>
+        <button data-page="salesreturns"><i class="ti ti-arrow-back-up"></i>Sales Returns</button>
+        <button data-page="exchanges"><i class="ti ti-switch-3"></i>Exchanges</button>
       </div>
     </div>
 
@@ -362,6 +364,72 @@
         </table>
         </div>
         <div class="total-row"><span>Total returned</span><span id="salesreturns-total-val">Tk 0</span></div>
+      </div>
+    </section>
+
+    <!-- EXCHANGES -->
+    <section id="page-exchanges" class="page">
+      <h1 class="page-title"><i class="ti ti-switch-3"></i> Exchanges</h1>
+
+      <!-- Bill search -->
+      <div class="entry-section" style="margin-bottom:18px">
+        <h3><i class="ti ti-receipt" style="color:var(--accent)"></i> Find bill to exchange from</h3>
+        <div class="form-row">
+          <label>Search by bill number or customer name</label>
+          <input type="text" id="exc-bill-search" placeholder="e.g. #10 or customer name..." oninput="searchExchangeBill()" />
+        </div>
+        <div id="exc-bill-results" class="exc-bill-results"></div>
+      </div>
+
+      <!-- Selected bill items + exchange form -->
+      <div id="exc-bill-panel" style="display:none">
+        <div class="list-card" style="margin-bottom:18px">
+          <div class="list-header" id="exc-bill-header"><i class="ti ti-list"></i> Items on this bill</div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Total</th><th style="width:100px"></th></tr></thead>
+              <tbody id="exc-bill-items"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Pending exchanges list (inline, no popup) -->
+        <div id="exc-pending-section" style="display:none;margin-bottom:18px">
+          <div class="list-card">
+            <div class="list-header"><i class="ti ti-switch-3" style="color:var(--accent)"></i> Pending exchanges</div>
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th>Return</th><th class="num">Qty</th><th class="num">Price</th><th>Replace with</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Difference</th><th></th></tr></thead>
+                <tbody id="exc-pending-tbody"></tbody>
+              </table>
+            </div>
+            <div class="total-row" id="exc-net-diff-row">
+              <span>Net difference</span><span id="exc-net-diff-val">Tk 0.00</span>
+            </div>
+          </div>
+          <div class="form-row" style="margin-top:12px"><label>Date</label><input type="date" id="exc-date" /></div>
+          <div class="form-row"><label>Note (optional)</label><input type="text" id="exc-note" placeholder="Reason for exchange" /></div>
+          <button class="btn-save" onclick="saveExchanges()"><i class="ti ti-switch-3"></i> Save exchanges &amp; generate bill</button>
+        </div>
+      </div>
+
+      <!-- Exchange list -->
+      <div class="filter-bar">
+        <input type="text" id="exchlist-search" placeholder="🔍 Search customer, bill..." oninput="renderExchangeList()" style="flex:1;min-width:140px" />
+        <input type="date" id="exchlist-from" />
+        <span class="filter-to">to</span>
+        <input type="date" id="exchlist-to" />
+        <button class="btn-filter" onclick="renderExchangeList()">Filter</button>
+        <button class="btn-clear" onclick="clearExchFilter()">Clear</button>
+      </div>
+      <div class="list-card">
+        <div class="list-header"><i class="ti ti-switch-3"></i> Exchange history</div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Date</th><th>Bill #</th><th>Customer</th><th>Returned</th><th>New item</th><th class="num">Difference</th></tr></thead>
+            <tbody id="exchangelist-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 

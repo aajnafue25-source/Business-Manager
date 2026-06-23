@@ -417,6 +417,47 @@ const routes = {
     send(res, 200, { id });
   },
 
+  // ----- Exchanges -----
+  'GET /api/exchanges': async (req, res, session) => {
+    send(res, 200, (await sb('GET', 'exchanges', { query: bizQuery(session, 'order=id.desc') })) || []);
+  },
+  'POST /api/exchanges': async (req, res, session) => {
+    if (!canEdit(session)) return send(res, 403, { error: 'Manager only' });
+    const b = await readBody(req);
+    if (!b.date || !b.original_desc || !b.new_desc) return send(res, 400, { error: 'date, original_desc, new_desc required' });
+    const id = await getNextId();
+    const exchangeBillNo = await getNextBillNo();
+    const originalQty = Number(b.original_qty) || 1;
+    const newQty = Number(b.new_qty) || 1;
+    const originalPrice = Number(b.original_price) || 0;
+    const newPrice = Number(b.new_price) || 0;
+    const priceDiff = (newPrice * newQty) - (originalPrice * originalQty);
+
+    // Return original item to stock
+    if (b.original_product_id) {
+      const op = await sb('GET', 'products', { query: `id=eq.${b.original_product_id}&user_id=eq.${session.businessId}` });
+      if (op && op[0]) await sb('PATCH', 'products', { query: `id=eq.${b.original_product_id}`, body: { quantity: (op[0].quantity || 0) + originalQty } });
+    }
+    // Deduct new item from stock
+    if (b.new_product_id) {
+      const np = await sb('GET', 'products', { query: `id=eq.${b.new_product_id}&user_id=eq.${session.businessId}` });
+      if (np && np[0]) await sb('PATCH', 'products', { query: `id=eq.${b.new_product_id}`, body: { quantity: Math.max(0, (np[0].quantity || 0) - newQty) } });
+    }
+
+    const row = {
+      id, user_id: session.businessId, date: b.date,
+      original_bill_id: b.original_bill_id || null, original_bill_no: b.original_bill_no || null,
+      customer_name: b.customer_name || null, customer_id: b.customer_id || null,
+      original_product_id: b.original_product_id || null, original_desc: b.original_desc,
+      original_qty: originalQty, original_price: originalPrice,
+      new_product_id: b.new_product_id || null, new_desc: b.new_desc,
+      new_qty: newQty, new_price: newPrice, price_diff: priceDiff,
+      exchange_bill_no: exchangeBillNo, note: b.note || ''
+    };
+    await sb('POST', 'exchanges', { body: row });
+    send(res, 200, { id, exchangeBillNo, priceDiff });
+  },
+
   // ----- Expenses -----
   'GET /api/expenses': async (req, res, session) => {
     const rows = await sb('GET', 'expenses', { query: bizQuery(session, 'order=id.desc') });
@@ -743,7 +784,7 @@ function parseDynamic(method, pathname) {
   if (segs.length === 3 && segs[0] === 'api' && segs[2] !== 'search') {
     const resource = segs[1];
     const id = segs[2];
-    const tableMap = { sales: 'sales', expenses: 'expenses', dues: 'dues', 'due-paid': 'due_paid', products: 'products', customers: 'customers', suppliers: 'suppliers', 'supplier-due-paid': 'supplier_due_paid', 'supplier-dues': 'supplier_dues', 'sales-returns': 'sales_returns', 'purchase-returns': 'purchase_returns', purchases: 'purchases', categories: 'categories', brands: 'brands' };
+    const tableMap = { sales: 'sales', expenses: 'expenses', dues: 'dues', 'due-paid': 'due_paid', products: 'products', customers: 'customers', suppliers: 'suppliers', 'supplier-due-paid': 'supplier_due_paid', 'supplier-dues': 'supplier_dues', 'sales-returns': 'sales_returns', 'purchase-returns': 'purchase_returns', purchases: 'purchases', categories: 'categories', brands: 'brands', exchanges: 'exchanges' };
     const table = tableMap[resource];
     if (table && method === 'DELETE') return { type: 'delete', table, id };
     if (table && method === 'PUT') return { type: 'put', table, id };
