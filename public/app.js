@@ -1200,10 +1200,10 @@ function renderCart() {
       ) : '';
       return '<tr>' +
         '<td style="font-weight:600;font-size:12.5px;padding:5px 6px;min-width:90px">' + esc(it.desc) + '<div class="product-cost-row" style="font-size:10px;color:var(--text-3);font-weight:400">Cost: ' + fmtPlain(it.cost_price||0) + '</div></td>' +
-        '<td style="padding:3px 4px;white-space:nowrap;min-width:56px"><input ' + qtyInputAttrs(it.unit, it.quantity, stockAvail) + ' id="cart-qty-' + i + '" style="' + INP + 'width:52px" onchange="cartUpdateQty(' + i + ',this.value)" title="Max stock: ' + stockAvail + '" /></td>' +
+        '<td style="padding:3px 4px;white-space:nowrap;min-width:56px"><input ' + qtyInputAttrs(it.unit, it.quantity, stockAvail) + ' id="cart-qty-' + i + '" style="' + INP + 'width:52px" oninput="cartUpdateQty(' + i + ',this.value)" title="Max stock: ' + stockAvail + '" /></td>' +
         '<td style="padding:3px 4px;text-align:right;min-width:68px"><span style="font-size:12px;color:var(--text-2);white-space:nowrap">Tk ' + fmtPlain(it.unit_price) + '</span></td>' +
         wCell +
-        '<td style="padding:3px 4px;min-width:74px"><input type="number" id="cart-amt-' + i + '" value="' + fmtPlain(it.amount) + '" min="0" step="0.01" style="' + INP + 'width:68px;color:var(--ok);font-weight:700" onchange="cartUpdateAmount(' + i + ',this.value)" title="Edit total amount" /></td>' +
+        '<td style="padding:3px 4px;min-width:74px"><input type="number" id="cart-amt-' + i + '" value="' + fmtPlain(it.amount) + '" min="0" step="0.01" style="' + INP + 'width:68px;color:var(--ok);font-weight:700" oninput="cartUpdateAmount(' + i + ',this.value)" title="Edit total amount" /></td>' +
         '<td style="width:24px;padding:2px"><button class="cart-row-remove" onclick="removeCartItem(' + i + ')"><i class="ti ti-trash"></i></button></td>' +
       '</tr>';
     }).join('');
@@ -2242,12 +2242,12 @@ function buildPosBillHtml(bill, widthMm) {
   const itemsHtml = bill.items.map(function (it) {
     var sp = it.unit_price != null ? it.unit_price : (it.amount / (it.quantity || 1));
     var wLabel = it.warranty_months >= 9999 ? 'Lifetime' : (it.warranty_months ? warrantyDisplay(it.warranty_months, it.warranty_unit) : '');
-    var wCell = hasW ? '<td style="padding:3px 2px;vertical-align:top;text-align:center;white-space:nowrap;font-size:9px;color:#555">' + esc(wLabel) + '</td>' : '';
-    return '<tr><td style="padding:3px 2px;vertical-align:top;word-break:break-word;width:38%">' + esc(it.desc) + '</td>' +
-      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:12%">' + it.quantity + '</td>' +
-      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:20%">' + bfmt(sp) + '</td>' +
+    var wCell = hasW ? '<td style="padding:3px 2px;vertical-align:top;text-align:center;white-space:nowrap;font-size:9px;color:#555;overflow:hidden">' + esc(wLabel) + '</td>' : '';
+    return '<tr><td style="padding:3px 2px;vertical-align:top;word-break:break-word">' + esc(it.desc) + '</td>' +
+      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap">' + it.quantity + '</td>' +
+      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap">' + bfmt(sp) + '</td>' +
       wCell +
-      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:' + (hasW?'16':'30') + '%">' + bfmt(it.amount) + '</td></tr>';
+      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap">' + bfmt(it.amount) + '</td></tr>';
   }).join('');
   const totalQty = bill.items.reduce(function (s2, it) { return s2 + Number(it.quantity || 0); }, 0);
   const widthPx = Math.round(widthMm * 3.7795);
@@ -2267,13 +2267,20 @@ function buildPosBillHtml(bill, widthMm) {
     (bill.salesman_name ? '<div style="font-size:' + baseFont + ';margin:2px 0">Salesman: ' + esc(bill.salesman_name) + '</div>' : '') +
     (customerPhone ? '<div style="font-size:12px;margin:2px 0">Phone  ' + esc(customerPhone) + '</div>' : '') +
     '<div style="border-top:1px dashed #000;margin:8px 0"></div>' +
-    '<table style="width:100%;font-size:' + baseFont + ';border-collapse:collapse;table-layout:fixed">' +
+    '<table style="width:100%;font-size:' + baseFont + ';border-collapse:collapse">' +
+    '<colgroup>' +
+    '<col style="width:' + (hasW?'34':'44') + '%">' +
+    '<col style="width:8%">' +
+    '<col style="width:' + (hasW?'20':'24') + '%">' +
+    (hasW ? '<col style="width:16%">' : '') +
+    '<col style="width:' + (hasW?'22':'24') + '%">' +
+    '</colgroup>' +
     '<thead><tr>' +
-    '<th style="text-align:left;padding:3px 2px;font-weight:700;width:38%">Item</th>' +
-    '<th style="text-align:right;padding:3px 2px;font-weight:700;width:12%">Qty</th>' +
-    '<th style="text-align:right;padding:3px 2px;font-weight:700;width:20%">Rate</th>' +
-    (hasW ? '<th style="text-align:center;padding:3px 2px;font-weight:700;width:14%">Warranty</th>' : '') +
-    '<th style="text-align:right;padding:3px 2px;font-weight:700;width:' + (hasW?'16':'30') + '%">Amount</th>' +
+    '<th style="text-align:left;padding:3px 2px;font-weight:700">Item</th>' +
+    '<th style="text-align:right;padding:3px 2px;font-weight:700">Qty</th>' +
+    '<th style="text-align:right;padding:3px 2px;font-weight:700">Rate</th>' +
+    (hasW ? '<th style="text-align:center;padding:3px 2px;font-weight:700">Warranty</th>' : '') +
+    '<th style="text-align:right;padding:3px 2px;font-weight:700">Amount</th>' +
     '</tr></thead><tbody>' + itemsHtml + '</tbody></table>' +
     '<div style="border-top:1px dashed #000;margin:8px 0"></div>' +
     (bill.discountApplied > 0 ? '<div style="display:flex;justify-content:space-between;font-size:' + baseFont + ';padding:2px 0"><span>Subtotal</span><span>' + bfmt(bill.subtotal || bill.total) + '</span></div><div style="display:flex;justify-content:space-between;font-size:' + baseFont + ';padding:2px 0;color:#c00"><span>Discount</span><span>-' + bfmt(bill.discountApplied) + '</span></div>' : '') +
@@ -5060,11 +5067,11 @@ async function renderHajiraLedgerDetail() {
     summaryCard2('ti-calendar-check', '#10b981', 'Present', present + ' days') +
     summaryCard2('ti-clock-half', '#f59e0b', 'Half day', half + ' days') +
     summaryCard2('ti-user-x', '#ef4444', 'Absent', absent + ' days') +
-    summaryCard2('ti-clock', '#6366f1', 'OT Pay', 'Tk ' + fmt(att.reduce(function(t,r){ return t+Number(r.ot_pay||r.ot_hours||0); },0))) +
-    summaryCard2('ti-gift', '#0ea5e9', 'Allowance', 'Tk ' + fmt(totalAllowance)) +
-    summaryCard2('ti-coin', '#10b981', 'Total earned', 'Tk ' + fmt(totalEarned)) +
-    summaryCard2('ti-check', '#3b82f6', 'Paid', 'Tk ' + fmt(totalPaid)) +
-    summaryCard2('ti-alert-circle', due > 0 ? '#ef4444' : '#10b981', due > 0 ? 'Due' : 'Advance', 'Tk ' + fmt(Math.abs(due)));
+    summaryCard2('ti-clock', '#6366f1', 'OT Pay', 'Tk ' + fmtPlain(att.reduce(function(t,r){ return t+Number(r.ot_pay||r.ot_hours||0); },0))) +
+    summaryCard2('ti-gift', '#0ea5e9', 'Allowance', 'Tk ' + fmtPlain(totalAllowance)) +
+    summaryCard2('ti-coin', '#10b981', 'Total earned', 'Tk ' + fmtPlain(totalEarned)) +
+    summaryCard2('ti-check', '#3b82f6', 'Paid', 'Tk ' + fmtPlain(totalPaid)) +
+    summaryCard2('ti-alert-circle', due > 0 ? '#ef4444' : '#10b981', due > 0 ? 'Due' : 'Advance', 'Tk ' + fmtPlain(Math.abs(due)));
 
   // Attendance rows
   var attTb = document.getElementById('hld-att-tbody');
@@ -5081,10 +5088,10 @@ async function renderHajiraLedgerDetail() {
         return '<tr>' +
           '<td>' + r.date + '</td>' +
           '<td style="color:' + hajiraStatusColor(r.status) + ';font-weight:600">' + hajiraStatusLabel(r.status) + '</td>' +
-          '<td class="num">' + (base ? 'Tk ' + fmt(base) : '—') + '</td>' +
-          '<td class="num">' + (otAmt ? 'Tk ' + fmt(otAmt) : '—') + '</td>' +
-          '<td class="num">' + (alAmt ? 'Tk ' + fmt(alAmt) : '—') + '</td>' +
-          '<td class="num" style="font-weight:700;color:var(--ok)">' + (total ? 'Tk ' + fmt(total) : '—') + '</td>' +
+          '<td class="num">' + (base ? 'Tk ' + fmtPlain(base) : '—') + '</td>' +
+          '<td class="num">' + (otAmt ? 'Tk ' + fmtPlain(otAmt) : '—') + '</td>' +
+          '<td class="num">' + (alAmt ? 'Tk ' + fmtPlain(alAmt) : '—') + '</td>' +
+          '<td class="num" style="font-weight:700;color:var(--ok)">' + (total ? 'Tk ' + fmtPlain(total) : '—') + '</td>' +
           '<td style="font-size:12px;color:var(--text-2)">' + esc(notes) + '</td>' +
         '</tr>';
       }).join('') +
@@ -5131,7 +5138,7 @@ async function recordHajiraPayment() {
   var worker = __hajiraWorkers.find(function(w){ return w.id === workerId; });
   document.getElementById('hpay-amount').value = '';
   document.getElementById('hpay-note').value = '';
-  toast('Payment of Tk ' + fmt(amount) + ' recorded for ' + (worker ? worker.name : ''), 'ok');
+  toast('Payment of Tk ' + fmtPlain(amount) + ' recorded for ' + (worker ? worker.name : ''), 'ok');
   renderHajiraLedgerDetail();
 }
 

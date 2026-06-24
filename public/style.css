@@ -69,6 +69,8 @@
 .ti-sun::before                 { content: "\f185"; }  /* sun */
 .ti-chevron-down::before        { content: "\f078"; }  /* chevron-down */
 .ti-chevron-right::before       { content: "\f054"; }  /* chevron-right */
+.ti-chevron-left::before        { content: "\f053"; }  /* chevron-left */
+.ti-chevron-up::before          { content: "\f077"; }  /* chevron-up */
 .ti-layout-sidebar-right-collapse::before { content: "\f0db"; } /* table-columns */
 
 /* ── Status & misc ── */
