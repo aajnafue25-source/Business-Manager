@@ -254,6 +254,7 @@ const PAGE_RENDERERS = {
   purchasereturns: renderPurchaseReturnsPage,
   suppliers: renderSuppliersPage,
   expenses: renderExpensePage,
+  damage: renderDamagePage,
   cashflow: renderCashFlowPage,
   dues: function () { navigateTo('duepaid'); },
   dueentry: function () { navigateTo('duepaid'); },
@@ -5833,3 +5834,120 @@ function toggleLang() {
     applyLang();
   };
 })();
+
+// ═══════════════════════════════════════════════════════════════════════
+// DAMAGE LOG
+// ═══════════════════════════════════════════════════════════════════════
+async function renderDamagePage() {
+  // Set today as default date
+  var dateEl = document.getElementById('dmg-date');
+  if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0,10);
+
+  // Wire product search (once)
+  var searchEl = document.getElementById('dmg-product-search');
+  if (searchEl && !searchEl.__dmgWired) {
+    searchEl.__dmgWired = true;
+    wireSearchPicker('dmg-product-search', 'dmg-product-results', searchProductsApi, renderProductSearchItem, function(p) {
+      document.getElementById('dmg-product-id').value   = p.id;
+      document.getElementById('dmg-product-name').value = p.name;
+      document.getElementById('dmg-product-unit').value = p.unit || 'pcs';
+      document.getElementById('dmg-unit').value          = p.unit || 'pcs';
+      document.getElementById('dmg-product-cost').value  = p.purchase_price || 0;
+      document.getElementById('dmg-product-search').value = p.name;
+      // Auto-calculate estimated loss
+      var qty  = parseFloat(document.getElementById('dmg-qty').value) || 1;
+      var cost = Number(p.purchase_price) || 0;
+      document.getElementById('dmg-loss').value = (qty * cost).toFixed(2);
+    });
+    // Recalc loss when qty changes
+    var qtyEl = document.getElementById('dmg-qty');
+    if (qtyEl) qtyEl.addEventListener('input', function() {
+      var cost = parseFloat(document.getElementById('dmg-product-cost').value) || 0;
+      if (cost) document.getElementById('dmg-loss').value = (parseFloat(this.value)||1) * cost;
+    });
+  }
+
+  renderDamageList();
+}
+
+async function renderDamageList() {
+  var search = (document.getElementById('dmg-search') ? document.getElementById('dmg-search').value : '').toLowerCase();
+  var from   = document.getElementById('dmg-from') ? document.getElementById('dmg-from').value : '';
+  var to     = document.getElementById('dmg-to')   ? document.getElementById('dmg-to').value   : '';
+
+  var rows = await apiGet('/damage') || [];
+  if (search) rows = rows.filter(function(r){ return (r.product_name||'').toLowerCase().includes(search) || (r.reason||'').toLowerCase().includes(search) || (r.note||'').toLowerCase().includes(search); });
+  if (from)   rows = rows.filter(function(r){ return r.date >= from; });
+  if (to)     rows = rows.filter(function(r){ return r.date <= to; });
+
+  var tb = document.getElementById('dmg-tbody');
+  if (!tb) return;
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="7" class="empty-state">No damage records yet.</td></tr>';
+    var tv = document.getElementById('dmg-total-val'); if (tv) tv.textContent = fmt(0);
+    return;
+  }
+
+  var totalLoss = rows.reduce(function(t,r){ return t + Number(r.estimated_loss||0); }, 0);
+  var isManager = currentRole === 'manager';
+
+  tb.innerHTML = rows.map(function(r) {
+    return '<tr>' +
+      '<td>' + esc(r.date) + '</td>' +
+      '<td style="font-weight:600">' + esc(r.product_name) + '</td>' +
+      '<td class="num">' + r.quantity + ' <span style="font-size:11px;color:var(--text-2)">' + esc(r.unit||'pcs') + '</span></td>' +
+      '<td>' + (r.reason ? '<span style="background:var(--danger-bg);color:var(--danger);padding:2px 7px;border-radius:5px;font-size:11.5px;font-weight:600">' + esc(r.reason) + '</span>' : '—') + '</td>' +
+      '<td class="num" style="color:var(--danger);font-weight:600">' + fmt(r.estimated_loss||0) + '</td>' +
+      '<td style="font-size:12px;color:var(--text-2)">' + esc(r.note||'') + '</td>' +
+      '<td>' + (isManager ? '<button class="del-btn" onclick="deleteDamageLog(' + r.id + ')" title="Delete & restore stock"><i class="ti ti-trash"></i></button>' : '') + '</td>' +
+    '</tr>';
+  }).join('');
+
+  var tv = document.getElementById('dmg-total-val');
+  if (tv) tv.textContent = fmt(totalLoss);
+}
+
+async function addDamageLog() {
+  var date    = document.getElementById('dmg-date').value;
+  var name    = document.getElementById('dmg-product-name').value.trim();
+  var pid     = document.getElementById('dmg-product-id').value || null;
+  var qty     = parseFloat(document.getElementById('dmg-qty').value) || 1;
+  var unit    = document.getElementById('dmg-unit').value.trim() || 'pcs';
+  var reason  = document.getElementById('dmg-reason').value;
+  var loss    = parseFloat(document.getElementById('dmg-loss').value) || 0;
+  var note    = document.getElementById('dmg-note').value.trim();
+
+  if (!date)  return alert('Please select a date.');
+  if (!name)  return alert('Please enter or select a product.');
+  if (qty <= 0) return alert('Quantity must be greater than 0.');
+
+  var res = await apiPost('/damage', { date, product_id: pid, product_name: name, quantity: qty, unit, reason, estimated_loss: loss, note });
+  if (res && res.error) return alert(res.error);
+
+  // Reset form
+  ['dmg-product-name','dmg-product-search','dmg-note','dmg-loss'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('dmg-product-id').value = '';
+  document.getElementById('dmg-product-cost').value = '';
+  document.getElementById('dmg-product-unit').value = '';
+  document.getElementById('dmg-qty').value = '1';
+  document.getElementById('dmg-reason').value = '';
+
+  toast('Damage logged — stock deducted', 'ok');
+  renderDamageList();
+  // Refresh products cache so stock reflects immediately
+  products = await apiGet('/products') || products;
+}
+
+async function deleteDamageLog(id) {
+  if (!confirm('Delete this damage record? Stock will be restored.')) return;
+  var res = await apiCall('DELETE', '/damage', { id: id });
+  if (res && res.error) return alert(res.error);
+  toast('Damage record deleted — stock restored', 'ok');
+  products = await apiGet('/products') || products;
+  renderDamageList();
+}
+
+function dmgClearFilter() {
+  ['dmg-search','dmg-from','dmg-to'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  renderDamageList();
+}

@@ -135,6 +135,7 @@
         <button data-page="products"><i class="ti ti-package"></i>Products</button>
         <button data-page="categories"><i class="ti ti-tag"></i>Categories</button>
         <button data-page="brands"><i class="ti ti-bookmark"></i>Brands</button>
+        <button data-page="damage"><i class="ti ti-alert-triangle"></i>Damage</button>
       </div>
     </div>
 
@@ -281,7 +282,7 @@
           <!-- Cart table -->
           <div class="pos-cart-table-wrap">
             <table id="cart-table">
-              <colgroup id="cart-colgroup"><col id="cart-col-item"><col id="cart-col-qty" style="width:56px"><col id="cart-col-price" style="width:88px"><col id="cart-col-warranty" style="width:0"><col id="cart-col-amount" style="width:100px"><col style="width:28px"></colgroup><thead><tr><th style="padding:6px 8px;font-size:11px;text-align:left">Item</th><th style="padding:6px 4px;font-size:11px;text-align:center">Qty</th><th style="padding:6px 6px;font-size:11px;text-align:right">Sell price</th><th id="cart-warranty-header" style="padding:6px 4px;font-size:11px;text-align:center;display:none">Warranty</th><th style="padding:6px 6px;font-size:11px;text-align:right">Amount</th><th style="padding:6px 2px"></th></tr></thead>
+              <colgroup id="cart-colgroup"><col id="cart-col-item"><col id="cart-col-qty" style="width:82px"><col id="cart-col-price" style="width:88px"><col id="cart-col-warranty" style="width:0"><col id="cart-col-amount" style="width:100px"><col style="width:28px"></colgroup><thead><tr><th style="padding:6px 8px;font-size:11px;text-align:left">Item</th><th style="padding:6px 4px;font-size:11px;text-align:center">Qty</th><th style="padding:6px 6px;font-size:11px;text-align:right">Sell price</th><th id="cart-warranty-header" style="padding:6px 4px;font-size:11px;text-align:center;display:none">Warranty</th><th style="padding:6px 6px;font-size:11px;text-align:right">Amount</th><th style="padding:6px 2px"></th></tr></thead>
               <tbody id="cart-tbody"><tr><td colspan="5" class="empty-state" style="padding:20px">Click a product to add it to cart</td></tr></tbody>
             </table>
           </div>
@@ -1355,6 +1356,100 @@
             <div class="list-header"><i class="ti ti-cash"></i> Payment history</div>
             <div class="table-scroll"><table><thead><tr><th>Date</th><th class="num">Amount (Tk)</th><th>Note</th><th></th></tr></thead><tbody id="hld-pay-tbody"></tbody></table></div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DAMAGE LOG PAGE -->
+    <section id="page-damage" class="page">
+      <h1 class="page-title"><i class="ti ti-alert-triangle" style="color:var(--danger)"></i> Damage Log</h1>
+
+      <!-- Entry form -->
+      <div class="entry-section" style="margin-bottom:18px">
+        <h3><i class="ti ti-plus" style="color:var(--danger)"></i> Log damaged product</h3>
+        <div class="product-form-grid">
+          <div class="form-row">
+            <label>Date</label>
+            <input type="date" id="dmg-date" />
+          </div>
+          <div class="form-row">
+            <label>Product</label>
+            <div class="search-pick-wrap">
+              <input type="text" id="dmg-product-search" class="search-pick-input" placeholder="Search product..." autocomplete="off" />
+              <input type="hidden" id="dmg-product-id" />
+              <input type="hidden" id="dmg-product-unit" />
+              <input type="hidden" id="dmg-product-cost" />
+              <div id="dmg-product-results" class="search-pick-results"></div>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>Product name <span style="font-size:11px;font-weight:400">(auto-fills or type manually)</span></label>
+            <input type="text" id="dmg-product-name" placeholder="Product name" />
+          </div>
+          <div class="form-row">
+            <label>Quantity damaged</label>
+            <input type="number" id="dmg-qty" placeholder="1" min="0.01" step="0.01" value="1" />
+          </div>
+          <div class="form-row">
+            <label>Unit</label>
+            <input type="text" id="dmg-unit" placeholder="pcs" value="pcs" />
+          </div>
+          <div class="form-row">
+            <label>Estimated loss (Tk) <span style="font-size:11px;font-weight:400">(auto = cost × qty)</span></label>
+            <input type="number" id="dmg-loss" placeholder="0.00" min="0" step="0.01" />
+          </div>
+          <div class="form-row">
+            <label>Reason</label>
+            <select id="dmg-reason">
+              <option value="">— Select reason —</option>
+              <option value="Expired">Expired</option>
+              <option value="Physical damage">Physical damage</option>
+              <option value="Water damage">Water damage</option>
+              <option value="Theft">Theft</option>
+              <option value="Manufacturing defect">Manufacturing defect</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Note</label>
+            <input type="text" id="dmg-note" placeholder="Optional details" />
+          </div>
+        </div>
+        <button class="btn-save btn-danger" style="max-width:240px" onclick="addDamageLog()">
+          <i class="ti ti-alert-triangle"></i> Log damage & deduct stock
+        </button>
+      </div>
+
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <input type="text" id="dmg-search" placeholder="Search product, reason..." oninput="renderDamagePage()" style="flex:1;min-width:160px" />
+        <input type="date" id="dmg-from" onchange="renderDamagePage()" />
+        <span class="filter-to">to</span>
+        <input type="date" id="dmg-to" onchange="renderDamagePage()" />
+        <button class="btn-filter" onclick="renderDamagePage()">Filter</button>
+        <button class="btn-clear" onclick="dmgClearFilter()">Clear</button>
+      </div>
+
+      <!-- List -->
+      <div class="list-card">
+        <div class="list-header"><i class="ti ti-alert-triangle"></i> Damage records</div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th>Date</th>
+              <th>Product</th>
+              <th class="num">Qty</th>
+              <th>Reason</th>
+              <th class="num">Est. Loss</th>
+              <th>Note</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="dmg-tbody"></tbody>
+          </table>
+        </div>
+        <div class="total-row">
+          <span>Total estimated loss</span>
+          <span id="dmg-total-val" style="color:var(--danger)">Tk 0</span>
         </div>
       </div>
     </section>
