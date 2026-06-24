@@ -492,7 +492,7 @@ body.hide-purchase-price .product-cost-row { display: none !important; }
 .detail-action-edit   { background: linear-gradient(135deg, #d97706, #f59e0b); }
 .detail-action-delete { background: linear-gradient(135deg, #dc2626, #ef4444); }
 /* ── POS Sales Layout ── */
-.pos-layout { display: grid; grid-template-columns: 1fr 380px; gap: 16px; align-items: start; }
+.pos-layout { display: grid; grid-template-columns: 1fr 500px; gap: 16px; align-items: start; }
 @media (max-width: 900px) { .pos-layout { grid-template-columns: 1fr; } }
 .pos-products-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; box-shadow: var(--shadow-card); }
 .pos-panel-header { margin-bottom: 12px; display: flex; gap: 8px; }
@@ -523,7 +523,7 @@ body.hide-purchase-price .product-cost-row { display: none !important; }
 .pos-custom-item summary:hover { color: var(--accent); }
 .pos-custom-fields { display: flex; gap: 6px; padding: 6px 12px 10px; align-items: center; }
 .pos-add-btn { width: 36px; height: 36px; border-radius: 9px; border: none; background: var(--grad-cyan); color: #fff; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.pos-cart-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 9px; max-height: 240px; overflow-y: auto; }
+.pos-cart-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 9px; max-height: 320px; overflow-y: auto; }
 .pos-summary { display: flex; flex-direction: column; gap: 8px; }
 .pos-total-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-top: 2px solid var(--border); }
 .pos-total-amt { font-size: 20px; font-weight: 700; color: var(--text); }
@@ -863,3 +863,21 @@ tr.clickable-row:hover { background: var(--surface-2); }
 
 /* Hajira page */
 .page-title .ti-hard-hat { color: var(--warn); }
+
+/* Warranty unit select - consistent size */
+#prod-warranty-unit, #pur-warranty-unit {
+  flex: 0 0 auto;
+  width: 110px !important;
+  min-width: 110px;
+  max-width: 110px;
+}
+/* Purchase serial row */
+#pur-serial-row { flex: 1; min-width: 120px; }
+
+/* Search pick results - smaller suggestion list */
+.search-pick-results {
+  max-height: 220px !important;
+  overflow-y: auto;
+}
+/* Hajira hammer icon */
+.ti-hammer { font-size: inherit; }

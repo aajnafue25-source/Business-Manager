@@ -145,7 +145,7 @@
       <div class="nav-dropdown">
         <button data-page="staff"><i class="ti ti-users-group"></i>Manage Staff</button>
         <button data-page="attendance"><i class="ti ti-calendar-check"></i>Attendance</button>
-        <button data-page="hajira" id="nav-hajira" style="display:none"><i class="ti ti-user-check"></i>হাজিরা</button>
+        <button data-page="hajira" id="nav-hajira" style="display:none"><i class="ti ti-hammer"></i>Hajira</button>
         <button data-page="staffsales"><i class="ti ti-chart-bar"></i>Staff Sales</button>
         <button data-page="staffreports"><i class="ti ti-report-analytics"></i>Staff Reports</button>
       </div>
@@ -276,7 +276,7 @@
           <!-- Cart table -->
           <div class="pos-cart-table-wrap">
             <table id="cart-table">
-              <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num" id="cart-warranty-header" style="display:none">Warranty (mo)</th><th class="num">Amount</th><th style="width:32px"></th></tr></thead>
+              <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num" id="cart-warranty-header" style="display:none">Warranty</th><th class="num">Amount</th><th style="width:32px"></th></tr></thead>
               <tbody id="cart-tbody"><tr><td colspan="5" class="empty-state" style="padding:20px">Click a product to add it to cart</td></tr></tbody>
             </table>
           </div>
@@ -478,6 +478,7 @@
         </div>
         <div class="cart-add-row">
           <div class="form-row" style="flex:2"><label>Item / Product Name</label><input type="text" id="pur-desc" placeholder="Enter product name" /></div>
+          <div class="form-row" id="pur-serial-row" style="display:none;flex:1"><label><i class="ti ti-barcode"></i> Serial No.</label><input type="text" id="pur-serial" placeholder="Scan or type" /></div>
           <div class="form-row" style="flex:1"><label>Qty</label><input type="number" id="pur-qty" min="0" placeholder="1" value="1" /></div>
           <div class="form-row" style="flex:1"><label>Cost price</label><input type="number" id="pur-cost" min="0" placeholder="0.00" /></div>
           <div class="form-row" style="flex:1"><label>Sell price</label><input type="number" id="pur-sell" min="0" placeholder="0.00" /></div>
@@ -1246,7 +1247,7 @@
 
     <!-- HAJIRA PAGE -->
     <section id="page-hajira" class="page">
-      <h1 class="page-title"><i class="ti ti-user-check"></i> হাজিরা <span style="font-size:14px;font-weight:400;color:var(--text-2)">(Daily Wage Attendance)</span></h1>
+      <h1 class="page-title"><i class="ti ti-hammer" style="color:var(--warn)"></i> Hajira <span style="font-size:14px;font-weight:400;color:var(--text-2)">(Daily Wage Attendance)</span></h1>
 
       <!-- Tabs -->
       <div class="tab-row" style="margin-bottom:18px">

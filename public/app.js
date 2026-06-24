@@ -1005,7 +1005,8 @@ function addProductDirectlyToCart(p) {
   cart.push({
     product_id: p.id, desc: p.name, quantity: 1, unit_price: Number(p.sell_price) || 0,
     amount: Number(p.sell_price) || 0, cost_price: costPrice, unit: p.unit || 'pcs',
-    warranty_months: Number(p.warranty_months) || 0
+    warranty_months: Number(p.warranty_months) || 0,
+    warranty_unit: p.warranty_unit || 'months'
   });
   // Decrement local stock display
   var local = products.find(function (x) { return x.id === p.id; });
@@ -1096,9 +1097,11 @@ function addCartItem() {
 
   var cartWM = 0;
   if (productId) { var cp2 = products.find(function(x){ return String(x.id)===String(productId); }); if (cp2) cartWM = Number(cp2.warranty_months)||0; }
+  var cartWU = 'months';
+  if (productId) { var cp3 = products.find(function(x){ return String(x.id)===String(productId); }); if (cp3) cartWU = cp3.warranty_unit || 'months'; }
   cart.push({
     product_id: productId, desc: desc, quantity: qty, unit_price: unitPrice,
-    amount: qty * unitPrice, cost_price: costPrice, warranty_months: cartWM
+    amount: qty * unitPrice, cost_price: costPrice, warranty_months: cartWM, warranty_unit: cartWU
   });
 
   document.getElementById('cart-product').value = '';
@@ -1138,7 +1141,8 @@ function renderCart() {
     tb.innerHTML = '<tr><td colspan="' + (showW?6:5) + '" class="empty-state">Click a product card to add it to cart.</td></tr>';
   } else {
     tb.innerHTML = cart.map(function (it, i) {
-      var wCell = showW ? '<td class="num"><input type="number" value="' + (it.warranty_months||0) + '" min="0" style="width:52px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);text-align:center" onchange="cart[' + i + '].warranty_months=+this.value" title="Warranty months for this item" /></td>' : '';
+      var wLabel = it.warranty_months >= 9999 ? '♾ Lifetime' : (it.warranty_months ? warrantyDisplay(it.warranty_months, it.warranty_unit) : '—');
+      var wCell = showW ? '<td class="num" style="font-size:12px;color:var(--ok)">' + wLabel + '</td>' : '';
       return '<tr><td>' + esc(it.desc) + '</td><td class="num">' + it.quantity + '</td><td class="num">' + fmtPlain(it.unit_price) + '</td>' + wCell + '<td class="num" style="font-weight:600">' + fmtPlain(it.amount) + '</td><td><button class="cart-row-remove" onclick="removeCartItem(' + i + ')"><i class="ti ti-trash"></i></button></td></tr>';
     }).join('');
   }
@@ -1241,7 +1245,7 @@ async function checkout() {
     discountPct: t.discPct, discountAmt: t.discAmt, vatPct: t.vatPct,
     salesman_id: salesmanId, salesman_name: salesmanName,
     items: cart.map(function (it) {
-      return { product_id: it.product_id, desc: it.desc, quantity: it.quantity, unit_price: it.unit_price, amount: it.amount, cost_price: it.cost_price, warranty_months: it.warranty_months || 0 };
+      return { product_id: it.product_id, desc: it.desc, quantity: it.quantity, unit_price: it.unit_price, amount: it.amount, cost_price: it.cost_price, warranty_months: it.warranty_months || 0, warranty_unit: it.warranty_unit || 'months' };
     })
   });
 
@@ -2607,8 +2611,10 @@ function renderPurchaseCart() {
     var showPurW = !!(settings && settings.feature_warranty);
     var purWth = document.getElementById('pur-warranty-th'); if (purWth) purWth.style.display = showPurW ? '' : 'none';
     tb.innerHTML = purchaseCart.map(function (it, i) {
-      var wCell = showPurW ? '<td class="num"><input type="number" value="' + (it.warranty_months||0) + '" min="0" style="width:56px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);text-align:center" onchange="purchaseCart[' + i + '].warranty_months=+this.value" title="Warranty months" /></td>' : '';
-      return '<tr><td>' + esc(it.desc) + '</td><td class="num">' + it.quantity + '</td><td class="num">' + fmtPlain(it.unit_cost) + '</td><td class="num" style="color:var(--ok)">' + (it.sell_price > 0 ? fmtPlain(it.sell_price) : '—') + '</td>' + wCell + '<td class="num" style="font-weight:600">' + fmtPlain(it.amount) + '</td><td><button class="cart-row-remove" onclick="removePurchaseItem(' + i + ')"><i class="ti ti-trash"></i></button></td></tr>';
+      var purWLabel = it.warranty_months >= 9999 ? '♾ Lifetime' : (it.warranty_months ? warrantyDisplay(it.warranty_months, it.warranty_unit) : '—');
+      var wCell = showPurW ? '<td class="num" style="font-size:12px;color:var(--ok)">' + purWLabel + '</td>' : '';
+      var serialCell = (settings && settings.feature_serial_numbers && it.serial) ? '<td style="font-size:11px;color:var(--text-2)">' + esc(it.serial) + '</td>' : '';
+      return '<tr><td>' + esc(it.desc) + (it.serial && !(settings && settings.feature_serial_numbers) ? '' : '') + '</td><td class="num">' + it.quantity + '</td><td class="num">' + fmtPlain(it.unit_cost) + '</td><td class="num" style="color:var(--ok)">' + (it.sell_price > 0 ? fmtPlain(it.sell_price) : '—') + '</td>' + wCell + '<td class="num" style="font-weight:600">' + fmtPlain(it.amount) + '</td><td><button class="cart-row-remove" onclick="removePurchaseItem(' + i + ')"><i class="ti ti-trash"></i></button></td></tr>';
     }).join('');
   }
   const total = purchaseCart.reduce(function (s, it) { return s + it.amount; }, 0);
@@ -2658,7 +2664,7 @@ async function savePurchase() {
   const res = await apiPost('/purchases', {
     date: date, supplier_id: supplierId, supplierName: selectedPurchaseSupplier ? selectedPurchaseSupplier.name : '',
     amountPaid: amountPaid, items: purchaseCart.map(function (it) {
-      return { product_id: it.product_id, desc: it.desc, quantity: it.quantity, unit_cost: it.unit_cost, sell_price: it.sell_price || 0, amount: it.amount, updatePurchasePrice: it.updatePurchasePrice, category_name: it.category_name || null, brand_name: it.brand_name || null, warranty_months: it.warranty_months || 0 };
+      return { product_id: it.product_id, desc: it.desc, quantity: it.quantity, unit_cost: it.unit_cost, sell_price: it.sell_price || 0, amount: it.amount, updatePurchasePrice: it.updatePurchasePrice, category_name: it.category_name || null, brand_name: it.brand_name || null, warranty_months: it.warranty_months || 0, warranty_unit: it.warranty_unit || 'months', serial: it.serial || null };
     })
   });
   if (res && res.error) { alert(res.error); return; }
@@ -3105,10 +3111,14 @@ function warrantyToMonths(val, unit) {
   return Number(val) || 0; // months default
 }
 function warrantyDisplay(months, unit) {
+  if (!months && months !== 0) return '—';
   if (!months) return '—';
   if (months >= 9999) return '♾ Lifetime';
   if (unit === 'days') return months + ' day' + (months !== 1 ? 's' : '');
-  return months + ' month' + (months !== 1 ? 's' : '');
+  // default: show as days (per requirement "count warranty in days")
+  // if unit not specified default to showing as months with label
+  if (!unit || unit === 'months') return months + ' month' + (months !== 1 ? 's' : '');
+  return months + ' ' + unit;
 }
 function getWarrantyInputs(numId, unitId) {
   var numEl = document.getElementById(numId);
@@ -3251,13 +3261,15 @@ function addPurchaseItem() {
   if (isNaN(qty) || qty <= 0) return alert('Please enter a valid quantity.');
   if (isNaN(unitCost) || unitCost < 0) return alert('Please enter a valid cost price.');
   var _wPur = getWarrantyInputs('pur-warranty-months','pur-warranty-unit'); var purWM = _wPur.months; var purWU = _wPur.unit;
-  purchaseCart.push({ product_id: productId, desc: desc, quantity: qty, unit_cost: unitCost, sell_price: sellPrice, amount: qty * unitCost, category_name: catName, brand_name: brandName, warranty_months: purWM, warranty_unit: purWU, updatePurchasePrice: true });
+  var purSerial = ((document.getElementById('pur-serial') || {}).value || '').trim();
+  purchaseCart.push({ product_id: productId, desc: desc, quantity: qty, unit_cost: unitCost, sell_price: sellPrice, amount: qty * unitCost, category_name: catName, brand_name: brandName, warranty_months: purWM, warranty_unit: purWU, serial: purSerial, updatePurchasePrice: true });
   document.getElementById('pur-product').value = '';
   document.getElementById('pur-desc').value = '';
   document.getElementById('pur-qty').value = '1';
   document.getElementById('pur-cost').value = '';
   document.getElementById('pur-sell').value = '';
   var purWel = document.getElementById('pur-warranty-months'); if (purWel) purWel.value = '';
+  var purSel = document.getElementById('pur-serial'); if (purSel) purSel.value = '';
   if (catEl) catEl.value = '';
   if (brandEl) brandEl.value = '';
   renderPurchaseCart();
@@ -4220,9 +4232,11 @@ function applyFeatureFlags() {
   var wr = document.getElementById('prod-warranty-row');
   if (wr) wr.style.display = hasWarranty ? '' : 'none';
 
-  // Warranty fields on purchase form
+  // Warranty & serial fields on purchase form
   var purW = document.getElementById('pur-warranty-row');
   if (purW) purW.style.display = hasWarranty ? '' : 'none';
+  var purSr = document.getElementById('pur-serial-row');
+  if (purSr) purSr.style.display = hasSerial ? '' : 'none';
 
   // Warranty column header in sales cart
   var cartWh = document.getElementById('cart-warranty-header');
