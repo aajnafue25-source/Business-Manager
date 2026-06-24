@@ -21,6 +21,7 @@
 .ti-layout-dashboard::before    { content: "\f3fd"; }  /* gauge-simple */
 .ti-chart-line::before          { content: "\f201"; }  /* chart-line */
 .ti-truck-delivery::before      { content: "\f0d1"; }  /* truck */
+.ti-file-type-pdf::before       { content: "\f1c1"; }  /* file-pdf */
 .ti-receipt::before             { content: "\f543"; }  /* receipt */
 .ti-receipt-2::before           { content: "\f543"; }
 .ti-clock::before               { content: "\f017"; }  /* clock */

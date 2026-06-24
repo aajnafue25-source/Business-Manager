@@ -244,6 +244,7 @@ const PAGE_RENDERERS = {
   admin: renderAdminPage,
   sales: function () { loadProductOptions(); loadCustomerOptions(); renderSalesPage(); loadSalesmanDropdown(); },
   saleslist: renderSalesListPage,
+  delivery: renderDeliveryPage,
   saledetail: renderSaleDetailPage,
   salesreturns: renderSalesReturnsPage,
   exchanges: renderExchangesPage,
@@ -693,6 +694,7 @@ async function renderSaleDetailPage() {
     '<div class="detail-card"><div class="detail-card-header"><i class="ti ti-bolt"></i> Actions</div>' +
     '<div class="detail-actions-grid">' +
     (r.bill_id ? '<button class="detail-action-btn detail-action-print" onclick="renderSaleDetailPrint()"><i class="ti ti-printer"></i><span>Print Bill</span></button>' : '') +
+    (r.bill_id ? '<button class="detail-action-btn" style="background:linear-gradient(135deg,#7c3aed,#a78bfa)" onclick="downloadCurrentBillPdf()"><i class="ti ti-file-type-pdf"></i><span>Download PDF</span></button>' : '') +
     (r.bill_id ? '<button class="detail-action-btn" style="background:linear-gradient(135deg,#7c3aed,#8b5cf6)" onclick="openExchangeFromBill()"><i class="ti ti-switch-3"></i><span>Exchange</span></button>' : '') +
     (isManager ? '<button class="detail-action-btn detail-action-edit" onclick="renderSaleDetailEdit()"><i class="ti ti-pencil"></i><span>Edit</span></button>' : '') +
     (isManager ? '<button class="detail-action-btn detail-action-delete" onclick="renderSaleDetailDelete()"><i class="ti ti-trash"></i><span>Delete</span></button>' : '') +
@@ -1443,7 +1445,8 @@ function billRowHtml(bill, rowRef) {
   var billNoStr = bill.bill_no ? '#' + String(bill.bill_no).padStart(5, '0') : '—';
   var itemSummary = bill.items.length === 1 ? esc(bill.items[0].desc) : bill.items.length + ' items';
   var customer = esc(bill.customer_name) || '<span style="color:var(--text-3)">Walk-in</span>';
-  return '<tr class="clickable-row" onclick="viewSaleEntry(' + rowRef + ')"><td>' + bill.date + '</td><td style="font-weight:700">' + billNoStr + '</td><td>' + customer + '</td><td>' + itemSummary + '</td><td class="num">' + bill.items.length + '</td><td class="num" style="color:var(--ok);font-weight:700">' + fmt(bill.total) + '</td></tr>';
+  var dlvBtn = '<button class="btn-secondary" style="padding:3px 8px;font-size:11px;border-radius:5px;white-space:nowrap" onclick="event.stopPropagation();addToDelivery(' + rowRef + ')" title="Add to delivery"><i class="ti ti-truck-delivery"></i></button>';
+  return '<tr class="clickable-row" onclick="viewSaleEntry(' + rowRef + ')"><td>' + bill.date + '</td><td style="font-weight:700">' + billNoStr + '</td><td>' + customer + '</td><td>' + itemSummary + '</td><td class="num">' + bill.items.length + '</td><td class="num" style="color:var(--ok);font-weight:700">' + fmt(bill.total) + '</td><td style="padding:3px 4px">' + dlvBtn + '</td></tr>';
 }
 
 async function renderSalesPage() {
@@ -5983,4 +5986,200 @@ async function deleteDamageLog(id) {
 function dmgClearFilter() {
   ['dmg-search','dmg-from','dmg-to'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   renderDamageList();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ONLINE DELIVERY TAB
+// ═══════════════════════════════════════════════════════════════════════
+
+async function addToDelivery(billOrRow) {
+  var bill = billOrRow;
+  // Normalise — could be a bill object or a single sale row
+  var billId    = bill.bill_id || bill.id;
+  var billNo    = bill.bill_no || null;
+  var date      = bill.date;
+  var custName  = bill.customer_name || '';
+  var custPhone = bill.customer_phone || '';
+  var total     = bill.total || bill.amount || 0;
+  var items     = bill.items ? (bill.items.length === 1 ? bill.items[0].desc : bill.items.length + ' items') : (bill.desc || '');
+
+  var res = await apiPost('/deliveries', { bill_id: billId, bill_no: billNo, date: date, customer_name: custName, customer_phone: custPhone, items_summary: items, total: total });
+  if (res && res.error) { toast(res.error, 'warn'); return; }
+  toast('Added to delivery list ✓', 'ok');
+}
+
+async function renderDeliveryPage() {
+  var search = (document.getElementById('dlv-search')||{}).value || '';
+  var statusF = (document.getElementById('dlv-status-filter')||{}).value || '';
+  var from    = (document.getElementById('dlv-from')||{}).value || '';
+  var to      = (document.getElementById('dlv-to')||{}).value || '';
+
+  var rows = await apiGet('/deliveries') || [];
+  if (search)   rows = rows.filter(function(r){ return (r.bill_no ? '#'+r.bill_no : '').includes(search) || (r.customer_name||'').toLowerCase().includes(search.toLowerCase()) || (r.items_summary||'').toLowerCase().includes(search.toLowerCase()); });
+  if (statusF)  rows = rows.filter(function(r){ return r.status === statusF; });
+  if (from)     rows = rows.filter(function(r){ return r.date >= from; });
+  if (to)       rows = rows.filter(function(r){ return r.date <= to; });
+
+  // Stats
+  var pending   = rows.filter(function(r){ return r.status === 'pending'; }).length;
+  var delivered = rows.filter(function(r){ return r.status === 'delivered'; }).length;
+  var canceled  = rows.filter(function(r){ return r.status === 'canceled'; }).length;
+  var statsEl = document.getElementById('dlv-stats');
+  if (statsEl) statsEl.innerHTML =
+    summaryCard2('ti-clock', '#f59e0b', 'Pending', pending) +
+    summaryCard2('ti-circle-check', '#10b981', 'Delivered', delivered) +
+    summaryCard2('ti-x', '#ef4444', 'Canceled', canceled) +
+    summaryCard2('ti-cash', '#3b82f6', 'Total value', fmt(rows.reduce(function(s,r){ return s+Number(r.total||0); },0)));
+
+  var tb = document.getElementById('dlv-tbody');
+  if (!tb) return;
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="8" class="empty-state">No delivery orders yet. Click the 🚚 button on any sale to add it here.</td></tr>';
+    return;
+  }
+
+  var statusColor = { pending: '#f59e0b', delivered: '#10b981', canceled: '#ef4444' };
+  var statusLabel = { pending: '⏳ Pending', delivered: '✅ Delivered', canceled: '❌ Canceled' };
+
+  tb.innerHTML = rows.map(function(r) {
+    var billStr = r.bill_no ? '#' + String(r.bill_no).padStart(5,'0') : '—';
+    return '<tr id="dlv-row-' + r.id + '">' +
+      '<td>' + esc(r.date) + '</td>' +
+      '<td style="font-weight:700">' + billStr + '</td>' +
+      '<td>' + esc(r.customer_name||'Walk-in') + (r.customer_phone ? '<br><span style="font-size:11px;color:var(--text-2)">' + esc(r.customer_phone) + '</span>' : '') + '</td>' +
+      '<td style="font-size:13px">' + esc(r.items_summary||'—') + '</td>' +
+      '<td class="num" style="font-weight:600;color:var(--ok)">' + fmt(r.total||0) + '</td>' +
+      '<td>' +
+        '<select id="dlv-status-' + r.id + '" style="padding:5px 8px;border:1.5px solid ' + (statusColor[r.status]||'var(--border)') + ';border-radius:6px;background:var(--surface-2);color:var(--text);font-weight:600;font-size:12px">' +
+        '<option value="pending"'   + (r.status==='pending'   ?' selected':'') + '>⏳ Pending</option>' +
+        '<option value="delivered"' + (r.status==='delivered' ?' selected':'') + '>✅ Delivered</option>' +
+        '<option value="canceled"'  + (r.status==='canceled'  ?' selected':'') + '>❌ Canceled</option>' +
+        '</select>' +
+      '</td>' +
+      '<td><input type="text" id="dlv-note-' + r.id + '" value="' + esc(r.note||'') + '" placeholder="Note" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);width:100%;font-size:12px" /></td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn-secondary" style="padding:4px 8px;font-size:11px;margin-right:4px" onclick="saveDeliveryRow(' + r.id + ')" title="Save status"><i class="ti ti-device-floppy"></i></button>' +
+        '<button class="del-btn" onclick="deleteDelivery(' + r.id + ')" title="Remove"><i class="ti ti-trash"></i></button>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+async function saveDeliveryRow(id) {
+  var status = (document.getElementById('dlv-status-' + id)||{}).value;
+  var note   = (document.getElementById('dlv-note-'   + id)||{}).value || '';
+  var res = await apiCall('PATCH', '/deliveries', { id: id, status: status, note: note });
+  if (res && res.error) return alert(res.error);
+  toast('Delivery status saved', 'ok');
+  renderDeliveryPage();
+}
+
+async function deleteDelivery(id) {
+  if (!confirm('Remove from delivery list?')) return;
+  var res = await apiCall('DELETE', '/deliveries', { id: id });
+  if (res && res.error) return alert(res.error);
+  toast('Removed', 'ok');
+  renderDeliveryPage();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PDF MEMO DOWNLOAD
+// ═══════════════════════════════════════════════════════════════════════
+// Uses the browser's built-in print-to-PDF. Opens the bill in a new tab
+// styled for A4 paper so the user can "Save as PDF" from the print dialog.
+// No external library needed — works on all browsers.
+
+async function downloadBillAsPdf(bill) {
+  if (!bill || !bill.items) return;
+  var s = settings || {};
+  var bizName  = s.businessName || 'BizSheba';
+  var address  = s.address || '';
+  var phone    = s.phone || '';
+  var gst      = s.gst || '';
+  var footNote = s.note || 'Thank you for your business!';
+  var billNo   = bill.bill_no ? String(bill.bill_no).padStart(6,'0') : '—';
+  var date     = bill.date || new Date().toISOString().slice(0,10);
+  var customer = bill.customer_name || 'Walk-in';
+  var custPhone= bill.customer_phone || '';
+
+  var hasW = bill.items.some(function(it){ return it.warranty_months && it.warranty_months > 0; });
+
+  var itemRows = bill.items.map(function(it) {
+    var sp = it.unit_price != null ? it.unit_price : (it.amount / (it.quantity || 1));
+    var wLabel = it.warranty_months >= 9999 ? 'Lifetime' : (it.warranty_months ? warrantyDisplay(it.warranty_months, it.warranty_unit) : '');
+    return '<tr>' +
+      '<td style="padding:8px 10px;border-bottom:1px solid #eee;word-break:break-word">' + (it.desc||it.description||'') + '</td>' +
+      '<td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center">' + (it.quantity||1) + '</td>' +
+      '<td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right">' + Number(sp).toLocaleString('en-US',{minimumFractionDigits:2}) + '</td>' +
+      (hasW ? '<td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;font-size:11px;color:#555">' + wLabel + '</td>' : '') +
+      '<td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600">' + Number(it.amount||0).toLocaleString('en-US',{minimumFractionDigits:2}) + '</td>' +
+    '</tr>';
+  }).join('');
+
+  var subTotal = bill.items.reduce(function(s,it){ return s+Number(it.amount||0); },0);
+  var paid     = bill.amountPaid || bill.total || subTotal;
+  var due      = Math.max(0, subTotal - paid);
+
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ' + billNo + '</title>' +
+    '<style>' +
+    'body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#222;margin:0;padding:0}' +
+    '.page{max-width:720px;margin:0 auto;padding:32px 40px}' +
+    '.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;border-bottom:3px solid #1a56db;padding-bottom:16px}' +
+    '.biz-name{font-size:24px;font-weight:800;color:#1a56db;letter-spacing:-0.5px}' +
+    '.biz-info{font-size:12px;color:#555;margin-top:4px;line-height:1.6}' +
+    '.invoice-meta{text-align:right;font-size:13px}' +
+    '.invoice-meta strong{font-size:18px;color:#1a56db;display:block;margin-bottom:4px}' +
+    '.customer-box{background:#f8faff;border:1px solid #dde6fa;border-radius:8px;padding:12px 16px;margin-bottom:24px;font-size:13px}' +
+    '.customer-box strong{display:block;margin-bottom:2px;font-size:14px}' +
+    'table{width:100%;border-collapse:collapse;margin-bottom:20px}' +
+    'thead{background:#1a56db;color:#fff}' +
+    'thead th{padding:9px 10px;text-align:left;font-size:12px;font-weight:600;letter-spacing:.5px}' +
+    'thead th.r{text-align:right} thead th.c{text-align:center}' +
+    'tbody tr:nth-child(even){background:#f9f9f9}' +
+    '.totals{width:280px;margin-left:auto;border:1px solid #eee;border-radius:8px;overflow:hidden;margin-bottom:24px}' +
+    '.totals td{padding:8px 14px;font-size:13px}' +
+    '.totals tr:last-child td{background:#1a56db;color:#fff;font-weight:700;font-size:15px}' +
+    '.footer{text-align:center;margin-top:32px;padding-top:16px;border-top:1px dashed #ddd;font-size:12px;color:#888}' +
+    '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{padding:16px 20px}}' +
+    '</style></head><body><div class="page">' +
+    '<div class="header">' +
+      '<div><div class="biz-name">' + bizName + '</div><div class="biz-info">' + (address?address+'<br>':'') + (phone?'📞 '+phone+'<br>':'') + (gst?'VAT/GST: '+gst:'') + '</div></div>' +
+      '<div class="invoice-meta"><strong>TAX INVOICE</strong>Bill # ' + billNo + '<br>Date: ' + date + (bill.salesman_name ? '<br>Salesman: ' + bill.salesman_name : '') + '</div>' +
+    '</div>' +
+    '<div class="customer-box"><strong>' + customer + '</strong>' + (custPhone?'📞 '+custPhone:'') + '</div>' +
+    '<table><thead><tr>' +
+      '<th>Item</th><th class="c">Qty</th><th class="r">Unit price</th>' +
+      (hasW ? '<th class="c">Warranty</th>' : '') +
+      '<th class="r">Amount (Tk)</th>' +
+    '</tr></thead><tbody>' + itemRows + '</tbody></table>' +
+    '<table class="totals"><tbody>' +
+      '<tr><td>Subtotal</td><td style="text-align:right">Tk ' + subTotal.toLocaleString('en-US',{minimumFractionDigits:2}) + '</td></tr>' +
+      (bill.discountAmt ? '<tr><td>Discount</td><td style="text-align:right">- Tk ' + Number(bill.discountAmt).toLocaleString('en-US',{minimumFractionDigits:2}) + '</td></tr>' : '') +
+      '<tr><td>Paid</td><td style="text-align:right">Tk ' + Number(paid).toLocaleString('en-US',{minimumFractionDigits:2}) + '</td></tr>' +
+      (due > 0 ? '<tr><td style="color:#ef4444">Due</td><td style="text-align:right;color:#ef4444">Tk ' + due.toLocaleString('en-US',{minimumFractionDigits:2}) + '</td></tr>' : '') +
+      '<tr><td>TOTAL</td><td style="text-align:right">Tk ' + subTotal.toLocaleString('en-US',{minimumFractionDigits:2}) + '</td></tr>' +
+    '</tbody></table>' +
+    '<div class="footer">' + footNote + '</div>' +
+    '</div>' +
+    '<script>window.onload=function(){window.print();}<\/script>' +
+    '</body></html>';
+
+  var win = window.open('', '_blank');
+  if (!win) { alert('Please allow popups for this site to download the PDF.'); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+}
+
+// Hook into the sale detail page print button - also offer PDF
+async function downloadCurrentBillPdf() {
+  var r = window.__currentSaleRow;
+  if (!r) return;
+  var bill = null;
+  if (r.bill_id) {
+    bill = await apiGet('/sales/bill/' + r.bill_id);
+    if (bill && bill.error) { alert(bill.error); return; }
+  }
+  if (!bill) bill = { items: [r], total: r.amount, amountPaid: r.amount, date: r.date, customer_name: r.customer_name, bill_no: r.bill_no };
+  await downloadBillAsPdf(bill);
 }

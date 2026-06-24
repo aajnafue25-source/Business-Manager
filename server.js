@@ -349,7 +349,7 @@ async function handleAdmin(method, pathname, req, res, session) {
 
   if (method === 'DELETE' && pathname.startsWith('/api/admin/users/')) {
     const userId = pathname.split('/').pop();
-    const bizTables = ['sales', 'expenses', 'dues', 'due_paid', 'products', 'customers', 'settings', 'suppliers', 'purchases', 'purchase_items', 'purchase_returns', 'sales_returns', 'supplier_dues', 'supplier_due_paid', 'serial_numbers', 'warranty_claims', 'warranty_exchanges', 'hajira_workers', 'hajira_attendance', 'hajira_payments', 'damage_log'];
+    const bizTables = ['sales', 'expenses', 'dues', 'due_paid', 'products', 'customers', 'settings', 'suppliers', 'purchases', 'purchase_items', 'purchase_returns', 'sales_returns', 'supplier_dues', 'supplier_due_paid', 'serial_numbers', 'warranty_claims', 'warranty_exchanges', 'hajira_workers', 'hajira_attendance', 'hajira_payments', 'damage_log', 'deliveries'];
     for (const table of bizTables) {
       try { await sb('DELETE', table, { query: `user_id=eq.${userId}` }); } catch (e) {}
     }
@@ -644,6 +644,37 @@ const routes = {
     send(res, 200, { ok: true });
   },
 
+
+  // ----- Online Deliveries -----
+  'GET /api/deliveries': async (req, res, session) => {
+    send(res, 200, (await sb('GET', 'deliveries', { query: bizQuery(session, 'order=id.desc') })) || []);
+  },
+  'POST /api/deliveries': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.date) return send(res, 400, { error: 'date required' });
+    if (b.bill_id) {
+      const existing = await sb('GET', 'deliveries', { query: `bill_id=eq.${b.bill_id}&user_id=eq.${session.businessId}` });
+      if (existing && existing.length) return send(res, 400, { error: 'This bill is already in the delivery list.' });
+    }
+    const id = await getNextId();
+    await sb('POST', 'deliveries', { body: { id, user_id: session.businessId, bill_id: b.bill_id || null, bill_no: b.bill_no || null, date: b.date, customer_name: b.customer_name || null, customer_phone: b.customer_phone || null, items_summary: b.items_summary || null, total: Number(b.total) || 0, status: 'pending', note: b.note || null } });
+    send(res, 200, { id });
+  },
+  'PATCH /api/deliveries': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.id) return send(res, 400, { error: 'id required' });
+    const patch = {};
+    if (b.status !== undefined) patch.status = b.status;
+    if (b.note !== undefined) patch.note = b.note;
+    await sb('PATCH', 'deliveries', { query: `id=eq.${b.id}&user_id=eq.${session.businessId}`, body: patch });
+    send(res, 200, { ok: true });
+  },
+  'DELETE /api/deliveries': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.id) return send(res, 400, { error: 'id required' });
+    await sb('DELETE', 'deliveries', { query: `id=eq.${b.id}&user_id=eq.${session.businessId}` });
+    send(res, 200, { ok: true });
+  },
 
   'GET /api/dues': async (req, res, session) => {
     send(res, 200, (await sb('GET', 'dues', { query: bizQuery(session, 'order=id.desc') })) || []);
