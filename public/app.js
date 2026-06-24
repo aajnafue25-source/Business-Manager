@@ -1192,7 +1192,10 @@ function renderCart() {
   const tb = document.getElementById('cart-tbody');
   var showW = !!(settings && settings.feature_warranty);
   var wHeader = document.getElementById('cart-warranty-header');
-  if (wHeader) wHeader.style.display = showW ? '' : 'none';
+  if (wHeader) {
+    if (showW) { wHeader.style.display=''; wHeader.style.width=''; wHeader.style.padding='6px 4px'; wHeader.style.overflow=''; }
+    else       { wHeader.style.display='none'; wHeader.style.width='0'; wHeader.style.padding='0'; wHeader.style.overflow='hidden'; }
+  }
   var INP = 'padding:3px 4px;border:1px solid var(--border);border-radius:5px;background:var(--surface-2);color:var(--text);text-align:center;box-sizing:border-box;font-size:12px;';
   var cols = showW ? 6 : 5;
   if (!cart.length) {
@@ -4440,7 +4443,10 @@ function applyFeatureFlags() {
 
   // Warranty column header in sales cart
   var cartWh = document.getElementById('cart-warranty-header');
-  if (cartWh) cartWh.style.display = hasWarranty ? '' : 'none';
+  if (cartWh) {
+    if (hasWarranty) { cartWh.style.display=''; cartWh.style.width=''; cartWh.style.padding='6px 4px'; cartWh.style.overflow=''; }
+    else             { cartWh.style.display='none'; cartWh.style.width='0'; cartWh.style.padding='0'; cartWh.style.overflow='hidden'; }
+  }
 
   // Serial tab on warranty page (show even if only serial is on)
   var stab = document.getElementById('wtab-serials');
