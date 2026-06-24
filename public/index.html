@@ -67,6 +67,7 @@
     <div class="brand"><i class="ti ti-building-store"></i> <span>BizSheba</span></div>
     <div class="topbar-right">
       <span id="topbar-days-left" class="days-badge" style="display:none"></span>
+      <button onclick="toggleLang()" id="lang-toggle" class="icon-btn" title="Switch language / ভাষা পরিবর্তন" style="font-size:12px;font-weight:700;letter-spacing:.5px;min-width:36px">বাং</button>
       <button onclick="toggleTheme()" id="theme-toggle" class="icon-btn" title="Toggle light/dark"><i class="ti ti-moon"></i></button>
       <!-- Business name + Profile avatar + dropdown -->
       <div class="profile-avatar-wrap">
@@ -95,20 +96,21 @@
     <nav id="nav">
     <button class="nav-collapse-btn" onclick="toggleSidebar()" title="Collapse menu"><i class="ti ti-layout-sidebar-right-collapse"></i></button>
 
-    <button class="active" data-page="dashboard"><i class="ti ti-layout-dashboard"></i><span>Dashboard</span></button>
+    <button class="active" data-page="dashboard"><i class="ti ti-layout-dashboard"></i><span data-i18n="nav_dashboard">Dashboard</span></button>
 
     <div class="nav-group">
-      <button class="nav-group-btn" data-page="sales" data-default="sales"><i class="ti ti-chart-line"></i><span>Sales</span><i class="ti ti-chevron-down nav-caret"></i></button>
+      <button class="nav-group-btn" data-page="sales" data-default="sales"><i class="ti ti-chart-line"></i><span data-i18n="nav_sales">Sales</span><i class="ti ti-chevron-down nav-caret"></i></button>
       <div class="nav-dropdown">
         <button data-page="sales"><i class="ti ti-shopping-cart"></i>New Sale</button>
         <button data-page="saleslist"><i class="ti ti-list"></i>Sales List</button>
         <button data-page="salesreturns"><i class="ti ti-arrow-back-up"></i>Sales Returns</button>
         <button data-page="exchanges"><i class="ti ti-switch-3"></i>Exchanges</button>
+        <button data-page="warranty" id="nav-warranty" style="display:none"><i class="ti ti-shield-check"></i>Warranty</button>
       </div>
     </div>
 
     <div class="nav-group">
-      <button class="nav-group-btn" data-page="purchases" data-default="purchases"><i class="ti ti-truck-delivery"></i><span>Purchases</span><i class="ti ti-chevron-down nav-caret"></i></button>
+      <button class="nav-group-btn" data-page="purchases" data-default="purchases"><i class="ti ti-truck-delivery"></i><span data-i18n="nav_purchases">Purchases</span><i class="ti ti-chevron-down nav-caret"></i></button>
       <div class="nav-dropdown">
         <button data-page="purchases"><i class="ti ti-plus"></i>New Purchase</button>
         <button data-page="purchaselist"><i class="ti ti-list"></i>Purchase List</button>
@@ -117,18 +119,18 @@
       </div>
     </div>
 
-    <button data-page="expenses"><i class="ti ti-receipt"></i><span>Expenses</span></button>
-    <button data-page="cashflow"><i class="ti ti-cash"></i><span>Cash Flow</span></button>
+    <button data-page="expenses"><i class="ti ti-receipt"></i><span data-i18n="nav_expenses">Expenses</span></button>
+    <button data-page="cashflow"><i class="ti ti-cash"></i><span data-i18n="nav_cashflow">Cash Flow</span></button>
     <div class="nav-group">
-      <button class="nav-group-btn" data-page="duepaid" data-default="duepaid"><i class="ti ti-clock"></i><span>Dues</span><i class="ti ti-chevron-down nav-caret"></i></button>
+      <button class="nav-group-btn" data-page="duepaid" data-default="duepaid"><i class="ti ti-clock"></i><span data-i18n="nav_dues">Dues</span><i class="ti ti-chevron-down nav-caret"></i></button>
       <div class="nav-dropdown">
         <button data-page="duepaid"><i class="ti ti-circle-check"></i>Due Payment</button>
       </div>
     </div>
-    <button data-page="customers"><i class="ti ti-users"></i><span>Customers</span></button>
+    <button data-page="customers"><i class="ti ti-users"></i><span data-i18n="nav_customers">Customers</span></button>
 
     <div class="nav-group">
-      <button class="nav-group-btn" data-page="products" data-default="products"><i class="ti ti-package"></i><span>Inventory</span><i class="ti ti-chevron-down nav-caret"></i></button>
+      <button class="nav-group-btn" data-page="products" data-default="products"><i class="ti ti-package"></i><span data-i18n="nav_inventory">Inventory</span><i class="ti ti-chevron-down nav-caret"></i></button>
       <div class="nav-dropdown">
         <button data-page="products"><i class="ti ti-package"></i>Products</button>
         <button data-page="categories"><i class="ti ti-tag"></i>Categories</button>
@@ -136,13 +138,14 @@
       </div>
     </div>
 
-    <button data-page="reports"><i class="ti ti-report-analytics"></i><span>Reports</span></button>
+    <button data-page="reports"><i class="ti ti-report-analytics"></i><span data-i18n="nav_reports">Reports</span></button>
 
     <div class="nav-group" id="nav-group-staff" style="display:none">
-      <button class="nav-group-btn" data-page="staff" data-default="staff"><i class="ti ti-users-group"></i><span>Staff</span><i class="ti ti-chevron-down nav-caret"></i></button>
+      <button class="nav-group-btn" data-page="staff" data-default="staff"><i class="ti ti-users-group"></i><span data-i18n="nav_staff">Staff</span><i class="ti ti-chevron-down nav-caret"></i></button>
       <div class="nav-dropdown">
         <button data-page="staff"><i class="ti ti-users-group"></i>Manage Staff</button>
         <button data-page="attendance"><i class="ti ti-calendar-check"></i>Attendance</button>
+        <button data-page="hajira" id="nav-hajira" style="display:none"><i class="ti ti-user-check"></i>হাজিরা</button>
         <button data-page="staffsales"><i class="ti ti-chart-bar"></i>Staff Sales</button>
         <button data-page="staffreports"><i class="ti ti-report-analytics"></i>Staff Reports</button>
       </div>
@@ -754,6 +757,13 @@
             <select id="prod-brand"><option value="">— No brand —</option></select>
           </div>
         </div>
+        <!-- Serial & Warranty fields — shown only when features are ON -->
+        <div id="prod-serial-row" style="display:none" class="product-form-grid">
+          <div class="form-row"><label><i class="ti ti-barcode"></i> Serial numbers <span style="font-weight:400;font-size:11px">(comma-separated if multiple)</span></label><input type="text" id="prod-serials" placeholder="Scan or type serial numbers" /></div>
+        </div>
+        <div id="prod-warranty-row" style="display:none" class="product-form-grid">
+          <div class="form-row"><label><i class="ti ti-shield-check"></i> Warranty (months)</label><input type="number" id="prod-warranty-months" placeholder="0 = no warranty" min="0" /></div>
+        </div>
         <button class="btn-save" onclick="addProduct()">Save product &amp; generate barcode</button>
       </div>
 
@@ -908,7 +918,33 @@
         </div>
       </div>
 
-      <button class="btn-save" style="max-width:240px" onclick="saveSettings()"><i class="ti ti-device-floppy"></i> Save settings</button>
+      <!-- Feature Toggles -->
+      <div class="entry-section" style="margin-bottom:18px">
+        <h3><i class="ti ti-toggle-right" style="color:var(--accent)"></i> <span data-i18n="set_features">Optional features</span></h3>
+        <p style="color:var(--text-2);font-size:13px;margin-bottom:14px">Turn on only the features your business needs. Saved with the button below.</p>
+        <div class="feature-toggle-row">
+          <div class="feature-toggle-info">
+            <div class="feature-toggle-title"><i class="ti ti-barcode"></i> <span data-i18n="feat_serial_title">Serial number tracking</span></div>
+            <div class="feature-toggle-desc" data-i18n="feat_serial_desc">Attach serial / barcode numbers to products when adding stock. Best for electronics or any uniquely numbered item.</div>
+          </div>
+          <label class="feature-switch"><input type="checkbox" id="feat-serial" onchange="onFeatureToggle()"><span class="feature-slider"></span></label>
+        </div>
+        <div class="feature-toggle-row">
+          <div class="feature-toggle-info">
+            <div class="feature-toggle-title"><i class="ti ti-shield-check"></i> <span data-i18n="feat_warranty_title">Warranty management</span></div>
+            <div class="feature-toggle-desc" data-i18n="feat_warranty_desc">Set warranty duration on products, log warranty claims, and process warranty exchanges with serial number replacement.</div>
+          </div>
+          <label class="feature-switch"><input type="checkbox" id="feat-warranty" onchange="onFeatureToggle()"><span class="feature-slider"></span></label>
+        </div>
+        <div class="feature-toggle-row">
+          <div class="feature-toggle-info">
+            <div class="feature-toggle-title"><i class="ti ti-user-check"></i> <span data-i18n="feat_hajira_title">হাজিরা (Hajira) — Daily wage attendance</span></div>
+            <div class="feature-toggle-desc" data-i18n="feat_hajira_desc">Track daily-wage workers separately from regular staff. Record present/absent/half-day, auto-calculate payable amount, log payments, and view per-worker ledger. Best for construction, daily-labour, or shift-based businesses.</div>
+          </div>
+          <label class="feature-switch"><input type="checkbox" id="feat-hajira" onchange="onFeatureToggle()"><span class="feature-slider"></span></label>
+        </div>
+      </div>
+      <button class="btn-save" style="max-width:240px" onclick="saveSettings()"><i class="ti ti-device-floppy"></i> <span data-i18n="btn_save_settings">Save settings</span></button>
       </div>
     </section>
 
@@ -1093,6 +1129,228 @@
         </div>
       </div>
     </section>
+    <!-- WARRANTY PAGE -->
+    <section id="page-warranty" class="page">
+      <h1 class="page-title"><i class="ti ti-shield-check"></i> Warranty</h1>
+
+      <!-- Tabs -->
+      <div class="tab-row" style="margin-bottom:18px">
+        <button class="tab-btn active" onclick="switchWarrantyTab('claims')" id="wtab-claims"><span data-i18n="nav_warranty">Claims</span></button>
+        <button class="tab-btn" onclick="switchWarrantyTab('exchanges')" id="wtab-wexchanges">Warranty Exchanges</button>
+        <button class="tab-btn" onclick="switchWarrantyTab('serials')" id="wtab-serials">Serial Numbers</button>
+      </div>
+
+      <!-- Claims tab -->
+      <div id="warranty-tab-claims">
+        <!-- Bill search -->
+        <div class="entry-section" style="margin-bottom:18px">
+          <h3><i class="ti ti-receipt" style="color:var(--accent)"></i> Find bill to claim warranty from</h3>
+          <div class="form-row">
+            <label>Search by bill number, customer name or phone</label>
+            <input type="text" id="wc-bill-search" placeholder="e.g. #10 or customer name or phone..." oninput="searchWarrantyBill()" />
+          </div>
+          <div id="wc-bill-results" class="exc-bill-results"></div>
+        </div>
+
+        <!-- Selected bill panel -->
+        <div id="wc-bill-panel" style="display:none;margin-bottom:18px">
+          <div class="list-card">
+            <div class="list-header" id="wc-bill-header"><i class="ti ti-list"></i> Items on this bill</div>
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th>Item</th><th>Serial</th><th class="num">Warranty</th><th class="num">Sold</th><th class="num">Expires</th><th></th></tr></thead>
+                <tbody id="wc-bill-items"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Claim form (appears after clicking Claim Warranty on a bill item) -->
+        <div id="wc-claim-form" style="display:none;margin-bottom:18px">
+          <div class="entry-section">
+            <h3><i class="ti ti-alert-circle" style="color:var(--danger)"></i> Log warranty claim</h3>
+            <div class="product-form-grid">
+              <div class="form-row"><label>Product</label><input type="text" id="wc-product" readonly style="background:var(--surface-2)" /></div>
+              <div class="form-row"><label>Serial number</label><input type="text" id="wc-serial" placeholder="Scan or type if not auto-filled" /></div>
+              <div class="form-row"><label>Customer name</label><input type="text" id="wc-customer" placeholder="Optional" /></div>
+              <div class="form-row"><label>Customer phone</label><input type="text" id="wc-phone" placeholder="Optional" /></div>
+              <div class="form-row"><label>Original sale date</label><input type="date" id="wc-sale-date" readonly style="background:var(--surface-2)" /></div>
+              <div class="form-row"><label>Warranty (months)</label><input type="number" id="wc-warranty-months" min="0" readonly style="background:var(--surface-2)" /></div>
+              <div class="form-row"><label>Claim date</label><input type="date" id="wc-claim-date" /></div>
+              <div class="form-row"><label>Issue description</label><input type="text" id="wc-issue" placeholder="Describe the problem" /></div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+              <button class="btn-save" onclick="submitWarrantyClaim()"><i class="ti ti-shield-check"></i> Submit claim</button>
+              <button class="btn-secondary" onclick="cancelWarrantyClaim()"><i class="ti ti-x"></i> Cancel</button>
+            </div>
+            <input type="hidden" id="wc-sale-id" />
+            <input type="hidden" id="wc-serial-id" />
+          </div>
+        </div>
+
+        <!-- Claims list -->
+        <div class="list-card">
+          <div class="list-header"><i class="ti ti-shield-check"></i> Warranty claims</div>
+          <div style="padding:10px 14px 6px;display:flex;gap:8px;flex-wrap:wrap">
+            <input type="text" id="wclist-search" placeholder="Search serial, customer..." oninput="renderWarrantyClaims()" style="flex:1;min-width:140px" />
+            <select id="wclist-status" onchange="renderWarrantyClaims()" style="max-width:140px"><option value="">All statuses</option><option value="open">Open</option><option value="resolved">Resolved</option><option value="exchanged">Exchanged</option></select>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>Claim date</th><th>Serial</th><th>Product</th><th>Customer</th><th>Issue</th><th>Status</th><th></th></tr></thead><tbody id="wc-tbody"></tbody></table></div>
+        </div>
+      </div>
+
+      <!-- Warranty exchanges tab -->
+      <div id="warranty-tab-exchanges" style="display:none">
+        <div class="entry-section" style="margin-bottom:18px">
+          <h3><i class="ti ti-replace" style="color:var(--ok)"></i> Process warranty exchange</h3>
+          <div class="product-form-grid">
+            <div class="form-row"><label>Old serial number</label><input type="text" id="we-old-serial" placeholder="Scan defective unit" oninput="lookupOldSerial()" /></div>
+            <div class="form-row"><label>Product name</label><input type="text" id="we-product" placeholder="Auto-fills" /></div>
+            <div class="form-row"><label>New serial number</label><input type="text" id="we-new-serial" placeholder="Scan replacement unit" /></div>
+            <div class="form-row"><label>Customer name</label><input type="text" id="we-customer" placeholder="Optional" /></div>
+            <div class="form-row"><label>Exchange date</label><input type="date" id="we-date" /></div>
+            <div class="form-row"><label>Note</label><input type="text" id="we-note" placeholder="Optional" /></div>
+          </div>
+          <input type="hidden" id="we-serial-id" />
+          <input type="hidden" id="we-claim-id" />
+          <input type="hidden" id="we-product-id" />
+          <button class="btn-save" onclick="saveWarrantyExchange()"><i class="ti ti-replace"></i> Save warranty exchange</button>
+        </div>
+        <div class="list-card">
+          <div class="list-header"><i class="ti ti-replace"></i> Warranty exchange history</div>
+          <div class="table-wrap"><table><thead><tr><th>Date</th><th>Old serial</th><th>New serial</th><th>Product</th><th>Customer</th><th></th></tr></thead><tbody id="we-tbody"></tbody></table></div>
+        </div>
+      </div>
+
+      <!-- Serial numbers tab -->
+      <div id="warranty-tab-serials" style="display:none">
+        <div class="entry-section" style="margin-bottom:18px">
+          <h3><i class="ti ti-barcode"></i> Register serial number</h3>
+          <div class="product-form-grid">
+            <div class="form-row"><label>Serial number</label><input type="text" id="sn-serial" placeholder="Scan or type" /></div>
+            <div class="form-row"><label>Product</label><select id="sn-product"><option value="">— Select product —</option></select></div>
+          </div>
+          <button class="btn-save" onclick="addSerialNumber()"><i class="ti ti-plus"></i> Register serial</button>
+        </div>
+        <div class="list-card">
+          <div class="list-header"><i class="ti ti-barcode"></i> Serial number registry</div>
+          <div style="padding:10px 14px 6px;display:flex;gap:8px;flex-wrap:wrap">
+            <input type="text" id="snlist-search" placeholder="Search serial, product..." oninput="renderSerialList()" style="flex:1;min-width:140px" />
+            <select id="snlist-status" onchange="renderSerialList()" style="max-width:140px"><option value="">All</option><option value="in_stock">In stock</option><option value="sold">Sold</option><option value="exchanged">Exchanged</option><option value="returned">Returned</option></select>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>Serial</th><th>Product</th><th>Status</th><th>Sold to</th><th>Sale date</th></tr></thead><tbody id="sn-tbody"></tbody></table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HAJIRA PAGE -->
+    <section id="page-hajira" class="page">
+      <h1 class="page-title"><i class="ti ti-user-check"></i> হাজিরা <span style="font-size:14px;font-weight:400;color:var(--text-2)">(Daily Wage Attendance)</span></h1>
+
+      <!-- Tabs -->
+      <div class="tab-row" style="margin-bottom:18px">
+        <button class="tab-btn active" onclick="switchHajiraTab('attendance')" id="htab-attendance"><i class="ti ti-calendar-check"></i> <span data-i18n="htab_attendance">Attendance</span></button>
+        <button class="tab-btn" onclick="switchHajiraTab('workers')" id="htab-workers"><i class="ti ti-users"></i> <span data-i18n="htab_workers">Workers</span></button>
+        <button class="tab-btn" onclick="switchHajiraTab('ledger')" id="htab-ledger"><i class="ti ti-report-money"></i> <span data-i18n="htab_ledger">Ledger</span></button>
+      </div>
+
+      <!-- ══ ATTENDANCE TAB ══ -->
+      <div id="hajira-tab-attendance">
+        <div class="entry-section" style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div class="form-row" style="margin:0;flex:0 0 auto">
+              <label style="margin-bottom:4px">Date</label>
+              <input type="date" id="hatt-date" onchange="loadHajiraAttendance()" />
+            </div>
+            <button class="btn-secondary" style="margin-top:18px" onclick="hattPrevDay()"><i class="ti ti-chevron-left"></i></button>
+            <button class="btn-secondary" style="margin-top:18px" onclick="hattNextDay()"><i class="ti ti-chevron-right"></i></button>
+            <button class="btn-save" style="margin-top:18px;max-width:160px" onclick="saveHajiraAttendance()"><i class="ti ti-device-floppy"></i> Save</button>
+          </div>
+        </div>
+
+        <!-- Attendance table — one row per worker -->
+        <div class="list-card" style="margin-bottom:16px">
+          <div class="list-header" id="hatt-header"><i class="ti ti-list"></i> Today's attendance</div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Worker</th><th>Rate/day</th><th>Status</th><th class="num">OT hrs</th><th class="num">OT rate/hr</th><th class="num">Allowance</th><th>Note</th></tr></thead>
+              <tbody id="hatt-tbody"></tbody>
+            </table>
+          </div>
+          <div id="hatt-summary" style="padding:10px 16px;font-size:13px;color:var(--text-2);border-top:1px solid var(--border)"></div>
+        </div>
+      </div>
+
+      <!-- ══ WORKERS TAB ══ -->
+      <div id="hajira-tab-workers" style="display:none">
+        <div class="entry-section" style="margin-bottom:18px">
+          <h3><i class="ti ti-plus" style="color:var(--ok)"></i> Add worker</h3>
+          <div class="product-form-grid">
+            <div class="form-row"><label>Name</label><input type="text" id="hw-name" placeholder="Worker name" /></div>
+            <div class="form-row"><label>Phone</label><input type="text" id="hw-phone" placeholder="Optional" /></div>
+            <div class="form-row"><label>Salary / day (Tk)</label><input type="number" id="hw-rate" placeholder="e.g. 500" min="0" /></div>
+            <div class="form-row"><label>Note</label><input type="text" id="hw-note" placeholder="Optional" /></div>
+          </div>
+          <button class="btn-save" onclick="addHajiraWorker()"><i class="ti ti-plus"></i> Add worker</button>
+        </div>
+        <div class="list-card">
+          <div class="list-header"><i class="ti ti-users"></i> All workers</div>
+          <div class="table-scroll">
+            <table><thead><tr><th>Name</th><th>Phone</th><th class="num">Rate/day</th><th>Note</th><th></th></tr></thead>
+            <tbody id="hw-tbody"></tbody></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ LEDGER TAB ══ -->
+      <div id="hajira-tab-ledger" style="display:none">
+        <!-- Worker cards grid -->
+        <div id="hledger-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-bottom:18px"></div>
+
+        <!-- Per-worker detail (slides in) -->
+        <div id="hledger-detail" style="display:none">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <button class="btn-secondary" onclick="closeHajiraLedgerDetail()"><i class="ti ti-arrow-left"></i> Back</button>
+            <h2 id="hledger-detail-title" style="margin:0;font-size:17px"></h2>
+          </div>
+
+          <!-- Summary cards -->
+          <div id="hledger-detail-summary" class="dash-summary-row" style="margin-bottom:16px"></div>
+
+          <!-- Date range filter -->
+          <div class="filter-bar" style="margin-bottom:14px">
+            <input type="date" id="hld-from" onchange="renderHajiraLedgerDetail()" />
+            <span class="filter-to">to</span>
+            <input type="date" id="hld-to" onchange="renderHajiraLedgerDetail()" />
+            <button class="btn-clear" onclick="document.getElementById('hld-from').value='';document.getElementById('hld-to').value='';renderHajiraLedgerDetail()">Clear</button>
+          </div>
+
+          <!-- Pay box -->
+          <div class="entry-section" style="margin-bottom:16px;background:var(--accent-soft);border:1px solid var(--accent)">
+            <h3 style="color:var(--accent)"><i class="ti ti-cash"></i> Record payment</h3>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+              <div class="form-row" style="margin:0;flex:1;min-width:120px"><label>Amount (Tk)</label><input type="number" id="hpay-amount" placeholder="0" min="0" /></div>
+              <div class="form-row" style="margin:0;flex:1;min-width:120px"><label>Date</label><input type="date" id="hpay-date" /></div>
+              <div class="form-row" style="margin:0;flex:2;min-width:160px"><label>Note</label><input type="text" id="hpay-note" placeholder="Optional" /></div>
+              <button class="btn-save" style="max-width:120px" onclick="recordHajiraPayment()"><i class="ti ti-check"></i> Paid</button>
+            </div>
+          </div>
+
+          <!-- Attendance history -->
+          <div class="list-card" style="margin-bottom:14px">
+            <div class="list-header"><i class="ti ti-calendar-check"></i> Attendance history</div>
+            <div class="table-scroll"><table><thead><tr><th>Date</th><th>Status</th><th class="num">Base</th><th class="num">OT</th><th class="num">Allowance</th><th class="num">Total</th><th>Note</th></tr></thead><tbody id="hld-att-tbody"></tbody></table></div>
+          </div>
+
+          <!-- Payment history -->
+          <div class="list-card">
+            <div class="list-header"><i class="ti ti-cash"></i> Payment history</div>
+            <div class="table-scroll"><table><thead><tr><th>Date</th><th class="num">Amount (Tk)</th><th>Note</th><th></th></tr></thead><tbody id="hld-pay-tbody"></tbody></table></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
   </div>
 </div>

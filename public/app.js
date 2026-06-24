@@ -204,6 +204,7 @@ function initApp() {
   (async function () {
     settings = await apiGet('/settings');
     updateTopbarBizName();
+    applyFeatureFlags();
     renderDashboard();
   })();
 }
@@ -246,6 +247,8 @@ const PAGE_RENDERERS = {
   saledetail: renderSaleDetailPage,
   salesreturns: renderSalesReturnsPage,
   exchanges: renderExchangesPage,
+  warranty: renderWarrantyPage,
+  hajira: renderHajiraPage,
   purchases: function () { setupPurchasePage(); renderPurchasePage(); },
   purchaselist: renderPurchaseListPage,
   purchasereturns: renderPurchaseReturnsPage,
@@ -267,6 +270,9 @@ const PAGE_RENDERERS = {
   staffreports: renderStaffReportsPage,
   staffdetail: renderStaffDetailPage,
 };
+
+// expose to toggleLang
+window.__pageRenderers = PAGE_RENDERERS;
 
 function navigateTo(page) {
   startLoad(); // immediate visual feedback
@@ -293,6 +299,7 @@ function navigateTo(page) {
   });
   document.getElementById('nav').classList.remove('open');
   if (PAGE_RENDERERS[page]) PAGE_RENDERERS[page]();
+  applyLang();
 }
 
 document.getElementById('nav').addEventListener('click', function (e) {
@@ -1908,6 +1915,10 @@ async function renderSettingsPage() {
   if (nameEl) nameEl.textContent = window.__currentUsername || 'User';
   if (roleEl) roleEl.textContent = currentRole === 'manager' ? 'Manager' : (currentIsAdmin ? 'Admin' : 'Sales Staff');
 
+  // Feature toggles
+  var fs = document.getElementById('feat-serial'); if (fs) fs.checked = !!(settings && settings.feature_serial_numbers);
+  var fw = document.getElementById('feat-warranty'); if (fw) fw.checked = !!(settings && settings.feature_warranty);
+  var fh = document.getElementById('feat-hajira'); if (fh) fh.checked = !!(settings && settings.feature_hajira);
   document.getElementById('pw-current').value = '';
   document.getElementById('pw-new').value = '';
   document.getElementById('pw-confirm').value = '';
@@ -1973,12 +1984,16 @@ async function saveSettings() {
     nameFontSize: Number(document.getElementById('set-name-size').value) || 14,
     priceFontSize: Number(document.getElementById('set-price-size').value) || 13,
     barcodeWidth: Number(document.getElementById('set-bc-width').value) || 2,
-    barcodeHeight: Number(document.getElementById('set-bc-height').value) || 56
+    barcodeHeight: Number(document.getElementById('set-bc-height').value) || 56,
+    feature_serial_numbers: !!(document.getElementById('feat-serial') && document.getElementById('feat-serial').checked),
+    feature_warranty: !!(document.getElementById('feat-warranty') && document.getElementById('feat-warranty').checked),
+    feature_hajira: !!(document.getElementById('feat-hajira') && document.getElementById('feat-hajira').checked)
   };
   const res = await apiPut('/settings', body);
   if (res && res.error) { alert(res.error); return; }
   settings = res;
   updateTopbarBizName();
+  applyFeatureFlags();
   toast('Settings saved');
 }
 
@@ -3084,9 +3099,11 @@ async function addProduct() {
   var catName = catEl && catEl.value ? catEl.options[catEl.selectedIndex].text : null;
   var brandName = brandEl && brandEl.value ? brandEl.options[brandEl.selectedIndex].text : null;
   if (!name) return alert('Please enter a product name.');
-  var res = await apiPost('/products', { name: name, quantity: qty, purchase_price: purchasePrice, sell_price: sellPrice, unit: unit, barcode: barcode, category_id: catId, brand_id: brandId, category_name: catName, brand_name: brandName });
+  var warrantyMonths = document.getElementById('prod-warranty-months') ? (parseFloat(document.getElementById('prod-warranty-months').value) || 0) : 0;
+  var serials = document.getElementById('prod-serials') ? document.getElementById('prod-serials').value.trim() : '';
+  var res = await apiPost('/products', { name: name, quantity: qty, purchase_price: purchasePrice, sell_price: sellPrice, unit: unit, barcode: barcode, category_id: catId, brand_id: brandId, category_name: catName, brand_name: brandName, warranty_months: warrantyMonths, serials: serials });
   if (res && res.error) { alert(res.error); return; }
-  ['prod-name', 'prod-barcode'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
+  ['prod-name', 'prod-barcode', 'prod-serials', 'prod-warranty-months'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('prod-qty').value = '0';
   document.getElementById('prod-purchase').value = '';
   document.getElementById('prod-sell').value = '';
@@ -4133,3 +4150,1410 @@ document.addEventListener('keydown', function (e) {
   const genericModal = document.getElementById('genericEditModal');
   if (genericModal) closeEditModal();
 });
+
+// ═══════════════════════════════════════════════════════════
+// FEATURE FLAGS
+// ═══════════════════════════════════════════════════════════
+function applyFeatureFlags() {
+  var hasSerial = !!(settings && settings.feature_serial_numbers);
+  var hasWarranty = !!(settings && settings.feature_warranty);
+
+  // Warranty nav button
+  var navW = document.getElementById('nav-warranty');
+  if (navW) navW.style.display = (hasSerial || hasWarranty) ? '' : 'none';
+
+  // Serial fields on product form
+  var sr = document.getElementById('prod-serial-row');
+  if (sr) sr.style.display = hasSerial ? '' : 'none';
+
+  // Warranty field on product form
+  var wr = document.getElementById('prod-warranty-row');
+  if (wr) wr.style.display = hasWarranty ? '' : 'none';
+
+  // Serial tab on warranty page (show even if only serial is on)
+  var stab = document.getElementById('wtab-serials');
+  if (stab) stab.style.display = hasSerial ? '' : 'none';
+
+  // Warranty tabs (show only if warranty is on)
+  var ct = document.getElementById('wtab-claims');
+  var et = document.getElementById('wtab-wexchanges');
+  if (ct) ct.style.display = hasWarranty ? '' : 'none';
+  if (et) et.style.display = hasWarranty ? '' : 'none';
+}
+
+function onFeatureToggle() {
+  // Preview the nav change instantly without saving
+  var hasSerial = !!(document.getElementById('feat-serial') && document.getElementById('feat-serial').checked);
+  var hasWarranty = !!(document.getElementById('feat-warranty') && document.getElementById('feat-warranty').checked);
+  var hasHajira = !!(document.getElementById('feat-hajira') && document.getElementById('feat-hajira').checked);
+  var navW = document.getElementById('nav-warranty');
+  if (navW) navW.style.display = (hasSerial || hasWarranty) ? '' : 'none';
+  var navH = document.getElementById('nav-hajira');
+  if (navH) navH.style.display = hasHajira ? '' : 'none';
+}
+
+// ═══════════════════════════════════════════════════════════
+// WARRANTY PAGE
+// ═══════════════════════════════════════════════════════════
+async function renderWarrantyPage() {
+  // Set today's date defaults
+  var today = new Date().toISOString().slice(0, 10);
+  var cd = document.getElementById('wc-claim-date'); if (cd && !cd.value) cd.value = today;
+  var wd = document.getElementById('we-date'); if (wd && !wd.value) wd.value = today;
+
+  // Populate product dropdown for serial tab
+  var snProd = document.getElementById('sn-product');
+  if (snProd && snProd.options.length <= 1) {
+    var prods = await apiGet('/products');
+    (prods || []).forEach(function (p) {
+      var o = document.createElement('option'); o.value = p.id; o.textContent = p.name; snProd.appendChild(o);
+    });
+  }
+
+  switchWarrantyTab('claims');
+  renderWarrantyClaims();
+  renderWarrantyExchanges();
+  renderSerialList();
+}
+
+function switchWarrantyTab(tab) {
+  ['claims', 'exchanges', 'serials'].forEach(function (t) {
+    var el = document.getElementById('warranty-tab-' + t);
+    var btn = document.getElementById('wtab-' + (t === 'exchanges' ? 'wexchanges' : t));
+    if (el) el.style.display = t === tab ? '' : 'none';
+    if (btn) btn.classList.toggle('active', t === tab);
+  });
+}
+
+// ── Warranty Claims — Bill-search driven ──
+
+async function searchWarrantyBill() {
+  var query = (document.getElementById('wc-bill-search').value || '').toLowerCase().trim();
+  var resultsEl = document.getElementById('wc-bill-results');
+  if (!resultsEl) return;
+  if (query.length < 1) { resultsEl.innerHTML = ''; return; }
+  var rows = await apiGet('/sales');
+  var bills = groupSalesIntoBills(rows);
+  var matches = bills.filter(function (b) {
+    return (b.bill_no ? String(b.bill_no) : '').includes(query) ||
+      (b.customer_name || '').toLowerCase().includes(query) ||
+      (b.customer_phone || '').toLowerCase().includes(query);
+  }).slice(0, 8);
+  if (!matches.length) { resultsEl.innerHTML = '<div class="empty-state" style="padding:12px">No bills found.</div>'; return; }
+  resultsEl.innerHTML = matches.map(function (b) {
+    var safeBill = JSON.stringify({ billId: b.bill_id, billNo: b.bill_no, customerId: b.customer_id, customerName: b.customer_name, customerPhone: b.customer_phone, date: b.date }).replace(/"/g, '&quot;');
+    var safeItems = JSON.stringify(b.items).replace(/"/g, '&quot;');
+    return '<div class="exc-bill-result-item" onclick="loadBillIntoWarrantyPage(' + safeBill + ',' + safeItems + ')">' +
+      '<strong>Bill #' + (b.bill_no || '—') + '</strong> · ' + b.date +
+      (b.customer_name ? ' · ' + esc(b.customer_name) : ' · Walk-in') +
+      (b.customer_phone ? ' · ' + esc(b.customer_phone) : '') +
+      ' · ' + fmt(b.total) + ' (' + b.items.length + ' item' + (b.items.length > 1 ? 's' : '') + ')' +
+      '</div>';
+  }).join('');
+}
+
+function loadBillIntoWarrantyPage(billData, items) {
+  window.__wcBillData = billData;
+  window.__wcBillItems = items;
+  // Hide claim form, reset search, show bill panel
+  var panel = document.getElementById('wc-bill-panel');
+  var claimForm = document.getElementById('wc-claim-form');
+  if (panel) panel.style.display = 'block';
+  if (claimForm) claimForm.style.display = 'none';
+  var header = document.getElementById('wc-bill-header');
+  if (header) header.innerHTML = '<i class="ti ti-receipt"></i> Bill #' + (billData.billNo || '—') + (billData.customerName ? ' · ' + esc(billData.customerName) : '') + (billData.customerPhone ? ' · ' + esc(billData.customerPhone) : '');
+  var resultsEl = document.getElementById('wc-bill-results');
+  if (resultsEl) resultsEl.innerHTML = '';
+  var searchEl = document.getElementById('wc-bill-search');
+  if (searchEl) searchEl.value = 'Bill #' + (billData.billNo || '—') + (billData.customerName ? ' · ' + billData.customerName : '');
+  renderWarrantyBillItems(items, billData);
+}
+
+function warrantyExpiryDate(saleDate, warrantyMonths) {
+  if (!saleDate || !warrantyMonths) return null;
+  var d = new Date(saleDate);
+  d.setMonth(d.getMonth() + Number(warrantyMonths));
+  return d.toISOString().slice(0, 10);
+}
+
+function warrantyStatus(saleDate, warrantyMonths) {
+  if (!warrantyMonths) return null; // no warranty
+  var expiry = warrantyExpiryDate(saleDate, warrantyMonths);
+  if (!expiry) return null;
+  var today = new Date().toISOString().slice(0, 10);
+  return expiry >= today ? { valid: true, expiry: expiry } : { valid: false, expiry: expiry };
+}
+
+function renderWarrantyBillItems(items, billData) {
+  var tb = document.getElementById('wc-bill-items');
+  if (!tb) return;
+  tb.innerHTML = (items || []).map(function (it, idx) {
+    var wMonths = Number(it.warranty_months) || 0;
+    var saleDate = billData.date || it.date || '';
+    var ws = warrantyStatus(saleDate, wMonths);
+    var warrantyCell, claimBtn;
+    if (!ws) {
+      warrantyCell = '<span style="color:var(--text-3)">—</span>';
+      claimBtn = '<span style="color:var(--text-3);font-size:12px">No warranty</span>';
+    } else if (ws.valid) {
+      warrantyCell = '<span style="color:var(--ok);font-weight:600">' + wMonths + ' mo</span>';
+      claimBtn = '<button class="btn-secondary" style="font-size:12px;padding:5px 10px;color:var(--accent);border-color:var(--accent)" onclick="openWarrantyClaimForm(' + idx + ')"><i class="ti ti-shield-check"></i> Claim warranty</button>';
+    } else {
+      warrantyCell = '<span style="color:var(--danger);font-weight:600">' + wMonths + ' mo</span>';
+      claimBtn = '<span style="color:var(--danger);font-size:12px">Expired ' + ws.expiry + '</span>';
+    }
+    var serial = it.serial_number || '—';
+    return '<tr>' +
+      '<td style="font-weight:600">' + esc(it.desc || it.description || '') + '</td>' +
+      '<td style="font-size:12px;color:var(--text-2)">' + esc(serial) + '</td>' +
+      '<td class="num">' + warrantyCell + '</td>' +
+      '<td class="num">' + esc(saleDate) + '</td>' +
+      '<td class="num" style="font-size:12px">' + (ws ? ws.expiry : '—') + '</td>' +
+      '<td>' + claimBtn + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+function openWarrantyClaimForm(itemIdx) {
+  var item = (window.__wcBillItems || [])[itemIdx];
+  var bill = window.__wcBillData || {};
+  if (!item) return;
+  var wMonths = Number(item.warranty_months) || 0;
+  var saleDate = bill.date || item.date || '';
+  // Fill form
+  var setVal = function(id, v) { var el = document.getElementById(id); if (el) el.value = v || ''; };
+  setVal('wc-product',         item.desc || item.description || '');
+  setVal('wc-serial',          item.serial_number || '');
+  setVal('wc-customer',        bill.customerName || item.customer_name || '');
+  setVal('wc-phone',           bill.customerPhone || item.customer_phone || '');
+  setVal('wc-sale-date',       saleDate);
+  setVal('wc-warranty-months', wMonths);
+  setVal('wc-claim-date',      new Date().toISOString().slice(0, 10));
+  setVal('wc-issue',           '');
+  setVal('wc-sale-id',         item.id || '');
+  setVal('wc-serial-id',       item.serial_id || '');
+  // Show form
+  var cf = document.getElementById('wc-claim-form');
+  if (cf) { cf.style.display = 'block'; cf.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+}
+
+function cancelWarrantyClaim() {
+  var cf = document.getElementById('wc-claim-form');
+  if (cf) cf.style.display = 'none';
+}
+
+async function submitWarrantyClaim() {
+  var claimDate = (document.getElementById('wc-claim-date') ? document.getElementById('wc-claim-date').value : '');
+  var issue = (document.getElementById('wc-issue') ? document.getElementById('wc-issue').value.trim() : '');
+  if (!claimDate) return alert('Please enter the claim date.');
+  if (!issue) return alert('Please describe the issue.');
+  var body = {
+    serial_number: document.getElementById('wc-serial').value.trim() || '—',
+    product_name:  document.getElementById('wc-product').value.trim(),
+    customer_name: document.getElementById('wc-customer').value.trim(),
+    customer_phone: document.getElementById('wc-phone').value.trim(),
+    sale_date:     document.getElementById('wc-sale-date').value,
+    warranty_months: parseFloat(document.getElementById('wc-warranty-months').value) || 0,
+    claim_date:    claimDate,
+    issue:         issue,
+    serial_id:     document.getElementById('wc-serial-id').value || null,
+    sale_id:       document.getElementById('wc-sale-id').value || null
+  };
+  var res = await apiPost('/warranty-claims', body);
+  if (res && res.error) return alert(res.error);
+  // Reset
+  ['wc-serial','wc-issue','wc-serial-id','wc-sale-id'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('wc-claim-form').style.display = 'none';
+  toast('Warranty claim logged', 'ok');
+  renderWarrantyClaims();
+}
+
+async function renderWarrantyClaims() {
+  var search = (document.getElementById('wclist-search') ? document.getElementById('wclist-search').value : '').toLowerCase();
+  var statusF = document.getElementById('wclist-status') ? document.getElementById('wclist-status').value : '';
+  var rows = await apiGet('/warranty-claims');
+  if (!rows || rows.error) rows = [];
+  if (search) rows = rows.filter(function (r) { return (r.serial_number||'').toLowerCase().includes(search) || (r.customer_name||'').toLowerCase().includes(search) || (r.product_name||'').toLowerCase().includes(search); });
+  if (statusF) rows = rows.filter(function (r) { return r.status === statusF; });
+  var tb = document.getElementById('wc-tbody');
+  if (!tb) return;
+  if (!rows.length) { tb.innerHTML = '<tr><td colspan="7" class="empty-state">No claims yet.</td></tr>'; return; }
+  var isManager = currentRole === 'manager';
+  tb.innerHTML = rows.map(function (r) {
+    var statusColor = r.status === 'open' ? 'var(--danger)' : r.status === 'exchanged' ? 'var(--ok)' : 'var(--text-2)';
+    var actionBtn = '';
+    if (isManager && r.status === 'open') {
+      actionBtn =
+        '<button class="btn-secondary" style="font-size:11px;padding:4px 8px" onclick="resolveWarrantyClaim(' + r.id + ')">Mark resolved</button>' +
+        '<button class="btn-secondary" style="font-size:11px;padding:4px 8px;margin-left:4px" onclick="startWarrantyExchangeFromClaim(' + JSON.stringify(r).replace(/"/g,'&quot;') + ')">Exchange</button>';
+    }
+    return '<tr>' +
+      '<td>' + esc(r.claim_date) + '</td>' +
+      '<td style="font-weight:600">' + esc(r.serial_number||'—') + '</td>' +
+      '<td>' + esc(r.product_name||'—') + '</td>' +
+      '<td>' + esc(r.customer_name||'—') + '</td>' +
+      '<td>' + esc(r.issue||'—') + '</td>' +
+      '<td style="color:' + statusColor + ';font-weight:600">' + r.status + '</td>' +
+      '<td style="white-space:nowrap">' + actionBtn + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+async function resolveWarrantyClaim(id) {
+  if (!confirm('Mark this claim as resolved?')) return;
+  await apiCall('PATCH', '/warranty-claims', { id: id, status: 'resolved' });
+  toast('Claim marked resolved', 'ok');
+  renderWarrantyClaims();
+}
+
+function startWarrantyExchangeFromClaim(r) {
+  switchWarrantyTab('exchanges');
+  var setVal = function(id, v) { var el = document.getElementById(id); if (el) el.value = v || ''; };
+  setVal('we-old-serial', r.serial_number);
+  setVal('we-product',    r.product_name);
+  setVal('we-customer',   r.customer_name);
+  setVal('we-claim-id',   r.id);
+  setVal('we-serial-id',  r.serial_id);
+}
+
+// ── Warranty Exchanges ──
+async function lookupOldSerial() {
+  var serial = (document.getElementById('we-old-serial') ? document.getElementById('we-old-serial').value.trim() : '');
+  if (!serial) return;
+  var snRows = await apiGet('/serial-numbers');
+  var found = (snRows || []).find(function (s) { return s.serial === serial; });
+  if (found) {
+    var wp = document.getElementById('we-product'); if (wp && !wp.value) wp.value = found.product_name || '';
+    var si = document.getElementById('we-serial-id'); if (si) si.value = found.id;
+    var pi = document.getElementById('we-product-id'); if (pi) pi.value = found.product_id || '';
+  }
+}
+
+async function saveWarrantyExchange() {
+  var oldSerial = (document.getElementById('we-old-serial').value || '').trim();
+  var newSerial = (document.getElementById('we-new-serial').value || '').trim();
+  var date = document.getElementById('we-date').value;
+  if (!newSerial) return alert('Please enter the new serial number.');
+  if (!date) return alert('Please enter the exchange date.');
+  var body = {
+    old_serial: oldSerial,
+    new_serial: newSerial,
+    old_product_name: document.getElementById('we-product').value.trim(),
+    new_product_name: document.getElementById('we-product').value.trim(),
+    customer_name: document.getElementById('we-customer').value.trim(),
+    exchange_date: date,
+    note: document.getElementById('we-note').value.trim(),
+    serial_id: document.getElementById('we-serial-id').value || null,
+    claim_id: document.getElementById('we-claim-id').value || null,
+    product_id: document.getElementById('we-product-id').value || null
+  };
+  var res = await apiPost('/warranty-exchanges', body);
+  if (res && res.error) return alert(res.error);
+  ['we-old-serial','we-new-serial','we-product','we-customer','we-note','we-serial-id','we-claim-id','we-product-id'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  toast('Warranty exchange saved', 'ok');
+  renderWarrantyExchanges();
+  renderWarrantyClaims();
+  renderSerialList();
+}
+
+async function renderWarrantyExchanges() {
+  var rows = await apiGet('/warranty-exchanges');
+  var tb = document.getElementById('we-tbody');
+  if (!tb) return;
+  if (!rows || rows.error || !rows.length) { tb.innerHTML = '<tr><td colspan="6" class="empty-state">No warranty exchanges yet.</td></tr>'; return; }
+  tb.innerHTML = rows.map(function (r) {
+    return '<tr><td>' + esc(r.exchange_date) + '</td><td style="font-weight:600;color:var(--danger)">' + esc(r.old_serial||'—') + '</td><td style="font-weight:600;color:var(--ok)">' + esc(r.new_serial) + '</td><td>' + esc(r.old_product_name||'—') + '</td><td>' + esc(r.customer_name||'—') + '</td><td>' + esc(r.note||'') + '</td></tr>';
+  }).join('');
+}
+
+// ── Serial Numbers ──
+async function addSerialNumber() {
+  var serial = (document.getElementById('sn-serial').value || '').trim();
+  var prodEl = document.getElementById('sn-product');
+  var productId = prodEl ? prodEl.value : '';
+  var productName = prodEl && prodEl.value ? prodEl.options[prodEl.selectedIndex].text : '';
+  if (!serial) return alert('Please enter a serial number.');
+  var res = await apiPost('/serial-numbers', { serial: serial, product_id: productId || null, product_name: productName || null });
+  if (res && res.error) return alert(res.error);
+  var sn = document.getElementById('sn-serial'); if (sn) sn.value = '';
+  toast('Serial registered', 'ok');
+  renderSerialList();
+}
+
+async function renderSerialList() {
+  var search = (document.getElementById('snlist-search') ? document.getElementById('snlist-search').value : '').toLowerCase();
+  var statusF = document.getElementById('snlist-status') ? document.getElementById('snlist-status').value : '';
+  var rows = await apiGet('/serial-numbers');
+  if (!rows || rows.error) rows = [];
+  if (search) rows = rows.filter(function (r) { return (r.serial||'').toLowerCase().includes(search) || (r.product_name||'').toLowerCase().includes(search); });
+  if (statusF) rows = rows.filter(function (r) { return r.status === statusF; });
+  var tb = document.getElementById('sn-tbody');
+  if (!tb) return;
+  if (!rows.length) { tb.innerHTML = '<tr><td colspan="5" class="empty-state">No serial numbers registered yet.</td></tr>'; return; }
+  var statusColors = { in_stock: 'var(--ok)', sold: 'var(--info)', exchanged: 'var(--accent)', returned: 'var(--warning)' };
+  tb.innerHTML = rows.map(function (r) {
+    return '<tr><td style="font-weight:600">' + esc(r.serial) + '</td><td>' + esc(r.product_name||'—') + '</td><td style="color:' + (statusColors[r.status]||'var(--text-2)') + ';font-weight:600">' + (r.status||'—') + '</td><td>' + esc(r.sold_to||'—') + '</td><td>' + esc(r.sale_date||'—') + '</td></tr>';
+  }).join('');
+}
+
+// Helper for PATCH calls
+async function apiCall(method, path, body) {
+  var res = await fetch('/api' + path, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  return res.json();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// HAJIRA — Daily Wage Attendance System
+// ═══════════════════════════════════════════════════════════════════════
+
+// ── cached data ──
+var __hajiraWorkers = [];
+var __hajiraAttRows = {};   // { "workerId_date": row }
+var __hajiraDetailId = null;
+
+// ── page entry ──
+async function renderHajiraPage() {
+  var today = new Date().toISOString().slice(0, 10);
+  var d = document.getElementById('hatt-date');
+  if (d && !d.value) d.value = today;
+  var pd = document.getElementById('hpay-date');
+  if (pd && !pd.value) pd.value = today;
+  switchHajiraTab('attendance');
+  __hajiraWorkers = await apiGet('/hajira-workers') || [];
+  loadHajiraAttendance();
+  renderHajiraWorkerList();
+}
+
+function switchHajiraTab(tab) {
+  ['attendance','workers','ledger'].forEach(function(t) {
+    var el = document.getElementById('hajira-tab-' + t);
+    var btn = document.getElementById('htab-' + t);
+    if (el) el.style.display = t === tab ? '' : 'none';
+    if (btn) btn.classList.toggle('active', t === tab);
+  });
+  if (tab === 'ledger') renderHajiraLedgerGrid();
+}
+
+// ── helpers ──
+function hajiraEarned(worker, att) {
+  // base pay per attendance row
+  if (!att || att.status === 'absent') return 0;
+  var base = att.status === 'half' ? Number(worker.daily_rate) / 2 : Number(worker.daily_rate);
+  // overtime: ot_hours × ot_rate (if ot_rate=0, default to daily_rate/8)
+  var otRate = Number(att.ot_rate) || (Number(worker.daily_rate) / 8);
+  var ot = Number(att.ot_hours || 0) * otRate;
+  var allowance = Number(att.allowance || 0);
+  return base + ot + allowance;
+}
+
+function hajiraStatusLabel(s) {
+  return s === 'present' ? 'Present' : s === 'half' ? 'Half day' : 'Absent';
+}
+function hajiraStatusColor(s) {
+  return s === 'present' ? 'var(--ok)' : s === 'half' ? 'var(--warn,#f59e0b)' : 'var(--danger)';
+}
+
+// ── ATTENDANCE TAB ──
+function hattPrevDay() {
+  var d = document.getElementById('hatt-date');
+  if (!d || !d.value) return;
+  var dt = new Date(d.value); dt.setDate(dt.getDate() - 1);
+  d.value = dt.toISOString().slice(0, 10);
+  loadHajiraAttendance();
+}
+function hattNextDay() {
+  var d = document.getElementById('hatt-date');
+  if (!d || !d.value) return;
+  var dt = new Date(d.value); dt.setDate(dt.getDate() + 1);
+  d.value = dt.toISOString().slice(0, 10);
+  loadHajiraAttendance();
+}
+
+async function loadHajiraAttendance() {
+  var date = document.getElementById('hatt-date') ? document.getElementById('hatt-date').value : new Date().toISOString().slice(0,10);
+  var header = document.getElementById('hatt-header');
+  if (header) header.innerHTML = '<i class="ti ti-list"></i> Attendance — ' + date;
+
+  if (!__hajiraWorkers.length) __hajiraWorkers = await apiGet('/hajira-workers') || [];
+  var active = __hajiraWorkers.filter(function(w){ return w.active !== false; });
+
+  // Load existing records for this date
+  var existing = await apiGet('/hajira-attendance?date=' + date) || [];
+  __hajiraAttRows = {};
+  existing.forEach(function(r){ __hajiraAttRows[r.worker_id] = r; });
+
+  var tb = document.getElementById('hatt-tbody');
+  if (!tb) return;
+  if (!active.length) {
+    tb.innerHTML = '<tr><td colspan="7" class="empty-state">No workers yet. Add workers in the Workers tab.</td></tr>';
+    return;
+  }
+
+  tb.innerHTML = active.map(function(w) {
+    var ex = __hajiraAttRows[w.id] || {};
+    var status = ex.status || 'present';
+    var otHours = ex.ot_hours || '';
+    var otRate = ex.ot_rate || '';
+    var allowance = ex.allowance || '';
+    var allowNote = ex.allowance_note || '';
+    var note = ex.note || '';
+    var sid = 'hatt-status-' + w.id;
+    var otHid = 'hatt-oth-' + w.id;
+    var otRid = 'hatt-otr-' + w.id;
+    var alid = 'hatt-al-' + w.id;
+    var alnid = 'hatt-aln-' + w.id;
+    var nid = 'hatt-note-' + w.id;
+    return '<tr>' +
+      '<td style="font-weight:600">' + esc(w.name) + '<br><span style="font-size:11px;color:var(--text-2)">' + esc(w.phone || '') + '</span></td>' +
+      '<td class="num">Tk ' + fmt(w.daily_rate) + '</td>' +
+      '<td><select id="' + sid + '" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font-size:13px" onchange="hattStatusChange(this,' + w.id + ')">' +
+        '<option value="present"' + (status==='present'?' selected':'') + '>✅ Present</option>' +
+        '<option value="half"' + (status==='half'?' selected':'') + '>🌓 Half day</option>' +
+        '<option value="absent"' + (status==='absent'?' selected':'') + '>❌ Absent</option>' +
+      '</select></td>' +
+      '<td class="num"><input type="number" id="' + otHid + '" value="' + otHours + '" placeholder="0" min="0" step="0.5" style="width:64px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);text-align:center" title="Overtime hours" /></td>' +
+      '<td class="num"><input type="number" id="' + otRid + '" value="' + otRate + '" placeholder="auto" min="0" style="width:72px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);text-align:center" title="OT rate/hr (blank = salary÷8)" /></td>' +
+      '<td class="num"><div style="display:flex;gap:4px;align-items:center"><input type="number" id="' + alid + '" value="' + allowance + '" placeholder="0" min="0" style="width:68px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);text-align:center" title="Allowance (Tk)" />' +
+      '<input type="text" id="' + alnid + '" value="' + esc(allowNote) + '" placeholder="label" style="width:80px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font-size:11px" title="Allowance label e.g. Transport" /></div></td>' +
+      '<td><input type="text" id="' + nid + '" value="' + esc(note) + '" placeholder="Note" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);width:120px;font-size:12px" /></td>' +
+      '</tr>';
+  }).join('');
+
+  updateHattSummary(active, date);
+}
+
+function hattStatusChange(sel, workerId) {
+  // Visual feedback only — actual save on Save button
+}
+
+function updateHattSummary(active, date) {
+  var sumEl = document.getElementById('hatt-summary');
+  if (!sumEl) return;
+  var present=0, half=0, absent=0, totalEarned=0;
+  active.forEach(function(w){
+    var ex = __hajiraAttRows[w.id];
+    var st = ex ? ex.status : 'present'; // default present until saved
+    if (st === 'present') present++;
+    else if (st === 'half') half++;
+    else absent++;
+    if (ex) totalEarned += hajiraEarned(w, ex);
+  });
+  sumEl.innerHTML = '✅ Present: <strong>' + present + '</strong> &nbsp;|&nbsp; 🌓 Half: <strong>' + half + '</strong> &nbsp;|&nbsp; ❌ Absent: <strong>' + absent + '</strong> &nbsp;|&nbsp; 💰 Total earned today: <strong>Tk ' + fmt(totalEarned) + '</strong>';
+}
+
+async function saveHajiraAttendance() {
+  var date = document.getElementById('hatt-date') ? document.getElementById('hatt-date').value : '';
+  if (!date) return alert('Please select a date.');
+  var active = __hajiraWorkers.filter(function(w){ return w.active !== false; });
+  if (!active.length) return alert('No workers to save.');
+
+  var errors = [];
+  for (var i = 0; i < active.length; i++) {
+    var w = active[i];
+    var status = (document.getElementById('hatt-status-' + w.id) || {}).value || 'present';
+    var otHours = parseFloat((document.getElementById('hatt-oth-' + w.id) || {}).value) || 0;
+    var otRate = parseFloat((document.getElementById('hatt-otr-' + w.id) || {}).value) || 0;
+    var allowance = parseFloat((document.getElementById('hatt-al-' + w.id) || {}).value) || 0;
+    var allowanceNote = ((document.getElementById('hatt-aln-' + w.id) || {}).value || '').trim();
+    var note = ((document.getElementById('hatt-note-' + w.id) || {}).value || '').trim();
+    var res = await apiPost('/hajira-attendance', { worker_id: w.id, date: date, status: status, ot_hours: otHours, ot_rate: otRate, allowance: allowance, allowance_note: allowanceNote, note: note });
+    if (res && res.error) errors.push(w.name + ': ' + res.error);
+  }
+
+  if (errors.length) return alert('Some entries failed:\n' + errors.join('\n'));
+  toast('Attendance saved for ' + date, 'ok');
+  // Reload to reflect saved state
+  var existing = await apiGet('/hajira-attendance?date=' + date) || [];
+  __hajiraAttRows = {};
+  existing.forEach(function(r){ __hajiraAttRows[r.worker_id] = r; });
+  updateHattSummary(active, date);
+}
+
+// ── WORKERS TAB ──
+async function addHajiraWorker() {
+  var name = (document.getElementById('hw-name').value || '').trim();
+  var phone = (document.getElementById('hw-phone').value || '').trim();
+  var rate = parseFloat(document.getElementById('hw-rate').value) || 0;
+  var note = (document.getElementById('hw-note').value || '').trim();
+  if (!name) return alert('Please enter worker name.');
+  if (!rate) return alert('Please enter daily rate.');
+  var res = await apiPost('/hajira-workers', { name: name, phone: phone, daily_rate: rate, note: note });
+  if (res && res.error) return alert(res.error);
+  ['hw-name','hw-phone','hw-rate','hw-note'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  __hajiraWorkers = await apiGet('/hajira-workers') || [];
+  renderHajiraWorkerList();
+  toast(name + ' added', 'ok');
+}
+
+function renderHajiraWorkerList() {
+  var tb = document.getElementById('hw-tbody');
+  if (!tb) return;
+  var active = __hajiraWorkers.filter(function(w){ return w.active !== false; });
+  if (!active.length) { tb.innerHTML = '<tr><td colspan="5" class="empty-state">No workers yet.</td></tr>'; return; }
+  tb.innerHTML = active.map(function(w) {
+    return '<tr>' +
+      '<td style="font-weight:600">' + esc(w.name) + '</td>' +
+      '<td>' + esc(w.phone || '—') + '</td>' +
+      '<td class="num">Tk ' + fmt(w.daily_rate) + '</td>' +
+      '<td style="font-size:12px;color:var(--text-2)">' + esc(w.note || '') + '</td>' +
+      '<td><button class="del-btn" onclick="removeHajiraWorker(' + w.id + ',\'' + esc(w.name) + '\')" title="Remove"><i class="ti ti-trash"></i></button></td>' +
+      '</tr>';
+  }).join('');
+}
+
+async function removeHajiraWorker(id, name) {
+  if (!confirm('Remove ' + name + '? Their attendance history will be kept.')) return;
+  var res = await apiCall('DELETE', '/hajira-workers', { id: id });
+  if (res && res.error) return alert(res.error);
+  __hajiraWorkers = await apiGet('/hajira-workers') || [];
+  renderHajiraWorkerList();
+  toast(name + ' removed', 'ok');
+}
+
+// ── LEDGER TAB ──
+async function renderHajiraLedgerGrid() {
+  var grid = document.getElementById('hledger-grid');
+  var detail = document.getElementById('hledger-detail');
+  if (!grid) return;
+  if (detail) detail.style.display = 'none';
+  grid.style.display = 'grid';
+  grid.innerHTML = '<div style="padding:20px;color:var(--text-2)">Loading...</div>';
+
+  if (!__hajiraWorkers.length) __hajiraWorkers = await apiGet('/hajira-workers') || [];
+  var active = __hajiraWorkers.filter(function(w){ return w.active !== false; });
+  if (!active.length) { grid.innerHTML = '<div class="empty-state" style="padding:30px">No workers yet.</div>'; return; }
+
+  var allAtt = await apiGet('/hajira-attendance') || [];
+  var allPay = await apiGet('/hajira-payments') || [];
+
+  grid.innerHTML = active.map(function(w) {
+    var wAtt = allAtt.filter(function(r){ return r.worker_id === w.id; });
+    var wPay = allPay.filter(function(r){ return r.worker_id === w.id; });
+    var present = wAtt.filter(function(r){ return r.status === 'present'; }).length;
+    var half    = wAtt.filter(function(r){ return r.status === 'half'; }).length;
+    var absent  = wAtt.filter(function(r){ return r.status === 'absent'; }).length;
+    var totalEarned = wAtt.reduce(function(t,r){ return t + hajiraEarned(w,r); }, 0);
+    var totalPaid   = wPay.reduce(function(t,r){ return t + Number(r.amount); }, 0);
+    var due = totalEarned - totalPaid;
+    var dueColor = due > 0 ? 'var(--danger)' : due < 0 ? 'var(--ok)' : 'var(--text-2)';
+    var dueLabel = due > 0 ? 'Due' : due < 0 ? 'Advance' : 'Clear';
+    return '<div class="detail-card" style="cursor:pointer" onclick="openHajiraLedgerDetail(' + w.id + ')">' +
+      '<div class="detail-card-header"><i class="ti ti-user"></i> ' + esc(w.name) +
+        (w.phone ? '<span style="font-size:11px;font-weight:400;color:var(--text-2);margin-left:8px">' + esc(w.phone) + '</span>' : '') +
+        '<span style="font-size:11px;font-weight:400;color:var(--text-2);margin-left:8px">Tk ' + fmt(w.daily_rate) + '/day</span>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0">' +
+        '<div style="padding:10px 14px;border-right:1px solid var(--border)">' +
+          '<div style="font-size:11px;color:var(--text-2)">Attendance</div>' +
+          '<div style="font-weight:700;font-size:15px">' + wAtt.length + ' days</div>' +
+          '<div style="font-size:11px;color:var(--text-2)">✅' + present + ' 🌓' + half + ' ❌' + absent + '</div>' +
+        '</div>' +
+        '<div style="padding:10px 14px;border-right:1px solid var(--border)">' +
+          '<div style="font-size:11px;color:var(--text-2)">Total earned</div>' +
+          '<div style="font-weight:700;font-size:15px;color:var(--ok)">Tk ' + fmt(totalEarned) + '</div>' +
+          '<div style="font-size:11px;color:var(--text-2)">Paid: Tk ' + fmt(totalPaid) + '</div>' +
+        '</div>' +
+        '<div style="padding:10px 14px">' +
+          '<div style="font-size:11px;color:var(--text-2)">' + dueLabel + '</div>' +
+          '<div style="font-weight:700;font-size:18px;color:' + dueColor + '">Tk ' + fmt(Math.abs(due)) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="padding:8px 14px;border-top:1px solid var(--border);font-size:12px;color:var(--accent)"><i class="ti ti-arrow-right"></i> View ledger</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function openHajiraLedgerDetail(workerId) {
+  __hajiraDetailId = workerId;
+  var grid = document.getElementById('hledger-grid');
+  var detail = document.getElementById('hledger-detail');
+  if (grid) grid.style.display = 'none';
+  if (detail) detail.style.display = 'block';
+  var today = new Date().toISOString().slice(0, 10);
+  var pd = document.getElementById('hpay-date'); if (pd && !pd.value) pd.value = today;
+  renderHajiraLedgerDetail();
+}
+
+function closeHajiraLedgerDetail() {
+  __hajiraDetailId = null;
+  var grid = document.getElementById('hledger-grid');
+  var detail = document.getElementById('hledger-detail');
+  if (grid) grid.style.display = 'grid';
+  if (detail) detail.style.display = 'none';
+  renderHajiraLedgerGrid();
+}
+
+async function renderHajiraLedgerDetail() {
+  var workerId = __hajiraDetailId;
+  if (!workerId) return;
+  var worker = __hajiraWorkers.find(function(w){ return w.id === workerId; });
+  if (!worker) return;
+
+  var titleEl = document.getElementById('hledger-detail-title');
+  if (titleEl) titleEl.innerHTML = '<i class="ti ti-user"></i> ' + esc(worker.name) +
+    '<span style="font-size:13px;font-weight:400;color:var(--text-2);margin-left:10px">Tk ' + fmt(worker.daily_rate) + '/day</span>' +
+    (worker.phone ? '<span style="font-size:12px;font-weight:400;color:var(--text-2);margin-left:8px">· ' + esc(worker.phone) + '</span>' : '');
+
+  var from = document.getElementById('hld-from') ? document.getElementById('hld-from').value : '';
+  var to   = document.getElementById('hld-to')   ? document.getElementById('hld-to').value   : '';
+  var inRange = function(d){ return (!from || d >= from) && (!to || d <= to); };
+
+  var allAtt = await apiGet('/hajira-attendance?worker_id=' + workerId) || [];
+  var allPay = await apiGet('/hajira-payments?worker_id=' + workerId) || [];
+
+  var att = allAtt.filter(function(r){ return inRange(r.date); });
+  var pay = allPay.filter(function(r){ return inRange(r.date); });
+
+  att.sort(function(a,b){ return b.date.localeCompare(a.date); });
+  pay.sort(function(a,b){ return b.date.localeCompare(a.date); });
+
+  var present = att.filter(function(r){ return r.status==='present'; }).length;
+  var half    = att.filter(function(r){ return r.status==='half'; }).length;
+  var absent  = att.filter(function(r){ return r.status==='absent'; }).length;
+  var totalOtHours  = att.reduce(function(t,r){ return t + Number(r.ot_hours||0); }, 0);
+  var totalAllowance = att.reduce(function(t,r){ return t + Number(r.allowance||0); }, 0);
+  var totalEarned   = att.reduce(function(t,r){ return t + hajiraEarned(worker,r); }, 0);
+  var totalPaid     = pay.reduce(function(t,r){ return t + Number(r.amount); }, 0);
+  var due = totalEarned - totalPaid;
+
+  // Summary cards
+  var sumEl = document.getElementById('hledger-detail-summary');
+  if (sumEl) sumEl.innerHTML =
+    summaryCard2('ti-calendar-check', '#10b981', 'Present', present + ' days') +
+    summaryCard2('ti-clock-half', '#f59e0b', 'Half day', half + ' days') +
+    summaryCard2('ti-user-x', '#ef4444', 'Absent', absent + ' days') +
+    summaryCard2('ti-clock', '#6366f1', 'Overtime', totalOtHours.toFixed(1) + ' hrs') +
+    summaryCard2('ti-gift', '#0ea5e9', 'Allowance', 'Tk ' + fmt(totalAllowance)) +
+    summaryCard2('ti-coin', '#10b981', 'Total earned', 'Tk ' + fmt(totalEarned)) +
+    summaryCard2('ti-check', '#3b82f6', 'Paid', 'Tk ' + fmt(totalPaid)) +
+    summaryCard2('ti-alert-circle', due > 0 ? '#ef4444' : '#10b981', due > 0 ? 'Due' : 'Advance', 'Tk ' + fmt(Math.abs(due)));
+
+  // Attendance rows
+  var attTb = document.getElementById('hld-att-tbody');
+  if (attTb) {
+    if (!att.length) {
+      attTb.innerHTML = '<tr><td colspan="7" class="empty-state">No attendance records.</td></tr>';
+    } else {
+      attTb.innerHTML = att.map(function(r) {
+        var base = r.status === 'absent' ? 0 : (r.status === 'half' ? Number(worker.daily_rate)/2 : Number(worker.daily_rate));
+        var otRate = Number(r.ot_rate) || (Number(worker.daily_rate)/8);
+        var otAmt = Number(r.ot_hours||0) * otRate;
+        var alAmt = Number(r.allowance||0);
+        var total = base + otAmt + alAmt;
+        var notes = [r.note, r.allowance_note ? r.allowance_note + ' allowance' : ''].filter(Boolean).join(', ');
+        return '<tr>' +
+          '<td>' + r.date + '</td>' +
+          '<td style="color:' + hajiraStatusColor(r.status) + ';font-weight:600">' + hajiraStatusLabel(r.status) + '</td>' +
+          '<td class="num">' + (base ? 'Tk ' + fmt(base) : '—') + '</td>' +
+          '<td class="num">' + (otAmt ? 'Tk ' + fmt(otAmt) + '<br><span style="font-size:10px;color:var(--text-2)">' + r.ot_hours + 'h × ' + fmt(otRate) + '</span>' : '—') + '</td>' +
+          '<td class="num">' + (alAmt ? 'Tk ' + fmt(alAmt) : '—') + '</td>' +
+          '<td class="num" style="font-weight:700;color:var(--ok)">' + (total ? 'Tk ' + fmt(total) : '—') + '</td>' +
+          '<td style="font-size:12px;color:var(--text-2)">' + esc(notes) + '</td>' +
+        '</tr>';
+      }).join('') +
+      '<tr style="font-weight:700;border-top:2px solid var(--border);background:var(--surface-2)">' +
+        '<td colspan="2">Total</td>' +
+        '<td class="num">Tk ' + fmt(att.reduce(function(t,r){ var b=r.status==='absent'?0:(r.status==='half'?Number(worker.daily_rate)/2:Number(worker.daily_rate)); return t+b; },0)) + '</td>' +
+        '<td class="num">Tk ' + fmt(att.reduce(function(t,r){ var otr=Number(r.ot_rate)||(Number(worker.daily_rate)/8); return t+Number(r.ot_hours||0)*otr; },0)) + '</td>' +
+        '<td class="num">Tk ' + fmt(totalAllowance) + '</td>' +
+        '<td class="num">Tk ' + fmt(totalEarned) + '</td>' +
+        '<td></td>' +
+      '</tr>';
+    }
+  }
+
+  // Payment rows
+  var payTb = document.getElementById('hld-pay-tbody');
+  if (payTb) {
+    if (!pay.length) {
+      payTb.innerHTML = '<tr><td colspan="4" class="empty-state">No payments recorded.</td></tr>';
+    } else {
+      payTb.innerHTML = pay.map(function(r) {
+        return '<tr>' +
+          '<td>' + r.date + '</td>' +
+          '<td class="num" style="color:var(--ok);font-weight:600">Tk ' + fmt(r.amount) + '</td>' +
+          '<td style="font-size:12px;color:var(--text-2)">' + esc(r.note||'') + '</td>' +
+          '<td><button class="del-btn" onclick="deleteHajiraPayment(' + r.id + ')" title="Delete"><i class="ti ti-trash"></i></button></td>' +
+        '</tr>';
+      }).join('') +
+      '<tr style="font-weight:700;border-top:2px solid var(--border)"><td colspan="1">Total</td><td class="num">Tk ' + fmt(totalPaid) + '</td><td colspan="2"></td></tr>';
+    }
+  }
+}
+
+async function recordHajiraPayment() {
+  var workerId = __hajiraDetailId;
+  if (!workerId) return alert('No worker selected.');
+  var amount = parseFloat(document.getElementById('hpay-amount').value) || 0;
+  var date   = document.getElementById('hpay-date').value;
+  var note   = (document.getElementById('hpay-note').value || '').trim();
+  if (!amount || amount <= 0) return alert('Please enter a valid amount.');
+  if (!date) return alert('Please enter payment date.');
+  var res = await apiPost('/hajira-payments', { worker_id: workerId, amount: amount, date: date, note: note });
+  if (res && res.error) return alert(res.error);
+  var worker = __hajiraWorkers.find(function(w){ return w.id === workerId; });
+  document.getElementById('hpay-amount').value = '';
+  document.getElementById('hpay-note').value = '';
+  toast('Payment of Tk ' + fmt(amount) + ' recorded for ' + (worker ? worker.name : ''), 'ok');
+  renderHajiraLedgerDetail();
+}
+
+async function deleteHajiraPayment(id) {
+  if (!confirm('Delete this payment record?')) return;
+  var res = await apiCall('DELETE', '/hajira-payments', { id: id });
+  if (res && res.error) return alert(res.error);
+  toast('Payment deleted', 'ok');
+  renderHajiraLedgerDetail();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// LANGUAGE / TRANSLATION SYSTEM
+// ═══════════════════════════════════════════════════════════════════════
+var __currentLang = localStorage.getItem('bizsheba_lang') || 'en';
+
+var LANG = {
+  en: {
+    // ── Topbar / brand ──
+    'brand': 'BizSheba',
+    'lang_btn': 'বাং',
+    // ── Nav groups ──
+    'nav_dashboard': 'Dashboard',
+    'nav_sales': 'Sales',
+    'nav_new_sale': 'New Sale',
+    'nav_sales_list': 'Sales List',
+    'nav_sales_returns': 'Sales Returns',
+    'nav_exchanges': 'Exchanges',
+    'nav_warranty': 'Warranty',
+    'nav_purchases': 'Purchases',
+    'nav_new_purchase': 'New Purchase',
+    'nav_purchase_list': 'Purchase List',
+    'nav_purchase_returns': 'Purchase Returns',
+    'nav_suppliers': 'Suppliers',
+    'nav_expenses': 'Expenses',
+    'nav_cashflow': 'Cash Flow',
+    'nav_dues': 'Dues',
+    'nav_due_payment': 'Due Payment',
+    'nav_customers': 'Customers',
+    'nav_inventory': 'Inventory',
+    'nav_products': 'Products',
+    'nav_categories': 'Categories',
+    'nav_brands': 'Brands',
+    'nav_reports': 'Reports',
+    'nav_staff': 'Staff',
+    'nav_manage_staff': 'Manage Staff',
+    'nav_attendance': 'Attendance',
+    'nav_hajira': 'হাজিরা',
+    'nav_staff_sales': 'Staff Sales',
+    'nav_staff_reports': 'Staff Reports',
+    'nav_settings': 'Settings',
+    'nav_admin': 'Admin Panel',
+    // ── Dashboard ──
+    'page_dashboard': 'Dashboard',
+    'dash_today_sales': "Today's Sales",
+    'dash_today_purchase': "Today's Purchase",
+    'dash_today_expense': "Today's Expense",
+    'dash_net_profit': 'Net Profit',
+    'dash_due': 'Due',
+    'dash_total_sales': 'Total Sales',
+    'dash_total_purchase': 'Total Purchase',
+    'dash_total_expense': 'Total Expense',
+    'dash_gross_profit': 'Gross Profit',
+    'dash_low_stock': 'Low Stock',
+    'dash_out_of_stock': 'Out of Stock',
+    'dash_filter_today': 'Today',
+    'dash_filter_week': 'This Week',
+    'dash_filter_month': 'This Month',
+    'dash_filter_year': 'This Year',
+    'dash_filter_custom': 'Custom',
+    // ── Sales ──
+    'page_sales': 'Sales',
+    'sales_customer': 'Customer',
+    'sales_search_customer': 'Search / add customer',
+    'sales_search_product': 'Search product or scan barcode...',
+    'sales_qty': 'Qty',
+    'sales_price': 'Price',
+    'sales_discount': 'Discount',
+    'sales_subtotal': 'Subtotal',
+    'sales_total': 'Total',
+    'sales_paid': 'Paid',
+    'sales_due': 'Due',
+    'sales_date': 'Date',
+    'sales_note': 'Note',
+    'sales_salesman': 'Salesman',
+    'btn_add_to_cart': 'Add to cart',
+    'btn_save_sale': 'Save & Print Bill',
+    'btn_clear_cart': 'Clear Cart',
+    'sales_prev_balance': 'Previous balance',
+    'sales_cash': 'Cash',
+    'sales_card': 'Card',
+    'sales_mobile': 'Mobile Banking',
+    // ── Sales List ──
+    'page_sales_list': 'Sales List',
+    'total_sales': 'Total (all sales)',
+    // ── Sales Returns ──
+    'page_sales_returns': 'Sales Returns',
+    'btn_save_return': 'Save return',
+    'total_returned': 'Total returned',
+    // ── Exchanges ──
+    'page_exchanges': 'Exchanges',
+    'exc_find_bill': 'Find bill to exchange from',
+    'exc_search': 'Search by bill number or customer name',
+    'exc_bill_items': 'Items on this bill',
+    'exc_pending': 'Pending exchanges',
+    'exc_net_diff': 'Net difference',
+    'btn_save_exchanges': 'Save exchanges & generate bill',
+    // ── Purchases ──
+    'page_purchases': 'New Purchase',
+    'pur_supplier': 'Supplier',
+    'pur_search_supplier': 'Search / add supplier',
+    'pur_search_product': 'Search product...',
+    'btn_add_item': 'Add Item',
+    'btn_save_purchase': 'Save Purchase',
+    'pur_total': 'Total',
+    'pur_paid': 'Paid',
+    'pur_due': 'Goes to supplier due',
+    // ── Purchase List ──
+    'page_purchase_list': 'Purchase List',
+    'total_purchased': 'Total purchased',
+    // ── Purchase Returns ──
+    'page_purchase_returns': 'Purchase Returns',
+    'total_returned_pur': 'Total returned',
+    // ── Suppliers ──
+    'page_suppliers': 'Suppliers',
+    'sup_name': 'Supplier name',
+    'sup_phone': 'Phone',
+    'sup_address': 'Address',
+    'btn_add_supplier': 'Add Supplier',
+    // ── Expenses ──
+    'page_expenses': 'Expenses',
+    'exp_category': 'Category',
+    'exp_amount': 'Amount',
+    'exp_note': 'Note',
+    'exp_date': 'Date',
+    'btn_save_expense': 'Save expense',
+    'total_expenses': 'Total',
+    // ── Cash Flow ──
+    'page_cashflow': 'Cash Flow',
+    // ── Dues ──
+    'page_dues': 'Due Payment',
+    'due_customer': 'Customer',
+    'due_amount': 'Amount',
+    'due_date': 'Date',
+    'total_outstanding': 'Total outstanding',
+    'total_paid': 'Total paid',
+    // ── Customers ──
+    'page_customers': 'Customers',
+    'cus_name': 'Customer name',
+    'cus_phone': 'Phone',
+    'cus_address': 'Address',
+    'btn_add_customer': 'Add Customer',
+    // ── Products ──
+    'page_products': 'Products',
+    'pro_name': 'Product name',
+    'pro_qty': 'Quantity',
+    'pro_purchase_price': 'Purchase price',
+    'pro_sell_price': 'Sell price',
+    'pro_unit': 'Unit',
+    'pro_barcode': 'Barcode',
+    'pro_category': 'Category',
+    'pro_brand': 'Brand',
+    'pro_serials': 'Serial numbers',
+    'pro_warranty': 'Warranty (months)',
+    'btn_save_product': 'Save product & generate barcode',
+    'all_products': 'All products',
+    // ── Categories & Brands ──
+    'page_categories': 'Categories',
+    'page_brands': 'Brands',
+    // ── Reports ──
+    'page_reports': 'Reports',
+    // ── Settings ──
+    'page_settings': 'Settings',
+    'set_profile': 'Profile & account',
+    'set_change_password': 'Change password',
+    'set_business_details': 'Business details (shown on printed bills)',
+    'set_business_name': 'Business name',
+    'set_address': 'Address',
+    'set_phone': 'Phone number',
+    'set_gst': 'GST / tax number',
+    'set_footer_note': 'Footer note',
+    'set_pos_custom': 'POS bill customization',
+    'set_features': 'Optional features',
+    'set_features_desc': 'Turn on only the features your business needs. Saved with the button below.',
+    'feat_serial_title': 'Serial number tracking',
+    'feat_serial_desc': 'Attach serial / barcode numbers to products when adding stock. Best for electronics or any uniquely numbered item.',
+    'feat_warranty_title': 'Warranty management',
+    'feat_warranty_desc': 'Set warranty duration on products, log warranty claims, and process warranty exchanges with serial number replacement.',
+    'feat_hajira_title': 'হাজিরা (Hajira) — Daily wage attendance',
+    'feat_hajira_desc': 'Track daily-wage workers separately from regular staff. Record present/absent/half-day, auto-calculate payable amount, log payments, and view per-worker ledger.',
+    'btn_save_settings': 'Save settings',
+    // ── Staff ──
+    'page_staff': 'Staff & Roles',
+    'staff_name': 'Name',
+    'staff_phone': 'Phone',
+    'staff_role': 'Role',
+    'staff_password': 'Password',
+    'btn_add_staff': 'Add Staff',
+    // ── Attendance ──
+    'page_attendance': 'Attendance',
+    'att_date': 'Date',
+    'att_staff': 'Staff member',
+    'att_status': 'Status',
+    'att_entry': 'Entry time',
+    'att_exit': 'Exit time',
+    'att_note': 'Note',
+    'att_present': 'Present',
+    'att_absent': 'Absent',
+    'att_leave': 'Leave',
+    'btn_save_attendance': 'Save attendance',
+    // ── Hajira ──
+    'page_hajira': 'হাজিরা',
+    'hajira_subtitle': 'Daily Wage Attendance',
+    'htab_attendance': 'Attendance',
+    'htab_workers': 'Workers',
+    'htab_ledger': 'Ledger',
+    'hw_name': 'Name',
+    'hw_phone': 'Phone',
+    'hw_rate': 'Salary / day (Tk)',
+    'hw_note': 'Note',
+    'btn_add_worker': 'Add worker',
+    'all_workers': 'All workers',
+    'hatt_status_present': '✅ Present',
+    'hatt_status_half': '🌓 Half day',
+    'hatt_status_absent': '❌ Absent',
+    'hatt_ot_hrs': 'OT hrs',
+    'hatt_ot_rate': 'OT rate/hr',
+    'hatt_allowance': 'Allowance',
+    'btn_save_attendance2': 'Save',
+    'hled_record_payment': 'Record payment',
+    'hled_amount': 'Amount (Tk)',
+    'hled_date': 'Date',
+    'hled_note': 'Note',
+    'btn_paid': 'Paid',
+    'hled_att_history': 'Attendance history',
+    'hled_pay_history': 'Payment history',
+    // ── Warranty ──
+    'page_warranty': 'Warranty',
+    'wc_find_bill': 'Find bill to claim warranty from',
+    'wc_search': 'Search by bill number, customer name or phone',
+    'wc_claim_form': 'Log warranty claim',
+    'wc_product': 'Product',
+    'wc_serial': 'Serial number',
+    'wc_customer': 'Customer name',
+    'wc_phone': 'Customer phone',
+    'wc_sale_date': 'Original sale date',
+    'wc_warranty_months': 'Warranty (months)',
+    'wc_claim_date': 'Claim date',
+    'wc_issue': 'Issue description',
+    'btn_submit_claim': 'Submit claim',
+    'we_exchange': 'Process warranty exchange',
+    'we_old_serial': 'Old serial number',
+    'we_new_serial': 'New serial number',
+    'btn_save_we': 'Save warranty exchange',
+    // ── Common ──
+    'search': 'Search',
+    'filter': 'Filter',
+    'clear': 'Clear',
+    'save': 'Save',
+    'cancel': 'Cancel',
+    'delete': 'Delete',
+    'edit': 'Edit',
+    'add': 'Add',
+    'loading': 'Loading...',
+    'no_data': 'No data found.',
+    'from': 'From',
+    'to': 'To',
+    'date': 'Date',
+    'amount': 'Amount',
+    'note': 'Note',
+    'status': 'Status',
+    'action': 'Action',
+    'name': 'Name',
+    'phone': 'Phone',
+    'total': 'Total',
+    'due': 'Due',
+    'paid': 'Paid',
+    'present': 'Present',
+    'absent': 'Absent',
+    'back': 'Back',
+    'print': 'Print',
+    'logout': 'Log out',
+    'settings': 'Settings',
+  },
+
+  bn: {
+    // ── Topbar / brand ──
+    'brand': 'BizSheba',
+    'lang_btn': 'EN',
+    // ── Nav groups ──
+    'nav_dashboard': 'ড্যাশবোর্ড',
+    'nav_sales': 'বিক্রয়',
+    'nav_new_sale': 'নতুন বিক্রয়',
+    'nav_sales_list': 'বিক্রয় তালিকা',
+    'nav_sales_returns': 'বিক্রয় ফেরত',
+    'nav_exchanges': 'বিনিময়',
+    'nav_warranty': 'ওয়ারেন্টি',
+    'nav_purchases': 'ক্রয়',
+    'nav_new_purchase': 'নতুন ক্রয়',
+    'nav_purchase_list': 'ক্রয় তালিকা',
+    'nav_purchase_returns': 'ক্রয় ফেরত',
+    'nav_suppliers': 'সরবরাহকারী',
+    'nav_expenses': 'খরচ',
+    'nav_cashflow': 'নগদ প্রবাহ',
+    'nav_dues': 'বাকি',
+    'nav_due_payment': 'বাকি পরিশোধ',
+    'nav_customers': 'গ্রাহক',
+    'nav_inventory': 'মজুদ',
+    'nav_products': 'পণ্য',
+    'nav_categories': 'বিভাগ',
+    'nav_brands': 'ব্র্যান্ড',
+    'nav_reports': 'রিপোর্ট',
+    'nav_staff': 'কর্মী',
+    'nav_manage_staff': 'কর্মী ব্যবস্থাপনা',
+    'nav_attendance': 'উপস্থিতি',
+    'nav_hajira': 'হাজিরা',
+    'nav_staff_sales': 'কর্মীর বিক্রয়',
+    'nav_staff_reports': 'কর্মী রিপোর্ট',
+    'nav_settings': 'সেটিংস',
+    'nav_admin': 'অ্যাডমিন প্যানেল',
+    // ── Dashboard ──
+    'page_dashboard': 'ড্যাশবোর্ড',
+    'dash_today_sales': 'আজকের বিক্রয়',
+    'dash_today_purchase': 'আজকের ক্রয়',
+    'dash_today_expense': 'আজকের খরচ',
+    'dash_net_profit': 'নিট মুনাফা',
+    'dash_due': 'বাকি',
+    'dash_total_sales': 'মোট বিক্রয়',
+    'dash_total_purchase': 'মোট ক্রয়',
+    'dash_total_expense': 'মোট খরচ',
+    'dash_gross_profit': 'মোট মুনাফা',
+    'dash_low_stock': 'কম মজুদ',
+    'dash_out_of_stock': 'স্টক নেই',
+    'dash_filter_today': 'আজ',
+    'dash_filter_week': 'এই সপ্তাহ',
+    'dash_filter_month': 'এই মাস',
+    'dash_filter_year': 'এই বছর',
+    'dash_filter_custom': 'নির্বাচিত',
+    // ── Sales ──
+    'page_sales': 'বিক্রয়',
+    'sales_customer': 'গ্রাহক',
+    'sales_search_customer': 'গ্রাহক খুঁজুন / যোগ করুন',
+    'sales_search_product': 'পণ্য খুঁজুন বা বারকোড স্ক্যান করুন...',
+    'sales_qty': 'পরিমাণ',
+    'sales_price': 'মূল্য',
+    'sales_discount': 'ছাড়',
+    'sales_subtotal': 'উপমোট',
+    'sales_total': 'মোট',
+    'sales_paid': 'পরিশোধিত',
+    'sales_due': 'বাকি',
+    'sales_date': 'তারিখ',
+    'sales_note': 'নোট',
+    'sales_salesman': 'বিক্রয়কর্মী',
+    'btn_add_to_cart': 'কার্টে যোগ করুন',
+    'btn_save_sale': 'সেভ ও বিল প্রিন্ট করুন',
+    'btn_clear_cart': 'কার্ট মুছুন',
+    'sales_prev_balance': 'পূর্বের বাকি',
+    'sales_cash': 'নগদ',
+    'sales_card': 'কার্ড',
+    'sales_mobile': 'মোবাইল ব্যাংকিং',
+    // ── Sales List ──
+    'page_sales_list': 'বিক্রয় তালিকা',
+    'total_sales': 'মোট (সকল বিক্রয়)',
+    // ── Sales Returns ──
+    'page_sales_returns': 'বিক্রয় ফেরত',
+    'btn_save_return': 'ফেরত সেভ করুন',
+    'total_returned': 'মোট ফেরত',
+    // ── Exchanges ──
+    'page_exchanges': 'বিনিময়',
+    'exc_find_bill': 'বিনিময়ের জন্য বিল খুঁজুন',
+    'exc_search': 'বিল নম্বর বা গ্রাহকের নাম দিয়ে খুঁজুন',
+    'exc_bill_items': 'এই বিলের পণ্যসমূহ',
+    'exc_pending': 'অপেক্ষমান বিনিময়',
+    'exc_net_diff': 'নিট পার্থক্য',
+    'btn_save_exchanges': 'বিনিময় সেভ করুন ও বিল তৈরি করুন',
+    // ── Purchases ──
+    'page_purchases': 'নতুন ক্রয়',
+    'pur_supplier': 'সরবরাহকারী',
+    'pur_search_supplier': 'সরবরাহকারী খুঁজুন / যোগ করুন',
+    'pur_search_product': 'পণ্য খুঁজুন...',
+    'btn_add_item': 'আইটেম যোগ করুন',
+    'btn_save_purchase': 'ক্রয় সেভ করুন',
+    'pur_total': 'মোট',
+    'pur_paid': 'পরিশোধিত',
+    'pur_due': 'সরবরাহকারীর বাকিতে যাবে',
+    // ── Purchase List ──
+    'page_purchase_list': 'ক্রয় তালিকা',
+    'total_purchased': 'মোট ক্রয়',
+    // ── Purchase Returns ──
+    'page_purchase_returns': 'ক্রয় ফেরত',
+    'total_returned_pur': 'মোট ফেরত',
+    // ── Suppliers ──
+    'page_suppliers': 'সরবরাহকারী',
+    'sup_name': 'সরবরাহকারীর নাম',
+    'sup_phone': 'ফোন',
+    'sup_address': 'ঠিকানা',
+    'btn_add_supplier': 'সরবরাহকারী যোগ করুন',
+    // ── Expenses ──
+    'page_expenses': 'খরচ',
+    'exp_category': 'বিভাগ',
+    'exp_amount': 'পরিমাণ',
+    'exp_note': 'নোট',
+    'exp_date': 'তারিখ',
+    'btn_save_expense': 'খরচ সেভ করুন',
+    'total_expenses': 'মোট',
+    // ── Cash Flow ──
+    'page_cashflow': 'নগদ প্রবাহ',
+    // ── Dues ──
+    'page_dues': 'বাকি পরিশোধ',
+    'due_customer': 'গ্রাহক',
+    'due_amount': 'পরিমাণ',
+    'due_date': 'তারিখ',
+    'total_outstanding': 'মোট বকেয়া',
+    'total_paid': 'মোট পরিশোধিত',
+    // ── Customers ──
+    'page_customers': 'গ্রাহক',
+    'cus_name': 'গ্রাহকের নাম',
+    'cus_phone': 'ফোন',
+    'cus_address': 'ঠিকানা',
+    'btn_add_customer': 'গ্রাহক যোগ করুন',
+    // ── Products ──
+    'page_products': 'পণ্য',
+    'pro_name': 'পণ্যের নাম',
+    'pro_qty': 'পরিমাণ',
+    'pro_purchase_price': 'ক্রয়মূল্য',
+    'pro_sell_price': 'বিক্রয়মূল্য',
+    'pro_unit': 'একক',
+    'pro_barcode': 'বারকোড',
+    'pro_category': 'বিভাগ',
+    'pro_brand': 'ব্র্যান্ড',
+    'pro_serials': 'সিরিয়াল নম্বর',
+    'pro_warranty': 'ওয়ারেন্টি (মাস)',
+    'btn_save_product': 'পণ্য সেভ ও বারকোড তৈরি করুন',
+    'all_products': 'সকল পণ্য',
+    // ── Categories & Brands ──
+    'page_categories': 'বিভাগ',
+    'page_brands': 'ব্র্যান্ড',
+    // ── Reports ──
+    'page_reports': 'রিপোর্ট',
+    // ── Settings ──
+    'page_settings': 'সেটিংস',
+    'set_profile': 'প্রোফাইল ও অ্যাকাউন্ট',
+    'set_change_password': 'পাসওয়ার্ড পরিবর্তন',
+    'set_business_details': 'ব্যবসার তথ্য (প্রিন্ট করা বিলে দেখা যাবে)',
+    'set_business_name': 'ব্যবসার নাম',
+    'set_address': 'ঠিকানা',
+    'set_phone': 'ফোন নম্বর',
+    'set_gst': 'ভ্যাট / ট্যাক্স নম্বর',
+    'set_footer_note': 'ফুটার নোট',
+    'set_pos_custom': 'পিওএস বিল কাস্টমাইজেশন',
+    'set_features': 'ঐচ্ছিক ফিচারসমূহ',
+    'set_features_desc': 'আপনার ব্যবসার প্রয়োজনীয় ফিচারগুলো চালু করুন। নিচের বোতাম দিয়ে সেভ হবে।',
+    'feat_serial_title': 'সিরিয়াল নম্বর ট্র্যাকিং',
+    'feat_serial_desc': 'পণ্য যোগ করার সময় সিরিয়াল/বারকোড নম্বর সংযুক্ত করুন। ইলেকট্রনিক্স বা অনন্য নম্বরযুক্ত পণ্যের জন্য সেরা।',
+    'feat_warranty_title': 'ওয়ারেন্টি ব্যবস্থাপনা',
+    'feat_warranty_desc': 'পণ্যে ওয়ারেন্টির মেয়াদ নির্ধারণ করুন, দাবি লগ করুন এবং সিরিয়াল নম্বর পরিবর্তনসহ ওয়ারেন্টি বিনিময় প্রক্রিয়া করুন।',
+    'feat_hajira_title': 'হাজিরা — দৈনিক মজুরি উপস্থিতি',
+    'feat_hajira_desc': 'নিয়মিত কর্মীদের থেকে আলাদাভাবে দৈনিক মজুরি শ্রমিকদের ট্র্যাক করুন। উপস্থিত/অনুপস্থিত/অর্ধদিন রেকর্ড করুন, প্রদেয় পরিমাণ স্বয়ংক্রিয়ভাবে হিসাব হবে।',
+    'btn_save_settings': 'সেটিংস সেভ করুন',
+    // ── Staff ──
+    'page_staff': 'কর্মী ও ভূমিকা',
+    'staff_name': 'নাম',
+    'staff_phone': 'ফোন',
+    'staff_role': 'ভূমিকা',
+    'staff_password': 'পাসওয়ার্ড',
+    'btn_add_staff': 'কর্মী যোগ করুন',
+    // ── Attendance ──
+    'page_attendance': 'উপস্থিতি',
+    'att_date': 'তারিখ',
+    'att_staff': 'কর্মী',
+    'att_status': 'অবস্থা',
+    'att_entry': 'প্রবেশের সময়',
+    'att_exit': 'প্রস্থানের সময়',
+    'att_note': 'নোট',
+    'att_present': 'উপস্থিত',
+    'att_absent': 'অনুপস্থিত',
+    'att_leave': 'ছুটি',
+    'btn_save_attendance': 'উপস্থিতি সেভ করুন',
+    // ── Hajira ──
+    'page_hajira': 'হাজিরা',
+    'hajira_subtitle': 'দৈনিক মজুরি উপস্থিতি',
+    'htab_attendance': 'উপস্থিতি',
+    'htab_workers': 'শ্রমিক',
+    'htab_ledger': 'হিসাব',
+    'hw_name': 'নাম',
+    'hw_phone': 'ফোন',
+    'hw_rate': 'বেতন / দিন (টাকা)',
+    'hw_note': 'নোট',
+    'btn_add_worker': 'শ্রমিক যোগ করুন',
+    'all_workers': 'সকল শ্রমিক',
+    'hatt_status_present': '✅ উপস্থিত',
+    'hatt_status_half': '🌓 অর্ধদিন',
+    'hatt_status_absent': '❌ অনুপস্থিত',
+    'hatt_ot_hrs': 'ওভারটাইম ঘণ্টা',
+    'hatt_ot_rate': 'ওটি রেট/ঘণ্টা',
+    'hatt_allowance': 'ভাতা',
+    'btn_save_attendance2': 'সেভ',
+    'hled_record_payment': 'পেমেন্ট রেকর্ড করুন',
+    'hled_amount': 'পরিমাণ (টাকা)',
+    'hled_date': 'তারিখ',
+    'hled_note': 'নোট',
+    'btn_paid': 'পরিশোধ',
+    'hled_att_history': 'উপস্থিতির ইতিহাস',
+    'hled_pay_history': 'পেমেন্টের ইতিহাস',
+    // ── Warranty ──
+    'page_warranty': 'ওয়ারেন্টি',
+    'wc_find_bill': 'ওয়ারেন্টি দাবির জন্য বিল খুঁজুন',
+    'wc_search': 'বিল নম্বর, গ্রাহকের নাম বা ফোন দিয়ে খুঁজুন',
+    'wc_claim_form': 'ওয়ারেন্টি দাবি লগ করুন',
+    'wc_product': 'পণ্য',
+    'wc_serial': 'সিরিয়াল নম্বর',
+    'wc_customer': 'গ্রাহকের নাম',
+    'wc_phone': 'গ্রাহকের ফোন',
+    'wc_sale_date': 'মূল বিক্রয়ের তারিখ',
+    'wc_warranty_months': 'ওয়ারেন্টি (মাস)',
+    'wc_claim_date': 'দাবির তারিখ',
+    'wc_issue': 'সমস্যার বিবরণ',
+    'btn_submit_claim': 'দাবি জমা দিন',
+    'we_exchange': 'ওয়ারেন্টি বিনিময় প্রক্রিয়া করুন',
+    'we_old_serial': 'পুরানো সিরিয়াল নম্বর',
+    'we_new_serial': 'নতুন সিরিয়াল নম্বর',
+    'btn_save_we': 'ওয়ারেন্টি বিনিময় সেভ করুন',
+    // ── Common ──
+    'search': 'খুঁজুন',
+    'filter': 'ফিল্টার',
+    'clear': 'মুছুন',
+    'save': 'সেভ',
+    'cancel': 'বাতিল',
+    'delete': 'মুছুন',
+    'edit': 'সম্পাদনা',
+    'add': 'যোগ করুন',
+    'loading': 'লোড হচ্ছে...',
+    'no_data': 'কোনো ডেটা পাওয়া যায়নি।',
+    'from': 'থেকে',
+    'to': 'পর্যন্ত',
+    'date': 'তারিখ',
+    'amount': 'পরিমাণ',
+    'note': 'নোট',
+    'status': 'অবস্থা',
+    'action': 'কার্যক্রম',
+    'name': 'নাম',
+    'phone': 'ফোন',
+    'total': 'মোট',
+    'due': 'বাকি',
+    'paid': 'পরিশোধিত',
+    'present': 'উপস্থিত',
+    'absent': 'অনুপস্থিত',
+    'back': 'ফিরে যান',
+    'print': 'প্রিন্ট',
+    'logout': 'লগ আউট',
+    'settings': 'সেটিংস',
+  }
+};
+
+// ── translation engine ──
+function t(key) {
+  var d = LANG[__currentLang];
+  return (d && d[key]) || (LANG['en'] && LANG['en'][key]) || key;
+}
+
+function applyLang() {
+  var L = LANG[__currentLang] || LANG['en'];
+
+  // toggle button label
+  var btn = document.getElementById('lang-toggle');
+  if (btn) btn.textContent = L['lang_btn'] || (__currentLang === 'en' ? 'বাং' : 'EN');
+
+  // nav sidebar
+  var navMap = {
+    'dashboard':      'nav_dashboard',
+    'sales':          'nav_sales',
+    'new-sale':       'nav_new_sale',
+    'saleslist':      'nav_sales_list',
+    'salesreturns':   'nav_sales_returns',
+    'exchanges':      'nav_exchanges',
+    'warranty':       'nav_warranty',
+    'purchases':      'nav_purchases',
+    'new-purchase':   'nav_new_purchase',
+    'purchaselist':   'nav_purchase_list',
+    'purchasereturns':'nav_purchase_returns',
+    'suppliers':      'nav_suppliers',
+    'expenses':       'nav_expenses',
+    'cashflow':       'nav_cashflow',
+    'dues':           'nav_dues',
+    'due-payment':    'nav_due_payment',
+    'customers':      'nav_customers',
+    'inventory':      'nav_inventory',
+    'products':       'nav_products',
+    'categories':     'nav_categories',
+    'brands':         'nav_brands',
+    'reports':        'nav_reports',
+    'staff':          'nav_staff',
+    'manage-staff':   'nav_manage_staff',
+    'attendance':     'nav_attendance',
+    'hajira':         'nav_hajira',
+    'staffsales':     'nav_staff_sales',
+    'staffreports':   'nav_staff_reports',
+    'settings':       'nav_settings',
+    'admin':          'nav_admin',
+  };
+
+  // Translate nav buttons by data-page and text content
+  document.querySelectorAll('[data-page]').forEach(function(el) {
+    var page = el.getAttribute('data-page');
+    var key = navMap[page];
+    if (!key) return;
+    // preserve icon (first child <i>) and translate only text node
+    var icon = el.querySelector('i');
+    var caret = el.querySelector('.nav-caret');
+    var span = el.querySelector('span:not(.nav-caret)');
+    if (span) {
+      span.textContent = L[key] || span.textContent;
+    } else {
+      // plain button with icon + text node
+      var text = L[key];
+      if (text) {
+        var childNodes = Array.from(el.childNodes);
+        childNodes.forEach(function(n) {
+          if (n.nodeType === 3 && n.textContent.trim()) n.textContent = text;
+        });
+      }
+    }
+  });
+
+  // Translate all data-i18n elements
+  document.querySelectorAll('[data-i18n]').forEach(function(el) {
+    var key = el.getAttribute('data-i18n');
+    var val = L[key];
+    if (!val) return;
+    var ph = el.getAttribute('data-i18n-attr');
+    if (ph === 'placeholder') el.placeholder = val;
+    else el.textContent = val;
+  });
+
+  // Document title
+  document.title = 'BizSheba';
+}
+
+function toggleLang() {
+  __currentLang = (__currentLang === 'en') ? 'bn' : 'en';
+  localStorage.setItem('bizsheba_lang', __currentLang);
+  applyLang();
+  // Re-render current page so dynamically generated content also translates
+  var activePage = document.querySelector('.page[style*="block"], .page:not([style])');
+  // find active nav button
+  var activeBtn = document.querySelector('.sidebar button.active[data-page]');
+  if (activeBtn) {
+    var page = activeBtn.getAttribute('data-page');
+    if (window.__pageRenderers && window.__pageRenderers[page]) {
+      window.__pageRenderers[page]();
+    }
+  }
+}
+
+// Call applyLang on startup after DOM is ready
+(function() {
+  var _orig = window.onload;
+  window.onload = function() {
+    if (_orig) _orig();
+    applyLang();
+  };
+})();

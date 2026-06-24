@@ -349,7 +349,7 @@ async function handleAdmin(method, pathname, req, res, session) {
 
   if (method === 'DELETE' && pathname.startsWith('/api/admin/users/')) {
     const userId = pathname.split('/').pop();
-    const bizTables = ['sales', 'expenses', 'dues', 'due_paid', 'products', 'customers', 'settings', 'suppliers', 'purchases', 'purchase_items', 'purchase_returns', 'sales_returns', 'supplier_dues', 'supplier_due_paid'];
+    const bizTables = ['sales', 'expenses', 'dues', 'due_paid', 'products', 'customers', 'settings', 'suppliers', 'purchases', 'purchase_items', 'purchase_returns', 'sales_returns', 'supplier_dues', 'supplier_due_paid', 'serial_numbers', 'warranty_claims', 'warranty_exchanges', 'hajira_workers', 'hajira_attendance', 'hajira_payments'];
     for (const table of bizTables) {
       try { await sb('DELETE', table, { query: `user_id=eq.${userId}` }); } catch (e) {}
     }
@@ -646,11 +646,142 @@ const routes = {
     } else {
       barcode = await getNextBarcode(b.name);
     }
-    await sb('POST', 'products', { body: { id, user_id: session.businessId, name: b.name, barcode, quantity: Number(b.quantity) || 0, purchase_price: Number(b.purchase_price) || 0, sell_price: Number(b.sell_price) || 0, unit: b.unit || 'pcs', category_id: b.category_id || null, brand_id: b.brand_id || null, category_name: b.category_name || null, brand_name: b.brand_name || null } });
+    await sb('POST', 'products', { body: { id, user_id: session.businessId, name: b.name, barcode, quantity: Number(b.quantity) || 0, purchase_price: Number(b.purchase_price) || 0, sell_price: Number(b.sell_price) || 0, unit: b.unit || 'pcs', category_id: b.category_id || null, brand_id: b.brand_id || null, category_name: b.category_name || null, brand_name: b.brand_name || null, warranty_months: Number(b.warranty_months) || 0 } });
+    // If serial numbers provided (comma-separated), register each one
+    if (b.serials) {
+      const serials = String(b.serials).split(',').map(s => s.trim()).filter(Boolean);
+      for (const serial of serials) {
+        const sid = await getNextId();
+        await sb('POST', 'serial_numbers', { body: { id: sid, user_id: session.businessId, product_id: id, product_name: b.name, serial, status: 'in_stock' } });
+      }
+    }
     send(res, 200, { id, barcode });
   },
 
-  // ----- Categories -----
+  // ----- Serial Numbers -----
+  'GET /api/serial-numbers': async (req, res, session, query) => {
+    const productId = query && query.get('product_id');
+    const q = productId ? bizQuery(session, `product_id=eq.${productId}&order=id.desc`) : bizQuery(session, 'order=id.desc');
+    send(res, 200, (await sb('GET', 'serial_numbers', { query: q })) || []);
+  },
+  'POST /api/serial-numbers': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.serial) return send(res, 400, { error: 'serial required' });
+    const id = await getNextId();
+    await sb('POST', 'serial_numbers', { body: { id, user_id: session.businessId, product_id: b.product_id || null, product_name: b.product_name || null, serial: b.serial, status: 'in_stock' } });
+    send(res, 200, { id });
+  },
+
+  // ----- Warranty Claims -----
+  'GET /api/warranty-claims': async (req, res, session) => {
+    send(res, 200, (await sb('GET', 'warranty_claims', { query: bizQuery(session, 'order=id.desc') })) || []);
+  },
+  'POST /api/warranty-claims': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.claim_date || !b.serial_number) return send(res, 400, { error: 'claim_date and serial_number required' });
+    const id = await getNextId();
+    await sb('POST', 'warranty_claims', { body: { id, user_id: session.businessId, serial_id: b.serial_id || null, serial_number: b.serial_number, product_name: b.product_name || null, customer_name: b.customer_name || null, customer_phone: b.customer_phone || null, sale_date: b.sale_date || null, warranty_months: Number(b.warranty_months) || 0, claim_date: b.claim_date, issue: b.issue || null, status: 'open', note: b.note || null } });
+    await audit(session, 'CREATE', 'warranty_claims', id, `Serial: ${b.serial_number}`);
+    send(res, 200, { id });
+  },
+  'PATCH /api/warranty-claims': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.id) return send(res, 400, { error: 'id required' });
+    await sb('PATCH', 'warranty_claims', { query: `id=eq.${b.id}&user_id=eq.${session.businessId}`, body: { status: b.status, note: b.note || null } });
+    send(res, 200, { ok: true });
+  },
+
+  // ----- Warranty Exchanges -----
+  'GET /api/warranty-exchanges': async (req, res, session) => {
+    send(res, 200, (await sb('GET', 'warranty_exchanges', { query: bizQuery(session, 'order=id.desc') })) || []);
+  },
+  'POST /api/warranty-exchanges': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.exchange_date || !b.new_serial) return send(res, 400, { error: 'exchange_date and new_serial required' });
+    const id = await getNextId();
+    await sb('POST', 'warranty_exchanges', { body: { id, user_id: session.businessId, claim_id: b.claim_id || null, serial_id: b.serial_id || null, old_serial: b.old_serial || null, old_product_name: b.old_product_name || null, new_serial: b.new_serial, new_product_name: b.new_product_name || null, customer_name: b.customer_name || null, exchange_date: b.exchange_date, note: b.note || null } });
+    if (b.serial_id) await sb('PATCH', 'serial_numbers', { query: `id=eq.${b.serial_id}&user_id=eq.${session.businessId}`, body: { status: 'exchanged' } });
+    if (b.new_serial && b.product_id) {
+      const nsid = await getNextId();
+      await sb('POST', 'serial_numbers', { body: { id: nsid, user_id: session.businessId, product_id: b.product_id, product_name: b.new_product_name || b.old_product_name, serial: b.new_serial, status: 'sold', sold_to: b.customer_name || null } });
+    }
+    if (b.claim_id) await sb('PATCH', 'warranty_claims', { query: `id=eq.${b.claim_id}&user_id=eq.${session.businessId}`, body: { status: 'exchanged' } });
+    await audit(session, 'CREATE', 'warranty_exchanges', id, `Old: ${b.old_serial} → New: ${b.new_serial}`);
+    send(res, 200, { id });
+  },
+
+  // ----- Hajira Workers -----
+  'GET /api/hajira-workers': async (req, res, session) => {
+    send(res, 200, (await sb('GET', 'hajira_workers', { query: bizQuery(session, 'order=name.asc') })) || []);
+  },
+  'POST /api/hajira-workers': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.name) return send(res, 400, { error: 'name required' });
+    if (!b.daily_rate && b.daily_rate !== 0) return send(res, 400, { error: 'daily_rate required' });
+    const id = await getNextId();
+    await sb('POST', 'hajira_workers', { body: { id, user_id: session.businessId, name: b.name, phone: b.phone || null, daily_rate: Number(b.daily_rate) || 0, note: b.note || null, active: true } });
+    send(res, 200, { id });
+  },
+  'PUT /api/hajira-workers': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.id) return send(res, 400, { error: 'id required' });
+    await sb('PATCH', 'hajira_workers', { query: `id=eq.${b.id}&user_id=eq.${session.businessId}`, body: { name: b.name, phone: b.phone || null, daily_rate: Number(b.daily_rate) || 0, note: b.note || null, active: b.active !== false } });
+    send(res, 200, { ok: true });
+  },
+  'DELETE /api/hajira-workers': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.id) return send(res, 400, { error: 'id required' });
+    // Soft delete — mark inactive so history is preserved
+    await sb('PATCH', 'hajira_workers', { query: `id=eq.${b.id}&user_id=eq.${session.businessId}`, body: { active: false } });
+    send(res, 200, { ok: true });
+  },
+
+  // ----- Hajira Attendance -----
+  'GET /api/hajira-attendance': async (req, res, session, query) => {
+    const workerId = query && query.get('worker_id');
+    const date = query && query.get('date');
+    let q = bizQuery(session, 'order=date.desc');
+    if (workerId) q = bizQuery(session, `worker_id=eq.${workerId}&order=date.desc`);
+    if (date) q = bizQuery(session, `date=eq.${date}&order=id.asc`);
+    if (workerId && date) q = bizQuery(session, `worker_id=eq.${workerId}&date=eq.${date}`);
+    send(res, 200, (await sb('GET', 'hajira_attendance', { query: q })) || []);
+  },
+  'POST /api/hajira-attendance': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.worker_id || !b.date) return send(res, 400, { error: 'worker_id and date required' });
+    // Upsert — if record exists for this worker+date, update it
+    const existing = await sb('GET', 'hajira_attendance', { query: `worker_id=eq.${b.worker_id}&date=eq.${b.date}&user_id=eq.${session.businessId}` });
+    if (existing && existing.length) {
+      await sb('PATCH', 'hajira_attendance', { query: `id=eq.${existing[0].id}&user_id=eq.${session.businessId}`, body: { status: b.status || 'present', note: b.note || '', ot_hours: Number(b.ot_hours) || 0, ot_rate: Number(b.ot_rate) || 0, allowance: Number(b.allowance) || 0, allowance_note: b.allowance_note || '' } });
+      return send(res, 200, { id: existing[0].id, updated: true });
+    }
+    const id = await getNextId();
+    await sb('POST', 'hajira_attendance', { body: { id, user_id: session.businessId, worker_id: Number(b.worker_id), date: b.date, status: b.status || 'present', note: b.note || '', ot_hours: Number(b.ot_hours) || 0, ot_rate: Number(b.ot_rate) || 0, allowance: Number(b.allowance) || 0, allowance_note: b.allowance_note || '' } });
+    send(res, 200, { id });
+  },
+
+  // ----- Hajira Payments -----
+  'GET /api/hajira-payments': async (req, res, session, query) => {
+    const workerId = query && query.get('worker_id');
+    const q = workerId ? bizQuery(session, `worker_id=eq.${workerId}&order=date.desc`) : bizQuery(session, 'order=date.desc');
+    send(res, 200, (await sb('GET', 'hajira_payments', { query: q })) || []);
+  },
+  'POST /api/hajira-payments': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.worker_id || !b.amount || !b.date) return send(res, 400, { error: 'worker_id, amount, date required' });
+    const id = await getNextId();
+    await sb('POST', 'hajira_payments', { body: { id, user_id: session.businessId, worker_id: Number(b.worker_id), amount: Number(b.amount), date: b.date, note: b.note || '' } });
+    await audit(session, 'CREATE', 'hajira_payments', id, `Worker ${b.worker_id} paid ${b.amount}`);
+    send(res, 200, { id });
+  },
+  'DELETE /api/hajira-payments': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.id) return send(res, 400, { error: 'id required' });
+    await sb('DELETE', 'hajira_payments', { query: `id=eq.${b.id}&user_id=eq.${session.businessId}` });
+    send(res, 200, { ok: true });
+  },
+
+
   'GET /api/categories': async (req, res, session) => {
     send(res, 200, (await sb('GET', 'categories', { query: bizQuery(session, 'order=name.asc') })) || []);
   },
@@ -920,7 +1051,7 @@ function parseDynamic(method, pathname) {
   if (segs.length === 3 && segs[0] === 'api' && segs[2] !== 'search') {
     const resource = segs[1];
     const id = segs[2];
-    const tableMap = { sales: 'sales', expenses: 'expenses', dues: 'dues', 'due-paid': 'due_paid', products: 'products', customers: 'customers', suppliers: 'suppliers', 'supplier-due-paid': 'supplier_due_paid', 'supplier-dues': 'supplier_dues', 'sales-returns': 'sales_returns', 'purchase-returns': 'purchase_returns', purchases: 'purchases', categories: 'categories', brands: 'brands', exchanges: 'exchanges' };
+    const tableMap = { sales: 'sales', expenses: 'expenses', dues: 'dues', 'due-paid': 'due_paid', products: 'products', customers: 'customers', suppliers: 'suppliers', 'supplier-due-paid': 'supplier_due_paid', 'supplier-dues': 'supplier_dues', 'sales-returns': 'sales_returns', 'purchase-returns': 'purchase_returns', purchases: 'purchases', categories: 'categories', brands: 'brands', exchanges: 'exchanges', 'warranty-claims': 'warranty_claims', 'warranty-exchanges': 'warranty_exchanges', 'serial-numbers': 'serial_numbers' };
     const table = tableMap[resource];
     if (table && method === 'DELETE') return { type: 'delete', table, id };
     if (table && method === 'PUT') return { type: 'put', table, id };
