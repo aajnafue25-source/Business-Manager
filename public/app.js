@@ -3095,6 +3095,39 @@ async function deleteBrand(id) {
 }
 
 // ───────── Updated addProduct to include category + brand ─────────
+// ── Warranty helpers (days / months / lifetime) ──
+// warrantyToMonths: convert user input + unit to stored months value
+// Lifetime = 9999 months sentinel
+function warrantyToMonths(val, unit) {
+  if (!val && unit !== 'lifetime') return 0;
+  if (unit === 'lifetime') return 9999;
+  if (unit === 'days') return Math.round(Number(val));   // store days directly as a decimal months-like value; we track unit separately
+  return Number(val) || 0; // months default
+}
+function warrantyDisplay(months, unit) {
+  if (!months) return '—';
+  if (months >= 9999) return '♾ Lifetime';
+  if (unit === 'days') return months + ' day' + (months !== 1 ? 's' : '');
+  return months + ' month' + (months !== 1 ? 's' : '');
+}
+function getWarrantyInputs(numId, unitId) {
+  var numEl = document.getElementById(numId);
+  var unitEl = document.getElementById(unitId);
+  var unit = unitEl ? unitEl.value : 'months';
+  var val = numEl ? numEl.value : '0';
+  if (unit === 'lifetime') return { months: 9999, unit: 'lifetime', display: '♾ Lifetime' };
+  var num = parseFloat(val) || 0;
+  return { months: num, unit: unit, display: warrantyDisplay(num, unit) };
+}
+// When user selects Lifetime in a warranty dropdown, clear the number field
+function onWarrantyUnitChange(unitId, numId) {
+  var u = document.getElementById(unitId);
+  var n = document.getElementById(numId);
+  if (!u || !n) return;
+  if (u.value === 'lifetime') { n.value = ''; n.placeholder = 'Lifetime ♾'; n.disabled = true; }
+  else { n.placeholder = '0'; n.disabled = false; if (!n.value) n.placeholder = '0'; }
+}
+
 async function addProduct() {
   var name = document.getElementById('prod-name').value.trim();
   var qty = parseFloat(document.getElementById('prod-qty').value) || 0;
@@ -3109,9 +3142,9 @@ async function addProduct() {
   var catName = catEl && catEl.value ? catEl.options[catEl.selectedIndex].text : null;
   var brandName = brandEl && brandEl.value ? brandEl.options[brandEl.selectedIndex].text : null;
   if (!name) return alert('Please enter a product name.');
-  var warrantyMonths = document.getElementById('prod-warranty-months') ? (parseFloat(document.getElementById('prod-warranty-months').value) || 0) : 0;
+  var _wProd = getWarrantyInputs('prod-warranty-months','prod-warranty-unit'); var warrantyMonths = _wProd.months; var warrantyUnit = _wProd.unit;
   var serials = document.getElementById('prod-serials') ? document.getElementById('prod-serials').value.trim() : '';
-  var res = await apiPost('/products', { name: name, quantity: qty, purchase_price: purchasePrice, sell_price: sellPrice, unit: unit, barcode: barcode, category_id: catId, brand_id: brandId, category_name: catName, brand_name: brandName, warranty_months: warrantyMonths, serials: serials });
+  var res = await apiPost('/products', { name: name, quantity: qty, purchase_price: purchasePrice, sell_price: sellPrice, unit: unit, barcode: barcode, category_id: catId, brand_id: brandId, category_name: catName, brand_name: brandName, warranty_months: warrantyMonths, warranty_unit: warrantyUnit, serials: serials });
   if (res && res.error) { alert(res.error); return; }
   ['prod-name', 'prod-barcode', 'prod-serials', 'prod-warranty-months'].forEach(function (id) { var el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('prod-qty').value = '0';
@@ -3217,8 +3250,8 @@ function addPurchaseItem() {
   if (!desc) return alert('Please enter a product name.');
   if (isNaN(qty) || qty <= 0) return alert('Please enter a valid quantity.');
   if (isNaN(unitCost) || unitCost < 0) return alert('Please enter a valid cost price.');
-  var purWM = parseFloat((document.getElementById('pur-warranty-months') || {}).value) || 0;
-  purchaseCart.push({ product_id: productId, desc: desc, quantity: qty, unit_cost: unitCost, sell_price: sellPrice, amount: qty * unitCost, category_name: catName, brand_name: brandName, warranty_months: purWM, updatePurchasePrice: true });
+  var _wPur = getWarrantyInputs('pur-warranty-months','pur-warranty-unit'); var purWM = _wPur.months; var purWU = _wPur.unit;
+  purchaseCart.push({ product_id: productId, desc: desc, quantity: qty, unit_cost: unitCost, sell_price: sellPrice, amount: qty * unitCost, category_name: catName, brand_name: brandName, warranty_months: purWM, warranty_unit: purWU, updatePurchasePrice: true });
   document.getElementById('pur-product').value = '';
   document.getElementById('pur-desc').value = '';
   document.getElementById('pur-qty').value = '1';
@@ -4564,9 +4597,8 @@ function hajiraEarned(worker, att) {
   // base pay per attendance row
   if (!att || att.status === 'absent') return 0;
   var base = att.status === 'half' ? Number(worker.daily_rate) / 2 : Number(worker.daily_rate);
-  // overtime: ot_hours × ot_rate (if ot_rate=0, default to daily_rate/8)
-  var otRate = Number(att.ot_rate) || (Number(worker.daily_rate) / 8);
-  var ot = Number(att.ot_hours || 0) * otRate;
+  // OT pay is entered directly as a Tk amount (ot_pay field)
+  var ot = Number(att.ot_pay || att.ot_hours || 0); // ot_pay = new field; ot_hours = legacy fallback
   var allowance = Number(att.allowance || 0);
   return base + ot + allowance;
 }
@@ -4614,33 +4646,31 @@ async function loadHajiraAttendance() {
     return;
   }
 
+  var INP = 'padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);text-align:center;box-sizing:border-box;width:100%';
   tb.innerHTML = active.map(function(w) {
     var ex = __hajiraAttRows[w.id] || {};
     var status = ex.status || 'present';
-    var otHours = ex.ot_hours || '';
-    var otRate = ex.ot_rate || '';
+    var otPay = ex.ot_pay != null ? ex.ot_pay : (ex.ot_hours || '');
     var allowance = ex.allowance || '';
     var allowNote = ex.allowance_note || '';
     var note = ex.note || '';
-    var sid = 'hatt-status-' + w.id;
-    var otHid = 'hatt-oth-' + w.id;
-    var otRid = 'hatt-otr-' + w.id;
-    var alid = 'hatt-al-' + w.id;
+    var sid  = 'hatt-status-' + w.id;
+    var otPid = 'hatt-otp-' + w.id;
+    var alid  = 'hatt-al-'  + w.id;
     var alnid = 'hatt-aln-' + w.id;
-    var nid = 'hatt-note-' + w.id;
+    var nid   = 'hatt-note-'+ w.id;
     return '<tr>' +
       '<td style="font-weight:600">' + esc(w.name) + '<br><span style="font-size:11px;color:var(--text-2)">' + esc(w.phone || '') + '</span></td>' +
-      '<td class="num">Tk ' + fmt(w.daily_rate) + '</td>' +
-      '<td><select id="' + sid + '" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font-size:13px" onchange="hattStatusChange(this,' + w.id + ')">' +
-        '<option value="present"' + (status==='present'?' selected':'') + '>✅ Present</option>' +
-        '<option value="half"' + (status==='half'?' selected':'') + '>🌓 Half day</option>' +
-        '<option value="absent"' + (status==='absent'?' selected':'') + '>❌ Absent</option>' +
+      '<td class="num" style="white-space:nowrap">Tk ' + fmt(w.daily_rate) + '</td>' +
+      '<td><select id="' + sid + '" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font-size:13px;width:100%">' +
+        '<option value="present"'  + (status==='present' ?' selected':'') + '>✅ Present</option>' +
+        '<option value="half"'     + (status==='half'    ?' selected':'') + '>🌓 Half day</option>' +
+        '<option value="absent"'   + (status==='absent'  ?' selected':'') + '>❌ Absent</option>' +
       '</select></td>' +
-      '<td class="num"><input type="number" id="' + otHid + '" value="' + otHours + '" placeholder="0" min="0" step="0.5" style="width:64px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);text-align:center" title="Overtime hours" /></td>' +
-      '<td class="num"><input type="number" id="' + otRid + '" value="' + otRate + '" placeholder="auto" min="0" style="width:72px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);text-align:center" title="OT rate/hr (blank = salary÷8)" /></td>' +
-      '<td class="num"><div style="display:flex;gap:4px;align-items:center"><input type="number" id="' + alid + '" value="' + allowance + '" placeholder="0" min="0" style="width:68px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);text-align:center" title="Allowance (Tk)" />' +
-      '<input type="text" id="' + alnid + '" value="' + esc(allowNote) + '" placeholder="label" style="width:80px;padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font-size:11px" title="Allowance label e.g. Transport" /></div></td>' +
-      '<td><input type="text" id="' + nid + '" value="' + esc(note) + '" placeholder="Note" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);width:120px;font-size:12px" /></td>' +
+      '<td class="num" style="min-width:90px"><input type="number" id="' + otPid + '" value="' + otPay + '" placeholder="Tk 0" min="0" style="' + INP + '" title="Overtime payment (Tk)" /></td>' +
+      '<td class="num" style="min-width:90px"><input type="number" id="' + alid + '" value="' + allowance + '" placeholder="Tk 0" min="0" style="' + INP + '" title="Allowance (Tk)" /></td>' +
+      '<td style="min-width:90px"><input type="text" id="' + alnid + '" value="' + esc(allowNote) + '" placeholder="e.g. Transport" style="padding:5px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font-size:12px;box-sizing:border-box;width:100%" /></td>' +
+      '<td style="min-width:100px"><input type="text" id="' + nid + '" value="' + esc(note) + '" placeholder="Note" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font-size:12px;box-sizing:border-box;width:100%" /></td>' +
       '</tr>';
   }).join('');
 
@@ -4676,12 +4706,11 @@ async function saveHajiraAttendance() {
   for (var i = 0; i < active.length; i++) {
     var w = active[i];
     var status = (document.getElementById('hatt-status-' + w.id) || {}).value || 'present';
-    var otHours = parseFloat((document.getElementById('hatt-oth-' + w.id) || {}).value) || 0;
-    var otRate = parseFloat((document.getElementById('hatt-otr-' + w.id) || {}).value) || 0;
+    var otPay = parseFloat((document.getElementById('hatt-otp-' + w.id) || {}).value) || 0;
     var allowance = parseFloat((document.getElementById('hatt-al-' + w.id) || {}).value) || 0;
     var allowanceNote = ((document.getElementById('hatt-aln-' + w.id) || {}).value || '').trim();
     var note = ((document.getElementById('hatt-note-' + w.id) || {}).value || '').trim();
-    var res = await apiPost('/hajira-attendance', { worker_id: w.id, date: date, status: status, ot_hours: otHours, ot_rate: otRate, allowance: allowance, allowance_note: allowanceNote, note: note });
+    var res = await apiPost('/hajira-attendance', { worker_id: w.id, date: date, status: status, ot_pay: otPay, ot_hours: otPay, allowance: allowance, allowance_note: allowanceNote, note: note });
     if (res && res.error) errors.push(w.name + ': ' + res.error);
   }
 
@@ -4835,7 +4864,7 @@ async function renderHajiraLedgerDetail() {
   var present = att.filter(function(r){ return r.status==='present'; }).length;
   var half    = att.filter(function(r){ return r.status==='half'; }).length;
   var absent  = att.filter(function(r){ return r.status==='absent'; }).length;
-  var totalOtHours  = att.reduce(function(t,r){ return t + Number(r.ot_hours||0); }, 0);
+  var totalOtPay    = att.reduce(function(t,r){ return t + Number(r.ot_pay||r.ot_hours||0); }, 0);
   var totalAllowance = att.reduce(function(t,r){ return t + Number(r.allowance||0); }, 0);
   var totalEarned   = att.reduce(function(t,r){ return t + hajiraEarned(worker,r); }, 0);
   var totalPaid     = pay.reduce(function(t,r){ return t + Number(r.amount); }, 0);
@@ -4847,7 +4876,7 @@ async function renderHajiraLedgerDetail() {
     summaryCard2('ti-calendar-check', '#10b981', 'Present', present + ' days') +
     summaryCard2('ti-clock-half', '#f59e0b', 'Half day', half + ' days') +
     summaryCard2('ti-user-x', '#ef4444', 'Absent', absent + ' days') +
-    summaryCard2('ti-clock', '#6366f1', 'Overtime', totalOtHours.toFixed(1) + ' hrs') +
+    summaryCard2('ti-clock', '#6366f1', 'OT Pay', 'Tk ' + fmt(att.reduce(function(t,r){ return t+Number(r.ot_pay||r.ot_hours||0); },0))) +
     summaryCard2('ti-gift', '#0ea5e9', 'Allowance', 'Tk ' + fmt(totalAllowance)) +
     summaryCard2('ti-coin', '#10b981', 'Total earned', 'Tk ' + fmt(totalEarned)) +
     summaryCard2('ti-check', '#3b82f6', 'Paid', 'Tk ' + fmt(totalPaid)) +
@@ -4861,8 +4890,7 @@ async function renderHajiraLedgerDetail() {
     } else {
       attTb.innerHTML = att.map(function(r) {
         var base = r.status === 'absent' ? 0 : (r.status === 'half' ? Number(worker.daily_rate)/2 : Number(worker.daily_rate));
-        var otRate = Number(r.ot_rate) || (Number(worker.daily_rate)/8);
-        var otAmt = Number(r.ot_hours||0) * otRate;
+        var otAmt = Number(r.ot_pay || r.ot_hours || 0);
         var alAmt = Number(r.allowance||0);
         var total = base + otAmt + alAmt;
         var notes = [r.note, r.allowance_note ? r.allowance_note + ' allowance' : ''].filter(Boolean).join(', ');
@@ -4870,7 +4898,7 @@ async function renderHajiraLedgerDetail() {
           '<td>' + r.date + '</td>' +
           '<td style="color:' + hajiraStatusColor(r.status) + ';font-weight:600">' + hajiraStatusLabel(r.status) + '</td>' +
           '<td class="num">' + (base ? 'Tk ' + fmt(base) : '—') + '</td>' +
-          '<td class="num">' + (otAmt ? 'Tk ' + fmt(otAmt) + '<br><span style="font-size:10px;color:var(--text-2)">' + r.ot_hours + 'h × ' + fmt(otRate) + '</span>' : '—') + '</td>' +
+          '<td class="num">' + (otAmt ? 'Tk ' + fmt(otAmt) : '—') + '</td>' +
           '<td class="num">' + (alAmt ? 'Tk ' + fmt(alAmt) : '—') + '</td>' +
           '<td class="num" style="font-weight:700;color:var(--ok)">' + (total ? 'Tk ' + fmt(total) : '—') + '</td>' +
           '<td style="font-size:12px;color:var(--text-2)">' + esc(notes) + '</td>' +
@@ -4879,7 +4907,7 @@ async function renderHajiraLedgerDetail() {
       '<tr style="font-weight:700;border-top:2px solid var(--border);background:var(--surface-2)">' +
         '<td colspan="2">Total</td>' +
         '<td class="num">Tk ' + fmt(att.reduce(function(t,r){ var b=r.status==='absent'?0:(r.status==='half'?Number(worker.daily_rate)/2:Number(worker.daily_rate)); return t+b; },0)) + '</td>' +
-        '<td class="num">Tk ' + fmt(att.reduce(function(t,r){ var otr=Number(r.ot_rate)||(Number(worker.daily_rate)/8); return t+Number(r.ot_hours||0)*otr; },0)) + '</td>' +
+        '<td class="num">Tk ' + fmt(att.reduce(function(t,r){ return t+Number(r.ot_pay||r.ot_hours||0); },0)) + '</td>' +
         '<td class="num">Tk ' + fmt(totalAllowance) + '</td>' +
         '<td class="num">Tk ' + fmt(totalEarned) + '</td>' +
         '<td></td>' +

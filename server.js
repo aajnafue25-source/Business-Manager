@@ -648,7 +648,7 @@ const routes = {
     } else {
       barcode = await getNextBarcode(b.name);
     }
-    await sb('POST', 'products', { body: { id, user_id: session.businessId, name: b.name, barcode, quantity: Number(b.quantity) || 0, purchase_price: Number(b.purchase_price) || 0, sell_price: Number(b.sell_price) || 0, unit: b.unit || 'pcs', category_id: b.category_id || null, brand_id: b.brand_id || null, category_name: b.category_name || null, brand_name: b.brand_name || null, warranty_months: Number(b.warranty_months) || 0 } });
+    await sb('POST', 'products', { body: { id, user_id: session.businessId, name: b.name, barcode, quantity: Number(b.quantity) || 0, purchase_price: Number(b.purchase_price) || 0, sell_price: Number(b.sell_price) || 0, unit: b.unit || 'pcs', category_id: b.category_id || null, brand_id: b.brand_id || null, category_name: b.category_name || null, brand_name: b.brand_name || null, warranty_months: Number(b.warranty_months) || 0, warranty_unit: b.warranty_unit || 'months' } });
     // If serial numbers provided (comma-separated), register each one
     if (b.serials) {
       const serials = String(b.serials).split(',').map(s => s.trim()).filter(Boolean);

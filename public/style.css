@@ -582,13 +582,20 @@ body.hide-purchase-price .product-cost-row { display: none !important; }
 .form-row input:focus, .form-row select:focus { outline: none; border-color: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
 
 .btn-save {
-  width: 100%; padding: 12px; border-radius: var(--radius-md); background: var(--grad-cyan);
+  width: 100%; padding: 12px; border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #2f6fd0 0%, #2aa9c9 100%);
   color: #fff; font-size: 14px; font-weight: 600; border: none; cursor: pointer;
   margin-top: 4px; display: flex; align-items: center; justify-content: center; gap: 6px;
   transition: filter .15s, transform .05s; box-shadow: 0 4px 12px rgba(47,111,208,0.28);
 }
-.btn-save:hover { filter: brightness(1.07); }
+.btn-save:hover { filter: brightness(1.1); }
 .btn-save:active { transform: translateY(1px); }
+/* Green save variant */
+.btn-save.btn-green { background: linear-gradient(135deg, #0e9e6e 0%, #16c98d 100%); box-shadow: 0 4px 12px rgba(14,158,110,0.28); }
+/* Orange / warning variant */
+.btn-save.btn-orange { background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%); box-shadow: 0 4px 12px rgba(217,119,6,0.25); }
+/* Red / danger variant */
+.btn-save.btn-danger { background: linear-gradient(135deg, #dc2626 0%, #f87171 100%); box-shadow: 0 4px 12px rgba(220,38,38,0.25); }
 
 /* Lists */
 .list-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-top: 18px; box-shadow: var(--shadow-card); }
@@ -615,7 +622,8 @@ td.num { font-weight: 600; }
 .filter-bar input { font-size: 13px; padding: 8px 11px; border-radius: var(--radius-md); border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text); }
 .filter-to { font-size: 12.5px; color: var(--text-3); }
 .btn-filter, .btn-clear { font-size: 13px; padding: 8px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-strong); cursor: pointer; font-weight: 500; }
-.btn-filter { background: var(--surface-2); color: var(--text); }
+.btn-filter { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-filter:hover { filter: brightness(1.1); }
 .btn-clear { background: none; color: var(--text-2); }
 
 .total-row { padding: 12px 18px; background: var(--surface-2); font-size: 14px; font-weight: 600; display: flex; justify-content: space-between; border-top: 1px solid var(--border); }
@@ -693,10 +701,11 @@ tr.clickable-row:hover { background: var(--surface-2); }
 .modal-actions { display: flex; gap: 10px; }
 .btn-secondary {
   padding: 11px 16px; border-radius: var(--radius-md); background: var(--surface-2);
-  color: var(--text); font-size: 14px; font-weight: 600; border: 1px solid var(--border-strong); cursor: pointer;
+  color: var(--text); font-size: 14px; font-weight: 600; border: 1.5px solid var(--border-strong); cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: background .15s, border-color .15s, color .15s;
 }
-.btn-secondary:hover { background: var(--border); }
+.btn-secondary:hover { background: var(--border); border-color: var(--accent); color: var(--accent); }
 @media (max-width: 560px) {
   .label-editor { grid-template-columns: 1fr; }
 }
@@ -705,11 +714,13 @@ tr.clickable-row:hover { background: var(--surface-2); }
 .cart-add-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 8px; }
 .cart-add-row .form-row { margin-bottom: 0; min-width: 110px; }
 .btn-add-item {
-  padding: 9px 16px; border-radius: var(--radius-md); background: var(--ok-bg); color: var(--ok);
-  font-size: 13.5px; font-weight: 600; border: 1px solid transparent; cursor: pointer;
+  padding: 9px 16px; border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #0e9e6e 0%, #16c98d 100%);
+  color: #fff; font-size: 13.5px; font-weight: 600; border: none; cursor: pointer;
   display: flex; align-items: center; gap: 6px; white-space: nowrap; height: 38px;
+  box-shadow: 0 2px 8px rgba(14,158,110,0.28); transition: filter .15s;
 }
-.btn-add-item:hover { opacity: 0.85; }
+.btn-add-item:hover { filter: brightness(1.1); }
 .cart-table-wrap { margin: 14px 0; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
 .cart-table-wrap table { width: 100%; font-size: 13.5px; min-width: 0; }
 .cart-table-wrap thead th { background: var(--surface-2); padding: 8px 12px; font-size: 11px; }
@@ -812,3 +823,43 @@ tr.clickable-row:hover { background: var(--surface-2); }
 @media (max-width: 420px) {
   .metric-row { grid-template-columns: 1fr 1fr; }
 }
+
+/* ── Feature toggle switches ── */
+.feature-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.feature-toggle-row:last-child { border-bottom: none; }
+.feature-toggle-info { flex: 1; }
+.feature-toggle-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.feature-toggle-desc { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+.feature-switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+.feature-switch input { opacity: 0; width: 0; height: 0; }
+.feature-slider {
+  position: absolute; cursor: pointer; inset: 0;
+  background: var(--border); border-radius: 24px; transition: .2s;
+}
+.feature-slider:before {
+  content: ''; position: absolute;
+  width: 18px; height: 18px; left: 3px; bottom: 3px;
+  background: #fff; border-radius: 50%; transition: .2s;
+}
+.feature-switch input:checked + .feature-slider { background: var(--accent); }
+.feature-switch input:checked + .feature-slider:before { transform: translateX(20px); }
+
+/* ── Warranty page tabs ── */
+.tab-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.tab-btn {
+  padding: 7px 18px; border-radius: 8px; border: 1.5px solid var(--border);
+  background: var(--surface-2); color: var(--text-2); cursor: pointer; font-size: 13px; font-weight: 600;
+  transition: background .15s, color .15s, border-color .15s; display:flex;align-items:center;gap:6px;
+}
+.tab-btn:hover { background: var(--border); color: var(--text); }
+.tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow:0 2px 8px rgba(47,111,208,.25); }
+
+/* Hajira page */
+.page-title .ti-hard-hat { color: var(--warn); }

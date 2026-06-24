@@ -483,12 +483,13 @@
           <div class="form-row" style="flex:1"><label>Sell price</label><input type="number" id="pur-sell" min="0" placeholder="0.00" /></div>
           <div class="form-row" style="flex:1"><label>Category</label><select id="pur-category"><option value="">None</option></select></div>
           <div class="form-row" style="flex:1"><label>Brand</label><select id="pur-brand"><option value="">None</option></select></div>
+          <div class="form-row" id="pur-warranty-row" style="display:none;flex:1"><label><i class="ti ti-shield-check"></i> Warranty</label><div style="display:flex;gap:4px;align-items:center"><input type="number" id="pur-warranty-months" placeholder="0" min="0" style="flex:1;min-width:60px" /><select id="pur-warranty-unit" onchange="onWarrantyUnitChange('pur-warranty-unit','pur-warranty-months')" style="padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-2);color:var(--text);font-size:12px"><option value="months">mo</option><option value="days">days</option><option value="lifetime">Lifetime ♾</option></select></div></div>
           <button class="btn-add-item" onclick="addPurchaseItem()"><i class="ti ti-plus"></i> Add item</button>
         </div>
 
         <div class="cart-table-wrap">
           <table id="pur-table">
-            <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Cost</th><th class="num">Sell price</th><th class="num">Amount</th><th></th></tr></thead>
+            <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Cost</th><th class="num">Sell price</th><th class="num" id="pur-warranty-th" style="display:none">Warranty</th><th class="num">Amount</th><th></th></tr></thead>
             <tbody id="pur-tbody"><tr><td colspan="5" class="empty-state">No items added yet.</td></tr></tbody>
           </table>
         </div>
@@ -762,7 +763,7 @@
           <div class="form-row"><label><i class="ti ti-barcode"></i> Serial numbers <span style="font-weight:400;font-size:11px">(comma-separated if multiple)</span></label><input type="text" id="prod-serials" placeholder="Scan or type serial numbers" /></div>
         </div>
         <div id="prod-warranty-row" style="display:none" class="product-form-grid">
-          <div class="form-row"><label><i class="ti ti-shield-check"></i> Warranty (months)</label><input type="number" id="prod-warranty-months" placeholder="0 = no warranty" min="0" /></div>
+          <div class="form-row"><label><i class="ti ti-shield-check"></i> Warranty</label><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input type="number" id="prod-warranty-months" placeholder="0 = none" min="0" style="flex:1;min-width:80px" /><select id="prod-warranty-unit" onchange="onWarrantyUnitChange('prod-warranty-unit','prod-warranty-months')" style="padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-2);color:var(--text);font-size:13px"><option value="months">Months</option><option value="days">Days</option><option value="lifetime">Lifetime ♾</option></select></div></div>
         </div>
         <button class="btn-save" onclick="addProduct()">Save product &amp; generate barcode</button>
       </div>
