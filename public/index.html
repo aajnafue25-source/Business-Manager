@@ -145,7 +145,7 @@
       <div class="nav-dropdown">
         <button data-page="staff"><i class="ti ti-users-group"></i>Manage Staff</button>
         <button data-page="attendance"><i class="ti ti-calendar-check"></i>Attendance</button>
-        <button data-page="hajira" id="nav-hajira" style="display:none"><i class="ti ti-hammer"></i>Hajira</button>
+        <button data-page="hajira" id="nav-hajira" style="display:none"><i class="ti ti-hammer"></i><span>Hajira</span></button>
         <button data-page="staffsales"><i class="ti ti-chart-bar"></i>Staff Sales</button>
         <button data-page="staffreports"><i class="ti ti-report-analytics"></i>Staff Reports</button>
       </div>
@@ -219,7 +219,12 @@
 
     <!-- SALES -->
     <section id="page-sales" class="page">
-      <h1 class="page-title"><i class="ti ti-chart-line"></i> Sales</h1>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+        <h1 class="page-title" style="margin:0"><i class="ti ti-chart-line"></i> Sales</h1>
+        <button class="toggle-cost-btn" id="toggle-cost-btn-sales" onclick="togglePurchasePrice()" title="Show/hide purchase cost" style="font-size:12px;padding:6px 12px">
+          <i class="ti ti-eye-off" id="toggle-cost-icon-sales"></i> <span id="toggle-cost-label-sales">Show cost</span>
+        </button>
+      </div>
 
       <div class="pos-layout">
 

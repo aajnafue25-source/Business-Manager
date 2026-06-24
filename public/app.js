@@ -420,20 +420,25 @@ function togglePurchasePrice() {
 }
 
 function applyPurchasePriceVisibility() {
-  var btn = document.getElementById('toggle-cost-btn');
-  var icon = document.getElementById('toggle-cost-icon');
-  var label = document.getElementById('toggle-cost-label');
-  if (__showPurchasePrice) {
+  var showing = __showPurchasePrice;
+  if (showing) {
     document.body.classList.remove('hide-purchase-price');
-    if (btn) btn.classList.remove('cost-hidden');
-    if (icon) icon.className = 'ti ti-eye';
-    if (label) label.textContent = 'Hide cost';
   } else {
     document.body.classList.add('hide-purchase-price');
-    if (btn) btn.classList.add('cost-hidden');
-    if (icon) icon.className = 'ti ti-eye-off';
-    if (label) label.textContent = 'Show cost';
   }
+  // Update all toggle buttons (products page + sales page)
+  ['toggle-cost-btn','toggle-cost-btn-sales'].forEach(function(bid) {
+    var btn = document.getElementById(bid);
+    if (btn) { showing ? btn.classList.remove('cost-hidden') : btn.classList.add('cost-hidden'); }
+  });
+  ['toggle-cost-icon','toggle-cost-icon-sales'].forEach(function(iid) {
+    var icon = document.getElementById(iid);
+    if (icon) icon.className = showing ? 'ti ti-eye' : 'ti ti-eye-off';
+  });
+  ['toggle-cost-label','toggle-cost-label-sales'].forEach(function(lid) {
+    var label = document.getElementById(lid);
+    if (label) label.textContent = showing ? 'Hide cost' : 'Show cost';
+  });
 }
 
 // Theme toggle (light/dark)
@@ -1006,7 +1011,8 @@ function addProductDirectlyToCart(p) {
     product_id: p.id, desc: p.name, quantity: 1, unit_price: Number(p.sell_price) || 0,
     amount: Number(p.sell_price) || 0, cost_price: costPrice, unit: p.unit || 'pcs',
     warranty_months: Number(p.warranty_months) || 0,
-    warranty_unit: p.warranty_unit || 'months'
+    warranty_unit: p.warranty_unit || 'months',
+    _origQty: 1
   });
   // Decrement local stock display
   var local = products.find(function (x) { return x.id === p.id; });
@@ -1132,18 +1138,68 @@ function getCartTotals() {
   return { subtotal: subtotal, discApplied: discApplied, discPct: discPct, discAmt: discAmt, vatPct: vatPct, vatApplied: vatApplied, itemsTotal: itemsTotal, previousBalance: previousBalance, total: grandTotal };
 }
 
+function cartUpdateQty(i, val) {
+  var qty = parseFloat(val) || 1;
+  var it = cart[i];
+  if (!it) return;
+  // Stock check
+  var prod = products.find(function(p){ return p.id === it.product_id; });
+  var origQty = it._origQty != null ? it._origQty : 1; // quantity already taken from stock
+  var stockAvail = prod ? (Number(prod.quantity) + origQty) : Infinity;
+  if (qty > stockAvail) {
+    qty = stockAvail;
+    var el = document.getElementById('cart-qty-' + i);
+    if (el) el.value = qty;
+    toast('Max stock: ' + stockAvail, 'warn');
+  }
+  qty = Math.max(0.01, qty);
+  cart[i].quantity = qty;
+  cart[i].amount = qty * cart[i].unit_price;
+  renderCartTotals(); updatePayPreview();
+}
+function cartUpdatePrice(i, val) {
+  var price = parseFloat(val) || 0;
+  cart[i].unit_price = price;
+  cart[i].amount = cart[i].quantity * price;
+  renderCartTotals(); updatePayPreview();
+}
+function cartUpdateWarranty(i, val, unit) {
+  cart[i].warranty_months = val >= 9999 ? 9999 : (parseFloat(val) || 0);
+  if (unit) cart[i].warranty_unit = unit;
+}
+
 function renderCart() {
   const tb = document.getElementById('cart-tbody');
   var showW = !!(settings && settings.feature_warranty);
   var wHeader = document.getElementById('cart-warranty-header');
   if (wHeader) wHeader.style.display = showW ? '' : 'none';
+  var INP = 'padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:var(--surface-2);color:var(--text);text-align:center;box-sizing:border-box;';
   if (!cart.length) {
     tb.innerHTML = '<tr><td colspan="' + (showW?6:5) + '" class="empty-state">Click a product card to add it to cart.</td></tr>';
   } else {
     tb.innerHTML = cart.map(function (it, i) {
-      var wLabel = it.warranty_months >= 9999 ? '♾ Lifetime' : (it.warranty_months ? warrantyDisplay(it.warranty_months, it.warranty_unit) : '—');
-      var wCell = showW ? '<td class="num" style="font-size:12px;color:var(--ok)">' + wLabel + '</td>' : '';
-      return '<tr><td>' + esc(it.desc) + '</td><td class="num">' + it.quantity + '</td><td class="num">' + fmtPlain(it.unit_price) + '</td>' + wCell + '<td class="num" style="font-weight:600">' + fmtPlain(it.amount) + '</td><td><button class="cart-row-remove" onclick="removeCartItem(' + i + ')"><i class="ti ti-trash"></i></button></td></tr>';
+      var prod = products.find(function(p){ return p.id === it.product_id; });
+      var origQty = it._origQty != null ? it._origQty : 1;
+      var stockAvail = prod ? (Number(prod.quantity) + origQty) : 999;
+      var wVal = it.warranty_months >= 9999 ? 9999 : (it.warranty_months || 0);
+      var wUnit = it.warranty_unit || 'months';
+      var wCell = showW ? (
+        '<td class="num" style="min-width:110px">' +
+        '<input type="number" id="cart-w-' + i + '" value="' + wVal + '" min="0" step="1" style="' + INP + 'width:52px" title="Warranty (9999=Lifetime)" onchange="cartUpdateWarranty(' + i + ',+this.value,document.getElementById('cart-wu-' + i + '').value);renderCart()" />' +
+        '<select id="cart-wu-' + i + '" style="' + INP + 'width:56px;margin-left:2px;font-size:11px" onchange="cartUpdateWarranty(' + i + ',document.getElementById('cart-w-' + i + '').value||0,this.value);renderCart()">' +
+        '<option value="months"' + (wUnit==='months'?' selected':'') + '>mo</option>' +
+        '<option value="days"' + (wUnit==='days'?' selected':'') + '>d</option>' +
+        '<option value="lifetime"' + (wUnit==='lifetime'?' selected':'') + '>♾</option>' +
+        '</select></td>'
+      ) : '';
+      return '<tr>' +
+        '<td style="font-weight:600">' + esc(it.desc) + '<br><span class="product-cost-row" style="font-size:11px;color:var(--text-3);font-weight:400">Cost: ' + fmtPlain(it.cost_price || 0) + '</span></td>' +
+        '<td class="num" style="min-width:80px"><input type="number" id="cart-qty-' + i + '" value="' + it.quantity + '" min="0.01" max="' + stockAvail + '" step="1" style="' + INP + 'width:60px" onchange="cartUpdateQty(' + i + ',this.value)" title="Max stock: ' + stockAvail + '" /></td>' +
+        '<td class="num" style="min-width:90px"><input type="number" id="cart-sp-' + i + '" value="' + fmtPlain(it.unit_price) + '" min="0" step="0.01" style="' + INP + 'width:78px" onchange="cartUpdatePrice(' + i + ',this.value)" title="Selling price (editable)" /></td>' +
+        wCell +
+        '<td class="num" style="font-weight:700;min-width:80px">' + fmtPlain(it.amount) + '</td>' +
+        '<td><button class="cart-row-remove" onclick="removeCartItem(' + i + ')"><i class="ti ti-trash"></i></button></td>' +
+      '</tr>';
     }).join('');
   }
   renderCartTotals();
@@ -1420,25 +1476,88 @@ function clearSalesListFilter() {
 }
 
 function editSaleEntry(r) {
-  openEditModal('Edit Sale', [
-    { key: 'date', label: 'Date', type: 'date', value: r.date },
-    { key: 'desc', label: 'Description', type: 'text', value: r.desc },
-    { key: 'quantity', label: 'Quantity', type: 'number', value: r.quantity },
-    { key: 'unit_price', label: 'Unit price (Tk)', type: 'number', value: r.unit_price },
-    { key: 'amount', label: 'Amount (Tk)', type: 'number', value: r.amount }
-  ], async function () {
-    const date = document.getElementById('edit-date').value;
-    const desc = document.getElementById('edit-desc').value.trim();
-    const quantity = document.getElementById('edit-quantity').value;
-    const unit_price = document.getElementById('edit-unit_price').value;
-    const amount = parseFloat(document.getElementById('edit-amount').value);
-    if (!desc || isNaN(amount)) return alert('Please fill in description and amount.');
-    const res = await apiPut('/sales/' + r.id, { date: date, desc: desc, amount: amount, quantity: quantity ? parseFloat(quantity) : null, unit_price: unit_price ? parseFloat(unit_price) : null });
-    if (res && res.error) { alert(res.error); return; }
-    closeEditModal();
-    renderSalesPage();
-    toast('Sale updated');
-  });
+  // Switch bill detail to inline-edit mode
+  renderSaleDetailEditMode();
+}
+
+async function renderSaleDetailEditMode() {
+  var billItems = window.__currentBillItems || [];
+  var billData = window.__currentBillData || {};
+  var content = document.getElementById('saledetail-content');
+  if (!content || !billItems.length) return;
+
+  var INP = 'padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);width:100%;box-sizing:border-box;font-size:13px;';
+
+  var rows = billItems.map(function(it, i) {
+    return '<tr id="sale-edit-row-' + i + '">' +
+      '<td>' +
+        '<input type="text" id="se-desc-' + i + '" value="' + esc(it.desc||it.description||'') + '" style="' + INP + '" readonly />' +
+      '</td>' +
+      '<td class="num" style="min-width:70px">' +
+        '<input type="number" id="se-qty-' + i + '" value="' + (it.quantity||1) + '" min="0.01" step="1" style="' + INP + 'text-align:center" onchange="saleEditRecalc(' + i + ')" />' +
+      '</td>' +
+      '<td class="num" style="min-width:80px">' +
+        '<span style="font-size:12px;color:var(--text-3)">Tk ' + fmtPlain(it.unit_price || (it.amount/(it.quantity||1))) + '</span>' +
+      '</td>' +
+      '<td class="num" style="min-width:90px">' +
+        '<input type="number" id="se-sp-' + i + '" value="' + fmtPlain(it.unit_price || (it.amount/(it.quantity||1))) + '" min="0" step="0.01" style="' + INP + 'text-align:center" onchange="saleEditRecalc(' + i + ')" />' +
+      '</td>' +
+      '<td class="num" style="font-weight:700" id="se-amt-' + i + '">Tk ' + fmtPlain(it.amount) + '</td>' +
+      '<td><button class="del-btn" onclick="saleEditRemoveRow(' + i + ',' + it.id + ')" title="Remove"><i class="ti ti-trash"></i></button></td>' +
+    '</tr>';
+  }).join('');
+
+  content.innerHTML =
+    '<div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">' +
+      '<h3 style="margin:0;flex:1">✏️ Editing Bill #' + (billData.billNo || '—') + '</h3>' +
+      '<button class="btn-secondary" onclick="renderSaleDetailPage()"><i class="ti ti-x"></i> Cancel</button>' +
+      '<button class="btn-save" style="width:auto;padding:10px 20px" onclick="saveSaleDetailEdits()"><i class="ti ti-check"></i> Save changes</button>' +
+    '</div>' +
+    '<div class="list-card"><div class="table-scroll">' +
+    '<table><thead><tr>' +
+      '<th>Item</th><th class="num">Qty</th><th class="num">Cost price</th><th class="num">Sell price</th><th class="num">Amount</th><th></th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div></div>' +
+    '<p style="font-size:12px;color:var(--text-2);margin-top:8px"><i class="ti ti-info-circle"></i> Qty and selling price are editable. Cost price is shown for reference only and cannot be changed. Use the 🗑 button to remove an item from the bill.</p>';
+}
+
+function saleEditRecalc(i) {
+  var qty = parseFloat((document.getElementById('se-qty-' + i)||{}).value) || 1;
+  var sp  = parseFloat((document.getElementById('se-sp-'  + i)||{}).value) || 0;
+  var amt = qty * sp;
+  var amtEl = document.getElementById('se-amt-' + i);
+  if (amtEl) amtEl.textContent = 'Tk ' + fmtPlain(amt);
+}
+
+async function saleEditRemoveRow(rowIndex, saleId) {
+  if (!confirm('Remove this item from the bill? This cannot be undone.')) return;
+  var res = await fetch('/api/dynamic', { method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ type: 'delete', table: 'sales', id: saleId }) });
+  var data = await res.json();
+  if (data && data.error) return alert(data.error);
+  // Remove from local array and re-render edit mode
+  window.__currentBillItems.splice(rowIndex, 1);
+  toast('Item removed', 'ok');
+  if (!window.__currentBillItems.length) { navigateTo('saleslist'); return; }
+  renderSaleDetailEditMode();
+}
+
+async function saveSaleDetailEdits() {
+  var billItems = window.__currentBillItems || [];
+  var errors = [];
+  for (var i = 0; i < billItems.length; i++) {
+    var it = billItems[i];
+    var qty = parseFloat((document.getElementById('se-qty-' + i)||{}).value) || 1;
+    var sp  = parseFloat((document.getElementById('se-sp-'  + i)||{}).value) || 0;
+    var amt = qty * sp;
+    var res = await apiPut('/sales/' + it.id, { date: it.date, desc: it.desc||it.description, quantity: qty, unit_price: sp, amount: amt });
+    if (res && res.error) errors.push((it.desc||'item') + ': ' + res.error);
+    else { billItems[i].quantity = qty; billItems[i].unit_price = sp; billItems[i].amount = amt; }
+  }
+  if (errors.length) return alert('Errors:
+' + errors.join('
+'));
+  toast('Bill updated', 'ok');
+  renderSaleDetailPage();
 }
 
 async function renderExpensePage() {
