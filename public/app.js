@@ -1007,9 +1007,10 @@ function setupCartProductPicker() {
 
 function addProductDirectlyToCart(p) {
   var costPrice = Number(p.purchase_price) || 0;
+  var sellPrice = Number(p.sell_price) || 0;
   cart.push({
-    product_id: p.id, desc: p.name, quantity: 1, unit_price: Number(p.sell_price) || 0,
-    amount: Number(p.sell_price) || 0, cost_price: costPrice, unit: p.unit || 'pcs',
+    product_id: p.id, desc: p.name, quantity: 1, unit_price: sellPrice,
+    amount: sellPrice, cost_price: costPrice, unit: p.unit || 'pcs',
     warranty_months: Number(p.warranty_months) || 0,
     warranty_unit: p.warranty_unit || 'months',
     _origQty: 1
@@ -1138,6 +1139,21 @@ function getCartTotals() {
   return { subtotal: subtotal, discApplied: discApplied, discPct: discPct, discAmt: discAmt, vatPct: vatPct, vatApplied: vatApplied, itemsTotal: itemsTotal, previousBalance: previousBalance, total: grandTotal };
 }
 
+function cartStepQty(i, delta) {
+  var el = document.getElementById('cart-qty-' + i);
+  if (!el) return;
+  var it = cart[i]; if (!it) return;
+  var isInt = qtyStepForUnit(it.unit) === '1';
+  var step = isInt ? 1 : 0.5;
+  var current = parseFloat(el.value) || (isInt ? 1 : 0.5);
+  var newVal = Math.max(isInt ? 1 : 0.01, current + (delta * step));
+  el.value = newVal;
+  cartUpdateQty(i, newVal);
+  // Force-update the amount field immediately for visual feedback
+  var amtEl = document.getElementById('cart-amt-' + i);
+  if (amtEl && cart[i]) amtEl.value = cart[i].amount.toFixed(2);
+}
+
 function cartUpdateQty(i, val) {
   var it = cart[i]; if (!it) return;
   var raw = parseFloat(val) || 1;
@@ -1188,22 +1204,29 @@ function renderCart() {
       var stockAvail = prod ? (Number(prod.quantity) + origQty) : 999;
       var wVal = it.warranty_months >= 9999 ? 9999 : (it.warranty_months || 0);
       var wUnit = it.warranty_unit || 'months';
-      var wCell = showW ? (
-        '<td style="padding:3px 4px;white-space:nowrap">' +
-        '<div style="display:flex;gap:2px;align-items:center">' +
-        '<input type="number" id="cart-w-' + i + '" value="' + wVal + '" min="0" step="1" style="' + INP + 'width:42px" title="Warranty" onchange="cartUpdateWarranty(' + i + ',+this.value,null)" />' +
-        '<select id="cart-wu-' + i + '" style="' + INP + 'width:42px;padding:3px 2px" onchange="cartUpdateWarranty(' + i + ',null,this.value)">' +
-        '<option value="months"' + (wUnit==='months'?' selected':'') + '>mo</option>' +
-        '<option value="days"' + (wUnit==='days'?' selected':'') + '>day</option>' +
-        '<option value="lifetime"' + (wUnit==='lifetime'?' selected':'') + '>Life</option>' +
-        '</select></div></td>'
-      ) : '';
+      var wCell = showW
+        ? ('<td style="padding:3px 4px;white-space:nowrap">' +
+           '<div style="display:flex;gap:2px;align-items:center">' +
+           '<input type="number" id="cart-w-' + i + '" value="' + wVal + '" min="0" step="1" style="' + INP + 'width:42px" title="Warranty" onchange="cartUpdateWarranty(' + i + ',+this.value,null)" />' +
+           '<select id="cart-wu-' + i + '" style="' + INP + 'width:42px;padding:3px 2px" onchange="cartUpdateWarranty(' + i + ',null,this.value)">' +
+           '<option value="months"' + (wUnit==='months'?' selected':'') + '>mo</option>' +
+           '<option value="days"' + (wUnit==='days'?' selected':'') + '>day</option>' +
+           '<option value="lifetime"' + (wUnit==='lifetime'?' selected':'') + '>Life</option>' +
+           '</select></div></td>')
+        : '';
+      var amtVal = Number(it.amount != null && it.amount !== 0 ? it.amount : (it.unit_price || 0)).toFixed(2);
       return '<tr>' +
         '<td style="font-weight:600;font-size:12.5px;padding:5px 6px;min-width:90px">' + esc(it.desc) + '<div class="product-cost-row" style="font-size:10px;color:var(--text-3);font-weight:400">Cost: ' + fmtPlain(it.cost_price||0) + '</div></td>' +
-        '<td style="padding:3px 4px;white-space:nowrap;min-width:56px"><input ' + qtyInputAttrs(it.unit, it.quantity, stockAvail) + ' id="cart-qty-' + i + '" style="' + INP + 'width:52px" oninput="cartUpdateQty(' + i + ',this.value)" title="Max stock: ' + stockAvail + '" /></td>' +
-        '<td style="padding:3px 4px;text-align:right;min-width:68px"><span style="font-size:12px;color:var(--text-2);white-space:nowrap">Tk ' + fmtPlain(it.unit_price) + '</span></td>' +
+        '<td style="padding:3px 4px;white-space:nowrap;min-width:80px">' +
+          '<div style="display:flex;align-items:center;gap:2px">' +
+          '<button type="button" style="width:20px;height:28px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);cursor:pointer;font-size:14px;line-height:1;padding:0" onclick="cartStepQty(' + i + ',-1)">−</button>' +
+          '<input type="number" id="cart-qty-' + i + '" ' + qtyInputAttrs(it.unit, it.quantity, stockAvail) + ' style="' + INP + 'width:40px" oninput="cartUpdateQty(' + i + ',this.value)" onchange="cartUpdateQty(' + i + ',this.value)" title="Max stock: ' + stockAvail + '" />' +
+          '<button type="button" style="width:20px;height:28px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);cursor:pointer;font-size:14px;line-height:1;padding:0" onclick="cartStepQty(' + i + ',1)">+</button>' +
+          '</div>' +
+        '</td>' +
+        '<td style="padding:3px 6px;text-align:right;min-width:68px"><span style="font-size:12px;color:var(--text-2);white-space:nowrap">Tk ' + fmtPlain(it.unit_price) + '</span></td>' +
         wCell +
-        '<td style="padding:3px 4px;min-width:74px"><input type="number" id="cart-amt-' + i + '" value="' + fmtPlain(it.amount != null ? it.amount : it.unit_price) + '" min="0" step="0.01" style="' + INP + 'width:68px;color:var(--ok);font-weight:700" oninput="cartUpdateAmount(' + i + ',this.value)" title="Edit total amount" /></td>' +
+        '<td style="padding:3px 4px;min-width:74px"><input type="number" id="cart-amt-' + i + '" value="' + amtVal + '" min="0" step="0.01" style="' + INP + 'width:68px;color:var(--ok);font-weight:700" oninput="cartUpdateAmount(' + i + ',this.value)" onchange="cartUpdateAmount(' + i + ',this.value)" title="Edit total amount" /></td>' +
         '<td style="width:24px;padding:2px"><button class="cart-row-remove" onclick="removeCartItem(' + i + ')"><i class="ti ti-trash"></i></button></td>' +
       '</tr>';
     }).join('');
