@@ -2238,11 +2238,16 @@ function buildPosBillHtml(bill, widthMm) {
   const dt = new Date(bill.date + 'T00:00:00');
   const dateStr = isNaN(dt.getTime()) ? bill.date : dt.toLocaleDateString('en-GB') + ' ' + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const billNoStr = bill.billNo != null ? String(bill.billNo).padStart(6, '0') : '—';
+  var hasW = bill.items.some(function(it){ return it.warranty_months && it.warranty_months > 0; });
   const itemsHtml = bill.items.map(function (it) {
-    return '<tr><td style="padding:3px 2px;vertical-align:top;word-break:break-word;width:40%">' + esc(it.desc) + '</td>' +
-      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:15%">' + it.quantity + '</td>' +
-      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:20%">' + bfmt(it.unit_price != null ? it.unit_price : (it.amount / (it.quantity || 1))) + '</td>' +
-      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:25%">' + bfmt(it.amount) + '</td></tr>';
+    var sp = it.unit_price != null ? it.unit_price : (it.amount / (it.quantity || 1));
+    var wLabel = it.warranty_months >= 9999 ? 'Lifetime' : (it.warranty_months ? warrantyDisplay(it.warranty_months, it.warranty_unit) : '');
+    var wCell = hasW ? '<td style="padding:3px 2px;vertical-align:top;text-align:center;white-space:nowrap;font-size:9px;color:#555">' + esc(wLabel) + '</td>' : '';
+    return '<tr><td style="padding:3px 2px;vertical-align:top;word-break:break-word;width:38%">' + esc(it.desc) + '</td>' +
+      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:12%">' + it.quantity + '</td>' +
+      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:20%">' + bfmt(sp) + '</td>' +
+      wCell +
+      '<td style="padding:3px 2px;vertical-align:top;text-align:right;white-space:nowrap;width:' + (hasW?'16':'30') + '%">' + bfmt(it.amount) + '</td></tr>';
   }).join('');
   const totalQty = bill.items.reduce(function (s2, it) { return s2 + Number(it.quantity || 0); }, 0);
   const widthPx = Math.round(widthMm * 3.7795);
@@ -2264,10 +2269,11 @@ function buildPosBillHtml(bill, widthMm) {
     '<div style="border-top:1px dashed #000;margin:8px 0"></div>' +
     '<table style="width:100%;font-size:' + baseFont + ';border-collapse:collapse;table-layout:fixed">' +
     '<thead><tr>' +
-    '<th style="text-align:left;padding:3px 2px;font-weight:700;width:40%">Item</th>' +
-    '<th style="text-align:right;padding:3px 2px;font-weight:700;width:15%">Qty</th>' +
+    '<th style="text-align:left;padding:3px 2px;font-weight:700;width:38%">Item</th>' +
+    '<th style="text-align:right;padding:3px 2px;font-weight:700;width:12%">Qty</th>' +
     '<th style="text-align:right;padding:3px 2px;font-weight:700;width:20%">Rate</th>' +
-    '<th style="text-align:right;padding:3px 2px;font-weight:700;width:25%">Amount</th>' +
+    (hasW ? '<th style="text-align:center;padding:3px 2px;font-weight:700;width:14%">Warranty</th>' : '') +
+    '<th style="text-align:right;padding:3px 2px;font-weight:700;width:' + (hasW?'16':'30') + '%">Amount</th>' +
     '</tr></thead><tbody>' + itemsHtml + '</tbody></table>' +
     '<div style="border-top:1px dashed #000;margin:8px 0"></div>' +
     (bill.discountApplied > 0 ? '<div style="display:flex;justify-content:space-between;font-size:' + baseFont + ';padding:2px 0"><span>Subtotal</span><span>' + bfmt(bill.subtotal || bill.total) + '</span></div><div style="display:flex;justify-content:space-between;font-size:' + baseFont + ';padding:2px 0;color:#c00"><span>Discount</span><span>-' + bfmt(bill.discountApplied) + '</span></div>' : '') +

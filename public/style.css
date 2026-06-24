@@ -31,6 +31,8 @@
 .ti-user-circle::before         { content: "\f2bd"; }  /* circle-user */
 .ti-user::before                { content: "\f007"; }  /* user */
 .ti-user-plus::before           { content: "\f234"; }  /* user-plus */
+.ti-hammer::before              { content: "\f6e3"; }  /* hammer */
+.ti-hard-hat::before            { content: "\f807"; }  /* helmet-safety */
 .ti-settings::before            { content: "\f013"; }  /* gear */
 .ti-shield::before              { content: "\f132"; }  /* shield */
 .ti-shield-check::before        { content: "\f3ed"; }  /* shield-halved */
