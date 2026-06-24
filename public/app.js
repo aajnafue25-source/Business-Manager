@@ -1164,8 +1164,13 @@ function cartUpdatePrice(i, val) {
   renderCartTotals(); updatePayPreview();
 }
 function cartUpdateWarranty(i, val, unit) {
-  cart[i].warranty_months = val >= 9999 ? 9999 : (parseFloat(val) || 0);
-  if (unit) cart[i].warranty_unit = unit;
+  // If val is null, read from the number input; if unit is null, read from the select
+  var numEl = document.getElementById('cart-w-' + i);
+  var unitEl = document.getElementById('cart-wu-' + i);
+  var v = val !== null ? val : (numEl ? +numEl.value : 0);
+  var u = unit !== null ? unit : (unitEl ? unitEl.value : 'months');
+  if (u === 'lifetime') { cart[i].warranty_months = 9999; cart[i].warranty_unit = 'lifetime'; }
+  else { cart[i].warranty_months = parseFloat(v) || 0; cart[i].warranty_unit = u; }
 }
 
 function renderCart() {
@@ -1185,11 +1190,11 @@ function renderCart() {
       var wUnit = it.warranty_unit || 'months';
       var wCell = showW ? (
         '<td class="num" style="min-width:110px">' +
-        '<input type="number" id="cart-w-' + i + '" value="' + wVal + '" min="0" step="1" style="' + INP + 'width:52px" title="Warranty (9999=Lifetime)" onchange="cartUpdateWarranty(' + i + ',+this.value,document.getElementById('cart-wu-' + i + '').value);renderCart()" />' +
-        '<select id="cart-wu-' + i + '" style="' + INP + 'width:56px;margin-left:2px;font-size:11px" onchange="cartUpdateWarranty(' + i + ',document.getElementById('cart-w-' + i + '').value||0,this.value);renderCart()">' +
+        '<input type="number" id="cart-w-' + i + '" value="' + wVal + '" min="0" step="1" style="' + INP + 'width:52px" title="Warranty" onchange="cartUpdateWarranty(' + i + ',+this.value,null);renderCart()" />' +
+        '<select id="cart-wu-' + i + '" style="' + INP + 'width:56px;margin-left:2px;font-size:11px" onchange="cartUpdateWarranty(' + i + ',null,this.value);renderCart()">' +
         '<option value="months"' + (wUnit==='months'?' selected':'') + '>mo</option>' +
         '<option value="days"' + (wUnit==='days'?' selected':'') + '>d</option>' +
-        '<option value="lifetime"' + (wUnit==='lifetime'?' selected':'') + '>♾</option>' +
+        '<option value="lifetime"' + (wUnit==='lifetime'?' selected':'') + '>Life</option>' +
         '</select></td>'
       ) : '';
       return '<tr>' +
@@ -1553,9 +1558,7 @@ async function saveSaleDetailEdits() {
     if (res && res.error) errors.push((it.desc||'item') + ': ' + res.error);
     else { billItems[i].quantity = qty; billItems[i].unit_price = sp; billItems[i].amount = amt; }
   }
-  if (errors.length) return alert('Errors:
-' + errors.join('
-'));
+  if (errors.length) return alert('Errors:\n' + errors.join('\n'));
   toast('Bill updated', 'ok');
   renderSaleDetailPage();
 }
