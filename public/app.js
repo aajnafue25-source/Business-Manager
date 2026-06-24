@@ -1139,28 +1139,27 @@ function getCartTotals() {
 }
 
 function cartUpdateQty(i, val) {
-  var qty = parseFloat(val) || 1;
-  var it = cart[i];
-  if (!it) return;
-  // Stock check
+  var it = cart[i]; if (!it) return;
+  var raw = parseFloat(val) || 1;
+  var isInt = qtyStepForUnit(it.unit) === '1';
+  var qty = isInt ? Math.round(raw) : raw;
   var prod = products.find(function(p){ return p.id === it.product_id; });
-  var origQty = it._origQty != null ? it._origQty : 1; // quantity already taken from stock
+  var origQty = it._origQty != null ? it._origQty : 1;
   var stockAvail = prod ? (Number(prod.quantity) + origQty) : Infinity;
-  if (qty > stockAvail) {
-    qty = stockAvail;
-    var el = document.getElementById('cart-qty-' + i);
-    if (el) el.value = qty;
-    toast('Max stock: ' + stockAvail, 'warn');
-  }
-  qty = Math.max(0.01, qty);
+  if (qty > stockAvail) { qty = isInt ? Math.floor(stockAvail) : stockAvail; toast('Max stock: ' + stockAvail, 'warn'); }
+  qty = Math.max(isInt ? 1 : 0.01, qty);
+  var el = document.getElementById('cart-qty-' + i); if (el) el.value = qty;
   cart[i].quantity = qty;
-  cart[i].amount = qty * cart[i].unit_price;
+  // Recalculate amount from qty × unit_price when qty changes
+  cart[i].amount = Math.round((qty * cart[i].unit_price) * 100) / 100;
+  var amtEl = document.getElementById('cart-amt-' + i); if (amtEl) amtEl.value = fmtPlain(cart[i].amount);
   renderCartTotals(); updatePayPreview();
 }
-function cartUpdatePrice(i, val) {
-  var price = parseFloat(val) || 0;
-  cart[i].unit_price = price;
-  cart[i].amount = cart[i].quantity * price;
+function cartUpdateAmount(i, val) {
+  var amt = parseFloat(val) || 0;
+  cart[i].amount = amt;
+  // back-calculate unit price so totals stay consistent
+  if (cart[i].quantity > 0) cart[i].unit_price = Math.round((amt / cart[i].quantity) * 100) / 100;
   renderCartTotals(); updatePayPreview();
 }
 function cartUpdateWarranty(i, val, unit) {
@@ -1178,9 +1177,10 @@ function renderCart() {
   var showW = !!(settings && settings.feature_warranty);
   var wHeader = document.getElementById('cart-warranty-header');
   if (wHeader) wHeader.style.display = showW ? '' : 'none';
-  var INP = 'padding:4px 6px;border:1px solid var(--border);border-radius:5px;background:var(--surface-2);color:var(--text);text-align:center;box-sizing:border-box;';
+  var INP = 'padding:3px 4px;border:1px solid var(--border);border-radius:5px;background:var(--surface-2);color:var(--text);text-align:center;box-sizing:border-box;font-size:12px;';
+  var cols = showW ? 6 : 5;
   if (!cart.length) {
-    tb.innerHTML = '<tr><td colspan="' + (showW?6:5) + '" class="empty-state">Click a product card to add it to cart.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="' + cols + '" class="empty-state">Click a product card to add it to cart.</td></tr>';
   } else {
     tb.innerHTML = cart.map(function (it, i) {
       var prod = products.find(function(p){ return p.id === it.product_id; });
@@ -1189,21 +1189,22 @@ function renderCart() {
       var wVal = it.warranty_months >= 9999 ? 9999 : (it.warranty_months || 0);
       var wUnit = it.warranty_unit || 'months';
       var wCell = showW ? (
-        '<td class="num" style="min-width:110px">' +
-        '<input type="number" id="cart-w-' + i + '" value="' + wVal + '" min="0" step="1" style="' + INP + 'width:52px" title="Warranty" onchange="cartUpdateWarranty(' + i + ',+this.value,null);renderCart()" />' +
-        '<select id="cart-wu-' + i + '" style="' + INP + 'width:56px;margin-left:2px;font-size:11px" onchange="cartUpdateWarranty(' + i + ',null,this.value);renderCart()">' +
+        '<td style="padding:3px 4px;white-space:nowrap">' +
+        '<div style="display:flex;gap:2px;align-items:center">' +
+        '<input type="number" id="cart-w-' + i + '" value="' + wVal + '" min="0" step="1" style="' + INP + 'width:42px" title="Warranty" onchange="cartUpdateWarranty(' + i + ',+this.value,null)" />' +
+        '<select id="cart-wu-' + i + '" style="' + INP + 'width:42px;padding:3px 2px" onchange="cartUpdateWarranty(' + i + ',null,this.value)">' +
         '<option value="months"' + (wUnit==='months'?' selected':'') + '>mo</option>' +
-        '<option value="days"' + (wUnit==='days'?' selected':'') + '>d</option>' +
+        '<option value="days"' + (wUnit==='days'?' selected':'') + '>day</option>' +
         '<option value="lifetime"' + (wUnit==='lifetime'?' selected':'') + '>Life</option>' +
-        '</select></td>'
+        '</select></div></td>'
       ) : '';
       return '<tr>' +
-        '<td style="font-weight:600">' + esc(it.desc) + '<br><span class="product-cost-row" style="font-size:11px;color:var(--text-3);font-weight:400">Cost: ' + fmtPlain(it.cost_price || 0) + '</span></td>' +
-        '<td class="num" style="min-width:80px"><input type="number" id="cart-qty-' + i + '" value="' + it.quantity + '" min="0.01" max="' + stockAvail + '" step="1" style="' + INP + 'width:60px" onchange="cartUpdateQty(' + i + ',this.value)" title="Max stock: ' + stockAvail + '" /></td>' +
-        '<td class="num" style="min-width:90px"><input type="number" id="cart-sp-' + i + '" value="' + fmtPlain(it.unit_price) + '" min="0" step="0.01" style="' + INP + 'width:78px" onchange="cartUpdatePrice(' + i + ',this.value)" title="Selling price (editable)" /></td>' +
+        '<td style="font-weight:600;font-size:12.5px;padding:5px 6px;min-width:90px">' + esc(it.desc) + '<div class="product-cost-row" style="font-size:10px;color:var(--text-3);font-weight:400">Cost: ' + fmtPlain(it.cost_price||0) + '</div></td>' +
+        '<td style="padding:3px 4px;white-space:nowrap;min-width:56px"><input ' + qtyInputAttrs(it.unit, it.quantity, stockAvail) + ' id="cart-qty-' + i + '" style="' + INP + 'width:52px" onchange="cartUpdateQty(' + i + ',this.value)" title="Max stock: ' + stockAvail + '" /></td>' +
+        '<td style="padding:3px 4px;text-align:right;min-width:68px"><span style="font-size:12px;color:var(--text-2);white-space:nowrap">Tk ' + fmtPlain(it.unit_price) + '</span></td>' +
         wCell +
-        '<td class="num" style="font-weight:700;min-width:80px">' + fmtPlain(it.amount) + '</td>' +
-        '<td><button class="cart-row-remove" onclick="removeCartItem(' + i + ')"><i class="ti ti-trash"></i></button></td>' +
+        '<td style="padding:3px 4px;min-width:74px"><input type="number" id="cart-amt-' + i + '" value="' + fmtPlain(it.amount) + '" min="0" step="0.01" style="' + INP + 'width:68px;color:var(--ok);font-weight:700" onchange="cartUpdateAmount(' + i + ',this.value)" title="Edit total amount" /></td>' +
+        '<td style="width:24px;padding:2px"><button class="cart-row-remove" onclick="removeCartItem(' + i + ')"><i class="ti ti-trash"></i></button></td>' +
       '</tr>';
     }).join('');
   }
@@ -1817,6 +1818,7 @@ function editProduct(id) {
     const res = await apiPut('/products/' + id, patch);
     if (res && res.error) { alert(res.error); return; }
     closeEditModal();
+    products = await apiGet('/products') || products; // sync global cache
     renderProductsPage();
     toast('Product updated');
   });
@@ -2748,7 +2750,7 @@ function renderPurchaseCart() {
     var showPurW = !!(settings && settings.feature_warranty);
     var purWth = document.getElementById('pur-warranty-th'); if (purWth) purWth.style.display = showPurW ? '' : 'none';
     tb.innerHTML = purchaseCart.map(function (it, i) {
-      var purWLabel = it.warranty_months >= 9999 ? '♾ Lifetime' : (it.warranty_months ? warrantyDisplay(it.warranty_months, it.warranty_unit) : '—');
+      var purWLabel = (it.warranty_months >= 9999 || it.warranty_unit === 'lifetime') ? '♾ Lifetime' : (it.warranty_months ? warrantyDisplay(it.warranty_months, it.warranty_unit) : '—');
       var wCell = showPurW ? '<td class="num" style="font-size:12px;color:var(--ok)">' + purWLabel + '</td>' : '';
       var serialCell = (settings && settings.feature_serial_numbers && it.serial) ? '<td style="font-size:11px;color:var(--text-2)">' + esc(it.serial) + '</td>' : '';
       return '<tr><td>' + esc(it.desc) + (it.serial && !(settings && settings.feature_serial_numbers) ? '' : '') + '</td><td class="num">' + it.quantity + '</td><td class="num">' + fmtPlain(it.unit_cost) + '</td><td class="num" style="color:var(--ok)">' + (it.sell_price > 0 ? fmtPlain(it.sell_price) : '—') + '</td>' + wCell + '<td class="num" style="font-weight:600">' + fmtPlain(it.amount) + '</td><td><button class="cart-row-remove" onclick="removePurchaseItem(' + i + ')"><i class="ti ti-trash"></i></button></td></tr>';
@@ -3262,6 +3264,18 @@ function warrantyDisplay(months, unit) {
   if (!unit || unit === 'months') return months + ' month' + (months !== 1 ? 's' : '');
   return months + ' ' + unit;
 }
+// Qty step: pcs/unit = integer only; kg/l/m/etc = decimal allowed
+function qtyStepForUnit(unit) {
+  var u = (unit || 'pcs').toLowerCase().trim();
+  var intUnits = ['pcs', 'pc', 'piece', 'pieces', 'unit', 'units', 'box', 'boxes', 'set', 'sets', 'pair', 'pairs', 'pack', 'packs', 'bag', 'bags', 'bottle', 'bottles', 'item', 'items', ''];
+  return intUnits.indexOf(u) >= 0 ? '1' : '0.01';
+}
+function qtyInputAttrs(unit, val, max) {
+  var step = qtyStepForUnit(unit);
+  var maxAttr = max != null ? ' max="' + max + '"' : '';
+  return 'type="number" value="' + (val||1) + '" min="0.01" step="' + step + '"' + maxAttr;
+}
+
 function getWarrantyInputs(numId, unitId) {
   var numEl = document.getElementById(numId);
   var unitEl = document.getElementById(unitId);
@@ -3310,6 +3324,7 @@ async function addProduct() {
 
 // ───────── Updated renderProductsPage to load categories/brands ─────────
 async function renderProductsPage() {
+  products = await apiGet('/products') || products; // always fresh
   if (!__categories.length || !__brands.length) await loadCategoriesAndBrands();
   populateCatBrandSelects(null, null);
   const isManager = currentRole === 'manager';
@@ -3381,7 +3396,13 @@ function setupPurchasePage() {
   wireSearchPicker('pur-product-search', 'pur-product-results', searchProductsApi, renderProductSearchItem, function (p) {
     // Auto-add to cart immediately, no extra button click needed
     var unitCost = Number(p.purchase_price) || 0;
-    purchaseCart.push({ product_id: p.id, desc: p.name, quantity: 1, unit_cost: unitCost, sell_price: Number(p.sell_price) || 0, amount: unitCost, updatePurchasePrice: true });
+    var pw = Number(p.warranty_months) || 0;
+    var pwu = p.warranty_unit || 'months';
+    var pwEl = document.getElementById('pur-warranty-months');
+    var pwuEl = document.getElementById('pur-warranty-unit');
+    if (pwEl) { pwEl.value = pw >= 9999 ? 9999 : pw; pwEl.disabled = pwu === 'lifetime'; }
+    if (pwuEl) { pwuEl.value = pwu; }
+    purchaseCart.push({ product_id: p.id, desc: p.name, quantity: 1, unit_cost: unitCost, sell_price: Number(p.sell_price) || 0, amount: unitCost, updatePurchasePrice: true, warranty_months: pw, warranty_unit: pwu, unit: p.unit || 'pcs' });
     document.getElementById('pur-product').value = '';
     document.getElementById('pur-product-search').value = '';
     renderPurchaseCart();

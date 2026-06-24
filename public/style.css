@@ -492,7 +492,7 @@ body.hide-purchase-price .product-cost-row { display: none !important; }
 .detail-action-edit   { background: linear-gradient(135deg, #d97706, #f59e0b); }
 .detail-action-delete { background: linear-gradient(135deg, #dc2626, #ef4444); }
 /* ── POS Sales Layout ── */
-.pos-layout { display: grid; grid-template-columns: 1fr 580px; gap: 14px; align-items: start; }
+.pos-layout { display: grid; grid-template-columns: 1fr 600px; gap: 14px; align-items: start; }
 @media (max-width: 900px) { .pos-layout { grid-template-columns: 1fr; } }
 .pos-products-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; box-shadow: var(--shadow-card); }
 .pos-panel-header { margin-bottom: 12px; display: flex; gap: 8px; }
@@ -509,7 +509,7 @@ body.hide-purchase-price .product-cost-row { display: none !important; }
 .pos-prod-stock { font-size: 10.5px; color: var(--text-3); }
 .pos-prod-stock.low { color: var(--danger); font-weight: 600; }
 .pos-prod-out { opacity: 0.45; pointer-events: none; }
-.pos-cart-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; box-shadow: var(--shadow-card); display: flex; flex-direction: column; gap: 10px; position: sticky; top: 72px; }
+.pos-cart-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px; box-shadow: var(--shadow-card); display: flex; flex-direction: column; gap: 8px; position: sticky; top: 72px; }
 .pos-cart-header { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
 .pos-field-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
 .pos-label { font-size: 11px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; }
@@ -523,7 +523,9 @@ body.hide-purchase-price .product-cost-row { display: none !important; }
 .pos-custom-item summary:hover { color: var(--accent); }
 .pos-custom-fields { display: flex; gap: 6px; padding: 6px 12px 10px; align-items: center; }
 .pos-add-btn { width: 36px; height: 36px; border-radius: 9px; border: none; background: var(--grad-cyan); color: #fff; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.pos-cart-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 9px; max-height: 320px; overflow-y: auto; }
+.pos-cart-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 9px; max-height: 380px; overflow-y: auto; }
+#cart-table { min-width: 420px; }
+#cart-table td, #cart-table th { white-space: nowrap; }
 .pos-summary { display: flex; flex-direction: column; gap: 8px; }
 .pos-total-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-top: 2px solid var(--border); }
 .pos-total-amt { font-size: 20px; font-weight: 700; color: var(--text); }
@@ -882,3 +884,17 @@ tr.clickable-row:hover { background: var(--surface-2); }
 }
 /* Hajira hammer icon */
 .ti-hammer { font-size: inherit; }
+
+/* Sales cart table - fit without scrolling */
+#cart-table { min-width: 0 !important; width: 100%; table-layout: auto; border-collapse: collapse; }
+#cart-table th { padding: 6px 4px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }
+#cart-table td { padding: 5px 4px; font-size: 12px; vertical-align: middle; }
+#cart-table td:first-child { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#cart-table .cart-row-remove { padding: 2px 3px; font-size: 13px; }
+.pos-cart-table-wrap { overflow-x: auto; }
+/* Purchase cart table - same */
+#pur-table { min-width: 0 !important; width: 100%; }
+/* Warranty cell: number + dropdown side by side, no wrap */
+.warranty-inline { display: flex; gap: 3px; align-items: center; flex-wrap: nowrap; }
+.warranty-inline input { width: 48px !important; }
+.warranty-inline select { width: 52px !important; font-size: 11px; }
