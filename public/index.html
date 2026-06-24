@@ -485,7 +485,7 @@
           <div class="form-row" style="flex:1"><label>Category</label><select id="pur-category"><option value="">None</option></select></div>
           <div class="form-row" style="flex:1"><label>Brand</label><select id="pur-brand"><option value="">None</option></select></div>
           <div class="form-row" id="pur-warranty-row" style="display:none;flex:1"><label><i class="ti ti-shield-check"></i> Warranty</label><div style="display:flex;gap:4px;align-items:center"><input type="number" id="pur-warranty-months" placeholder="0" min="0" style="flex:1;min-width:60px" /><select id="pur-warranty-unit" onchange="onWarrantyUnitChange('pur-warranty-unit','pur-warranty-months')" style="padding:7px 8px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-2);color:var(--text);font-size:12px"><option value="months">mo</option><option value="days">days</option><option value="lifetime">Lifetime ♾</option></select></div></div>
-          <button class="btn-add-item" onclick="addPurchaseItem()"><i class="ti ti-plus"></i> Add item</button>
+          <button class="btn-add-item btn-icon-only" onclick="addPurchaseItem()" title="Add item"><i class="ti ti-plus"></i></button>
         </div>
 
         <div class="cart-table-wrap">
@@ -785,6 +785,7 @@
                 <th class="num">Stock</th>
                 <th class="num product-cost-row">Buy price</th>
                 <th class="num">Sell price</th>
+                <th class="num">Warranty</th>
                 <th style="width:110px"></th>
               </tr>
             </thead>

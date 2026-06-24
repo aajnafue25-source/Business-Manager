@@ -1160,7 +1160,7 @@ const server = http.createServer(async (req, res) => {
         if (dyn.type === 'put') {
           const b = await readBody(req);
           if (dyn.table === 'products') {
-            await sb('PATCH', 'products', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}`, body: { name: b.name, quantity: Number(b.quantity), purchase_price: Number(b.purchase_price), sell_price: Number(b.sell_price), unit: b.unit || 'pcs' } });
+            await sb('PATCH', 'products', { query: `id=eq.${dyn.id}&user_id=eq.${session.businessId}`, body: { name: b.name, quantity: Number(b.quantity), purchase_price: Number(b.purchase_price), sell_price: Number(b.sell_price), unit: b.unit || 'pcs', warranty_months: b.warranty_months != null ? Number(b.warranty_months) : undefined, warranty_unit: b.warranty_unit || undefined } });
             return send(res, 200, { ok: true });
           }
           if (dyn.table === 'customers') {

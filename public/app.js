@@ -1664,20 +1664,35 @@ function editDueEntry(r, table) {
 function editProduct(id) {
   const p = products.find(function (x) { return x.id === id; });
   if (!p) return;
-  openEditModal('Edit Product', [
+  var hasW = !!(settings && settings.feature_warranty);
+  var hasS = !!(settings && settings.feature_serial_numbers);
+  var fields = [
     { key: 'name', label: 'Product Name', type: 'text', value: p.name },
     { key: 'quantity', label: 'Quantity', type: 'number', value: p.quantity },
     { key: 'unit', label: 'Unit (pcs, kg, l, etc.)', type: 'text', value: p.unit || 'pcs' },
     { key: 'purchase_price', label: 'Purchase Price (Tk)', type: 'number', value: p.purchase_price },
     { key: 'sell_price', label: 'Sell Price (Tk)', type: 'number', value: p.sell_price }
-  ], async function () {
+  ];
+  if (hasW) {
+    fields.push({ key: 'warranty_months', label: 'Warranty — enter 9999 for Lifetime', type: 'number', value: p.warranty_months || 0 });
+    fields.push({ key: 'warranty_unit', label: 'Warranty unit (months / days / lifetime)', type: 'text', value: p.warranty_unit || 'months' });
+  }
+  openEditModal('Edit Product', fields, async function () {
     const name = document.getElementById('edit-name').value.trim();
     const quantity = parseFloat(document.getElementById('edit-quantity').value) || 0;
     const unit = document.getElementById('edit-unit').value.trim() || 'pcs';
     const purchase_price = parseFloat(document.getElementById('edit-purchase_price').value) || 0;
     const sell_price = parseFloat(document.getElementById('edit-sell_price').value) || 0;
     if (!name) return alert('Please enter a product name.');
-    const res = await apiPut('/products/' + id, { name: name, quantity: quantity, purchase_price: purchase_price, sell_price: sell_price, unit: unit });
+    var patch = { name, quantity, purchase_price, sell_price, unit };
+    if (hasW) {
+      var wm = parseFloat(document.getElementById('edit-warranty_months').value) || 0;
+      var wu = (document.getElementById('edit-warranty_unit').value || 'months').trim().toLowerCase();
+      if (wu === 'lifetime') wm = 9999;
+      patch.warranty_months = wm;
+      patch.warranty_unit = wu;
+    }
+    const res = await apiPut('/products/' + id, patch);
     if (res && res.error) { alert(res.error); return; }
     closeEditModal();
     renderProductsPage();
@@ -2622,6 +2637,11 @@ function renderPurchaseCart() {
   updatePurPayPreview();
 }
 
+function removePurchaseItem(i) {
+  purchaseCart.splice(i, 1);
+  renderPurchaseCart();
+}
+
 function setPurPayMode(mode) {
   purPayMode = mode;
   ['full', 'partial', 'due'].forEach(function (m) {
@@ -3199,6 +3219,7 @@ function renderProductsTable(prods, isManager) {
       '<td class="num" style="color:' + stockColor + ';font-weight:600">' + p.quantity + ' <span style="font-size:11px;font-weight:400">' + esc(p.unit || 'pcs') + '</span></td>' +
       '<td class="num product-cost-row">' + fmt(p.purchase_price) + '</td>' +
       '<td class="num" style="color:var(--ok);font-weight:700">' + fmt(p.sell_price) + '</td>' +
+      '<td class="num" style="font-size:12px;color:var(--info)">' + (p.warranty_months >= 9999 ? '♾ Lifetime' : (p.warranty_months ? warrantyDisplay(p.warranty_months, p.warranty_unit) : '<span style="color:var(--text-3)">—</span>')) + '</td>' +
       '<td>' +
       (isManager ? '<button class="edit-btn" onclick="editProduct(' + p.id + ')" title="Edit"><i class="ti ti-pencil"></i></button> <button class="del-btn" onclick="deleteRow(\'products\',' + p.id + ',renderProductsPage)" title="Delete"><i class="ti ti-trash"></i></button> ' : '') +
       '<button class="edit-btn" onclick="openBarcodeModal(' + p.id + ')" title="Print barcode"><i class="ti ti-barcode"></i></button>' +
@@ -5009,7 +5030,7 @@ var LANG = {
     'nav_staff': 'Staff',
     'nav_manage_staff': 'Manage Staff',
     'nav_attendance': 'Attendance',
-    'nav_hajira': 'হাজিরা',
+    'nav_hajira': 'Hajira',
     'nav_staff_sales': 'Staff Sales',
     'nav_staff_reports': 'Staff Reports',
     'nav_settings': 'Settings',
@@ -5556,7 +5577,7 @@ function applyLang() {
     'staff':          'nav_staff',
     'manage-staff':   'nav_manage_staff',
     'attendance':     'nav_attendance',
-    'hajira':         'nav_hajira',
+    'hajira':         'nav_hajira',  // 'Hajira'
     'staffsales':     'nav_staff_sales',
     'staffreports':   'nav_staff_reports',
     'settings':       'nav_settings',

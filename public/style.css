@@ -492,7 +492,7 @@ body.hide-purchase-price .product-cost-row { display: none !important; }
 .detail-action-edit   { background: linear-gradient(135deg, #d97706, #f59e0b); }
 .detail-action-delete { background: linear-gradient(135deg, #dc2626, #ef4444); }
 /* ── POS Sales Layout ── */
-.pos-layout { display: grid; grid-template-columns: 1fr 500px; gap: 16px; align-items: start; }
+.pos-layout { display: grid; grid-template-columns: 1fr 580px; gap: 14px; align-items: start; }
 @media (max-width: 900px) { .pos-layout { grid-template-columns: 1fr; } }
 .pos-products-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; box-shadow: var(--shadow-card); }
 .pos-panel-header { margin-bottom: 12px; display: flex; gap: 8px; }
@@ -721,6 +721,7 @@ tr.clickable-row:hover { background: var(--surface-2); }
   box-shadow: 0 2px 8px rgba(14,158,110,0.28); transition: filter .15s;
 }
 .btn-add-item:hover { filter: brightness(1.1); }
+.btn-add-item.btn-icon-only { width: 38px; padding: 0; justify-content: center; font-size: 18px; border-radius: 50%; }
 .cart-table-wrap { margin: 14px 0; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
 .cart-table-wrap table { width: 100%; font-size: 13.5px; min-width: 0; }
 .cart-table-wrap thead th { background: var(--surface-2); padding: 8px 12px; font-size: 11px; }
