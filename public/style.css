@@ -902,3 +902,8 @@ tr.clickable-row:hover { background: var(--surface-2); }
 .warranty-inline { display: flex; gap: 3px; align-items: center; flex-wrap: nowrap; }
 .warranty-inline input { width: 48px !important; }
 .warranty-inline select { width: 52px !important; font-size: 11px; }
+
+/* Remove number input spinners globally */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
