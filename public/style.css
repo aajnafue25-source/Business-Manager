@@ -908,3 +908,10 @@ tr.clickable-row:hover { background: var(--surface-2); }
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type=number] { -moz-appearance: textfield; }
+
+/* PDF Template selector cards */
+.tpl-card { cursor:pointer; border:2px solid var(--border); border-radius:10px; overflow:hidden; transition:.15s; }
+.tpl-card:has(input:checked) { border-color:var(--accent); box-shadow:0 0 0 3px rgba(26,86,219,.15); }
+.tpl-preview { padding:10px 12px; background:var(--card); min-height:64px; }
+.tpl-label { padding:7px 12px; font-size:12px; font-weight:600; text-align:center; border-top:1px solid var(--border); color:var(--text-2); }
+.tpl-card:has(input:checked) .tpl-label { color:var(--accent); background:var(--accent-soft); }

@@ -928,6 +928,41 @@
         </div>
       </div>
 
+      <!-- Bill PDF Template -->
+      <div class="entry-section" style="margin-bottom:18px">
+        <h3><i class="ti ti-file-type-pdf" style="color:#7c3aed"></i> PDF Bill template</h3>
+        <p style="color:var(--text-2);font-size:13px;margin-bottom:12px">Choose the design for downloaded PDF invoices. Preview by downloading any bill after saving.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:4px">
+          <label class="tpl-card" id="tpl-modern">
+            <input type="radio" name="bill_template" value="modern" style="display:none" />
+            <div class="tpl-preview" style="border-top:4px solid #1a56db">
+              <div style="color:#1a56db;font-weight:800;font-size:13px">Business Name</div>
+              <div style="font-size:9px;color:#888;margin-top:2px">■■ ■■■■■■</div>
+              <div style="margin-top:6px;background:#1a56db;color:#fff;font-size:9px;padding:2px 4px;display:inline-block;border-radius:2px">ITEM — QTY — AMOUNT</div>
+            </div>
+            <div class="tpl-label">Modern Blue</div>
+          </label>
+          <label class="tpl-card" id="tpl-classic">
+            <input type="radio" name="bill_template" value="classic" style="display:none" />
+            <div class="tpl-preview" style="border-top:4px solid #222;font-family:Georgia,serif">
+              <div style="color:#222;font-weight:700;font-size:13px;text-align:center;letter-spacing:1px">BUSINESS NAME</div>
+              <div style="font-size:9px;color:#888;text-align:center;margin-top:2px">■■ ■■■■■■</div>
+              <div style="margin-top:6px;background:#222;color:#fff;font-size:9px;padding:2px 4px;display:inline-block">ITEM — QTY — AMOUNT</div>
+            </div>
+            <div class="tpl-label">Classic Black</div>
+          </label>
+          <label class="tpl-card" id="tpl-minimal">
+            <input type="radio" name="bill_template" value="minimal" style="display:none" />
+            <div class="tpl-preview">
+              <div style="color:#111;font-weight:700;font-size:13px;letter-spacing:-0.5px">Business Name</div>
+              <div style="font-size:9px;color:#aaa;margin-top:2px">■■ ■■■■■■</div>
+              <div style="margin-top:6px;border-bottom:2px solid #111;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding-bottom:2px">ITEM &nbsp; QTY &nbsp; AMOUNT</div>
+            </div>
+            <div class="tpl-label">Minimal Clean</div>
+          </label>
+        </div>
+      </div>
+
       <!-- Feature Toggles -->
       <div class="entry-section" style="margin-bottom:18px">
         <h3><i class="ti ti-toggle-right" style="color:var(--accent)"></i> <span data-i18n="set_features">Optional features</span></h3>

@@ -2098,6 +2098,10 @@ async function renderSettingsPage() {
   var fs = document.getElementById('feat-serial'); if (fs) fs.checked = !!(settings && settings.feature_serial_numbers);
   var fw = document.getElementById('feat-warranty'); if (fw) fw.checked = !!(settings && settings.feature_warranty);
   var fh = document.getElementById('feat-hajira'); if (fh) fh.checked = !!(settings && settings.feature_hajira);
+  // Load bill template
+  var tplVal = (settings && settings.bill_template) || 'modern';
+  var tplEl = document.querySelector('input[name="bill_template"][value="' + tplVal + '"]');
+  if (tplEl) tplEl.checked = true; else { var def = document.querySelector('input[name="bill_template"][value="modern"]'); if(def) def.checked=true; }
   document.getElementById('pw-current').value = '';
   document.getElementById('pw-new').value = '';
   document.getElementById('pw-confirm').value = '';
@@ -2166,7 +2170,8 @@ async function saveSettings() {
     barcodeHeight: Number(document.getElementById('set-bc-height').value) || 56,
     feature_serial_numbers: !!(document.getElementById('feat-serial') && document.getElementById('feat-serial').checked),
     feature_warranty: !!(document.getElementById('feat-warranty') && document.getElementById('feat-warranty').checked),
-    feature_hajira: !!(document.getElementById('feat-hajira') && document.getElementById('feat-hajira').checked)
+    feature_hajira: !!(document.getElementById('feat-hajira') && document.getElementById('feat-hajira').checked),
+    bill_template: (function(){ var r=document.querySelector('input[name="bill_template"]:checked'); return r ? r.value : 'modern'; })()
   };
   const res = await apiPut('/settings', body);
   if (res && res.error) { alert(res.error); return; }
@@ -6099,8 +6104,12 @@ async function downloadBillAsPdf(bill) {
   var footNote = s.note || 'Thank you for your business!';
   var billNo   = bill.bill_no ? String(bill.bill_no).padStart(6,'0') : '—';
   var date     = bill.date || new Date().toISOString().slice(0,10);
-  var customer = bill.customer_name || 'Walk-in';
-  var custPhone= bill.customer_phone || '';
+  // bill.customer is {name,phone} from API; bill.customer_name is flat fallback
+  var customer = (bill.customer && bill.customer.name) || bill.customer_name || bill.items[0].customer_name || 'Walk-in';
+  var custPhone= (bill.customer && bill.customer.phone) || bill.customer_phone || bill.items[0].customer_phone || '';
+  var salesman = bill.salesman_name || (bill.items[0] && bill.items[0].salesman_name) || '';
+  // Template from settings
+  var tpl = (settings && settings.bill_template) || 'modern';
 
   var hasW = bill.items.some(function(it){ return it.warranty_months && it.warranty_months > 0; });
 
@@ -6120,31 +6129,20 @@ async function downloadBillAsPdf(bill) {
   var paid     = bill.amountPaid || bill.total || subTotal;
   var due      = Math.max(0, subTotal - paid);
 
+  // Template styles
+  var tplStyles = {
+    modern: 'body{font-family:"Segoe UI",Arial,sans-serif;font-size:13px;color:#1a1a2e;margin:0;padding:0}.page{max-width:720px;margin:0 auto;padding:32px 40px}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;border-bottom:4px solid #1a56db;padding-bottom:16px}.biz-name{font-size:26px;font-weight:800;color:#1a56db;letter-spacing:-0.5px}.biz-info{font-size:12px;color:#555;margin-top:4px;line-height:1.7}.invoice-meta{text-align:right;font-size:13px}.invoice-meta strong{font-size:20px;color:#1a56db;display:block;margin-bottom:4px}.customer-box{background:#f0f4ff;border-left:4px solid #1a56db;padding:12px 16px;margin-bottom:24px;font-size:13px;border-radius:0 6px 6px 0}.customer-box strong{display:block;margin-bottom:2px;font-size:14px;color:#1a56db}table{width:100%;border-collapse:collapse;margin-bottom:20px}thead{background:#1a56db;color:#fff}thead th{padding:10px 10px;text-align:left;font-size:12px;font-weight:600;letter-spacing:.5px}thead th.r{text-align:right}thead th.c{text-align:center}tbody tr:nth-child(even){background:#f5f7ff}.totals{width:280px;margin-left:auto;border:1px solid #d0d8f0;border-radius:8px;overflow:hidden;margin-bottom:24px}.totals td{padding:9px 14px;font-size:13px;border-bottom:1px solid #eef1f8}.totals tr:last-child td{background:#1a56db;color:#fff;font-weight:700;font-size:15px;border:none}.footer{text-align:center;margin-top:32px;padding-top:16px;border-top:2px dashed #c5d0f0;font-size:12px;color:#888}',
+    classic: 'body{font-family:Georgia,"Times New Roman",serif;font-size:13px;color:#1a1a1a;margin:0;padding:0}.page{max-width:720px;margin:0 auto;padding:40px 50px}.header{text-align:center;margin-bottom:30px;border-bottom:2px solid #222;padding-bottom:20px}.biz-name{font-size:28px;font-weight:700;color:#222;letter-spacing:2px;text-transform:uppercase}.biz-info{font-size:12px;color:#555;margin-top:6px;line-height:1.7}.invoice-meta{display:flex;justify-content:space-between;margin-bottom:20px;font-size:13px;border-bottom:1px solid #ddd;padding-bottom:10px}.invoice-meta strong{font-size:15px;font-weight:700}.customer-box{border:1px solid #ddd;padding:12px 16px;margin-bottom:24px;font-size:13px}.customer-box strong{display:block;font-weight:700;font-size:14px;margin-bottom:4px}table{width:100%;border-collapse:collapse;margin-bottom:20px}thead{background:#222;color:#fff}thead th{padding:9px 10px;text-align:left;font-size:12px}thead th.r{text-align:right}thead th.c{text-align:center}tbody td{border-bottom:1px solid #eee}.totals{width:280px;margin-left:auto;margin-bottom:24px}.totals td{padding:7px 12px;font-size:13px;border-bottom:1px solid #eee}.totals tr:last-child td{border-top:2px solid #222;font-weight:700;font-size:15px}.footer{text-align:center;margin-top:32px;padding-top:16px;border-top:1px solid #ccc;font-size:12px;color:#888;font-style:italic}',
+    minimal: 'body{font-family:"Helvetica Neue",Arial,sans-serif;font-size:13px;color:#333;margin:0;padding:0}.page{max-width:680px;margin:0 auto;padding:40px 40px}.header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:36px}.biz-name{font-size:22px;font-weight:700;color:#111;letter-spacing:-0.5px}.biz-info{font-size:11px;color:#777;margin-top:4px;line-height:1.6}.invoice-meta{text-align:right;font-size:12px;color:#555}.invoice-meta strong{font-size:24px;font-weight:900;color:#111;display:block;letter-spacing:-1px}.customer-box{background:#f8f8f8;padding:14px 18px;margin-bottom:28px;font-size:13px}.customer-box strong{display:block;font-weight:700;margin-bottom:2px}table{width:100%;border-collapse:collapse;margin-bottom:24px}thead th{padding:8px 10px;text-align:left;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;border-bottom:2px solid #111}thead th.r{text-align:right}thead th.c{text-align:center}tbody td{padding:10px 10px;border-bottom:1px solid #f0f0f0}.totals{width:260px;margin-left:auto;margin-bottom:24px}.totals td{padding:8px 12px;font-size:13px}.totals tr:last-child td{border-top:2px solid #111;font-weight:700;font-size:16px;padding-top:10px}.footer{text-align:center;margin-top:36px;font-size:11px;color:#aaa;letter-spacing:.5px}'
+  };
+  var css = (tplStyles[tpl] || tplStyles.modern) + '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{padding:16px 20px}}';
+
   var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ' + billNo + '</title>' +
-    '<style>' +
-    'body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#222;margin:0;padding:0}' +
-    '.page{max-width:720px;margin:0 auto;padding:32px 40px}' +
-    '.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;border-bottom:3px solid #1a56db;padding-bottom:16px}' +
-    '.biz-name{font-size:24px;font-weight:800;color:#1a56db;letter-spacing:-0.5px}' +
-    '.biz-info{font-size:12px;color:#555;margin-top:4px;line-height:1.6}' +
-    '.invoice-meta{text-align:right;font-size:13px}' +
-    '.invoice-meta strong{font-size:18px;color:#1a56db;display:block;margin-bottom:4px}' +
-    '.customer-box{background:#f8faff;border:1px solid #dde6fa;border-radius:8px;padding:12px 16px;margin-bottom:24px;font-size:13px}' +
-    '.customer-box strong{display:block;margin-bottom:2px;font-size:14px}' +
-    'table{width:100%;border-collapse:collapse;margin-bottom:20px}' +
-    'thead{background:#1a56db;color:#fff}' +
-    'thead th{padding:9px 10px;text-align:left;font-size:12px;font-weight:600;letter-spacing:.5px}' +
-    'thead th.r{text-align:right} thead th.c{text-align:center}' +
-    'tbody tr:nth-child(even){background:#f9f9f9}' +
-    '.totals{width:280px;margin-left:auto;border:1px solid #eee;border-radius:8px;overflow:hidden;margin-bottom:24px}' +
-    '.totals td{padding:8px 14px;font-size:13px}' +
-    '.totals tr:last-child td{background:#1a56db;color:#fff;font-weight:700;font-size:15px}' +
-    '.footer{text-align:center;margin-top:32px;padding-top:16px;border-top:1px dashed #ddd;font-size:12px;color:#888}' +
-    '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{padding:16px 20px}}' +
-    '</style></head><body><div class="page">' +
+    '<style>' + css + '</style>' +
+    '</head><body><div class="page">' +
     '<div class="header">' +
       '<div><div class="biz-name">' + bizName + '</div><div class="biz-info">' + (address?address+'<br>':'') + (phone?'📞 '+phone+'<br>':'') + (gst?'VAT/GST: '+gst:'') + '</div></div>' +
-      '<div class="invoice-meta"><strong>TAX INVOICE</strong>Bill # ' + billNo + '<br>Date: ' + date + (bill.salesman_name ? '<br>Salesman: ' + bill.salesman_name : '') + '</div>' +
+      '<div class="invoice-meta"><strong>TAX INVOICE</strong>Bill # ' + billNo + '<br>Date: ' + date + (salesman ? '<br>Salesman: ' + salesman : '') + '</div>' +
     '</div>' +
     '<div class="customer-box"><strong>' + customer + '</strong>' + (custPhone?'📞 '+custPhone:'') + '</div>' +
     '<table><thead><tr>' +
