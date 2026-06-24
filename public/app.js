@@ -1152,7 +1152,7 @@ function cartUpdateQty(i, val) {
   cart[i].quantity = qty;
   // Recalculate amount from qty × unit_price when qty changes
   cart[i].amount = Math.round((qty * cart[i].unit_price) * 100) / 100;
-  var amtEl = document.getElementById('cart-amt-' + i); if (amtEl) amtEl.value = fmtPlain(cart[i].amount);
+  var amtEl = document.getElementById('cart-amt-' + i); if (amtEl) amtEl.value = cart[i].amount;
   renderCartTotals(); updatePayPreview();
 }
 function cartUpdateAmount(i, val) {
@@ -1203,7 +1203,7 @@ function renderCart() {
         '<td style="padding:3px 4px;white-space:nowrap;min-width:56px"><input ' + qtyInputAttrs(it.unit, it.quantity, stockAvail) + ' id="cart-qty-' + i + '" style="' + INP + 'width:52px" oninput="cartUpdateQty(' + i + ',this.value)" title="Max stock: ' + stockAvail + '" /></td>' +
         '<td style="padding:3px 4px;text-align:right;min-width:68px"><span style="font-size:12px;color:var(--text-2);white-space:nowrap">Tk ' + fmtPlain(it.unit_price) + '</span></td>' +
         wCell +
-        '<td style="padding:3px 4px;min-width:74px"><input type="number" id="cart-amt-' + i + '" value="' + fmtPlain(it.amount) + '" min="0" step="0.01" style="' + INP + 'width:68px;color:var(--ok);font-weight:700" oninput="cartUpdateAmount(' + i + ',this.value)" title="Edit total amount" /></td>' +
+        '<td style="padding:3px 4px;min-width:74px"><input type="number" id="cart-amt-' + i + '" value="' + fmtPlain(it.amount != null ? it.amount : it.unit_price) + '" min="0" step="0.01" style="' + INP + 'width:68px;color:var(--ok);font-weight:700" oninput="cartUpdateAmount(' + i + ',this.value)" title="Edit total amount" /></td>' +
         '<td style="width:24px;padding:2px"><button class="cart-row-remove" onclick="removeCartItem(' + i + ')"><i class="ti ti-trash"></i></button></td>' +
       '</tr>';
     }).join('');
@@ -4852,7 +4852,7 @@ async function loadHajiraAttendance() {
     var nid   = 'hatt-note-'+ w.id;
     return '<tr>' +
       '<td style="font-weight:600">' + esc(w.name) + '<br><span style="font-size:11px;color:var(--text-2)">' + esc(w.phone || '') + '</span></td>' +
-      '<td class="num" style="white-space:nowrap">Tk ' + fmt(w.daily_rate) + '</td>' +
+      '<td class="num" style="white-space:nowrap">Tk ' + fmtPlain(w.daily_rate) + '</td>' +
       '<td><select id="' + sid + '" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font-size:13px;width:100%">' +
         '<option value="present"'  + (status==='present' ?' selected':'') + '>✅ Present</option>' +
         '<option value="half"'     + (status==='half'    ?' selected':'') + '>🌓 Half day</option>' +
@@ -4884,7 +4884,7 @@ function updateHattSummary(active, date) {
     else absent++;
     if (ex) totalEarned += hajiraEarned(w, ex);
   });
-  sumEl.innerHTML = '✅ Present: <strong>' + present + '</strong> &nbsp;|&nbsp; 🌓 Half: <strong>' + half + '</strong> &nbsp;|&nbsp; ❌ Absent: <strong>' + absent + '</strong> &nbsp;|&nbsp; 💰 Total earned today: <strong>Tk ' + fmt(totalEarned) + '</strong>';
+  sumEl.innerHTML = '✅ Present: <strong>' + present + '</strong> &nbsp;|&nbsp; 🌓 Half: <strong>' + half + '</strong> &nbsp;|&nbsp; ❌ Absent: <strong>' + absent + '</strong> &nbsp;|&nbsp; 💰 Total earned today: <strong>Tk ' + fmtPlain(totalEarned) + '</strong>';
 }
 
 async function saveHajiraAttendance() {
@@ -4939,7 +4939,7 @@ function renderHajiraWorkerList() {
     return '<tr>' +
       '<td style="font-weight:600">' + esc(w.name) + '</td>' +
       '<td>' + esc(w.phone || '—') + '</td>' +
-      '<td class="num">Tk ' + fmt(w.daily_rate) + '</td>' +
+      '<td class="num">Tk ' + fmtPlain(w.daily_rate) + '</td>' +
       '<td style="font-size:12px;color:var(--text-2)">' + esc(w.note || '') + '</td>' +
       '<td><button class="del-btn" onclick="removeHajiraWorker(' + w.id + ',\'' + esc(w.name) + '\')" title="Remove"><i class="ti ti-trash"></i></button></td>' +
       '</tr>';
@@ -4985,7 +4985,7 @@ async function renderHajiraLedgerGrid() {
     return '<div class="detail-card" style="cursor:pointer" onclick="openHajiraLedgerDetail(' + w.id + ')">' +
       '<div class="detail-card-header"><i class="ti ti-user"></i> ' + esc(w.name) +
         (w.phone ? '<span style="font-size:11px;font-weight:400;color:var(--text-2);margin-left:8px">' + esc(w.phone) + '</span>' : '') +
-        '<span style="font-size:11px;font-weight:400;color:var(--text-2);margin-left:8px">Tk ' + fmt(w.daily_rate) + '/day</span>' +
+        '<span style="font-size:11px;font-weight:400;color:var(--text-2);margin-left:8px">Tk ' + fmtPlain(w.daily_rate) + '/day</span>' +
       '</div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0">' +
         '<div style="padding:10px 14px;border-right:1px solid var(--border)">' +
@@ -4995,12 +4995,12 @@ async function renderHajiraLedgerGrid() {
         '</div>' +
         '<div style="padding:10px 14px;border-right:1px solid var(--border)">' +
           '<div style="font-size:11px;color:var(--text-2)">Total earned</div>' +
-          '<div style="font-weight:700;font-size:15px;color:var(--ok)">Tk ' + fmt(totalEarned) + '</div>' +
-          '<div style="font-size:11px;color:var(--text-2)">Paid: Tk ' + fmt(totalPaid) + '</div>' +
+          '<div style="font-weight:700;font-size:15px;color:var(--ok)">Tk ' + fmtPlain(totalEarned) + '</div>' +
+          '<div style="font-size:11px;color:var(--text-2)">Paid: Tk ' + fmtPlain(totalPaid) + '</div>' +
         '</div>' +
         '<div style="padding:10px 14px">' +
           '<div style="font-size:11px;color:var(--text-2)">' + dueLabel + '</div>' +
-          '<div style="font-weight:700;font-size:18px;color:' + dueColor + '">Tk ' + fmt(Math.abs(due)) + '</div>' +
+          '<div style="font-weight:700;font-size:18px;color:' + dueColor + '">Tk ' + fmtPlain(Math.abs(due)) + '</div>' +
         '</div>' +
       '</div>' +
       '<div style="padding:8px 14px;border-top:1px solid var(--border);font-size:12px;color:var(--accent)"><i class="ti ti-arrow-right"></i> View ledger</div>' +
@@ -5036,7 +5036,7 @@ async function renderHajiraLedgerDetail() {
 
   var titleEl = document.getElementById('hledger-detail-title');
   if (titleEl) titleEl.innerHTML = '<i class="ti ti-user"></i> ' + esc(worker.name) +
-    '<span style="font-size:13px;font-weight:400;color:var(--text-2);margin-left:10px">Tk ' + fmt(worker.daily_rate) + '/day</span>' +
+    '<span style="font-size:13px;font-weight:400;color:var(--text-2);margin-left:10px">Tk ' + fmtPlain(worker.daily_rate) + '/day</span>' +
     (worker.phone ? '<span style="font-size:12px;font-weight:400;color:var(--text-2);margin-left:8px">· ' + esc(worker.phone) + '</span>' : '');
 
   var from = document.getElementById('hld-from') ? document.getElementById('hld-from').value : '';
@@ -5097,10 +5097,10 @@ async function renderHajiraLedgerDetail() {
       }).join('') +
       '<tr style="font-weight:700;border-top:2px solid var(--border);background:var(--surface-2)">' +
         '<td colspan="2">Total</td>' +
-        '<td class="num">Tk ' + fmt(att.reduce(function(t,r){ var b=r.status==='absent'?0:(r.status==='half'?Number(worker.daily_rate)/2:Number(worker.daily_rate)); return t+b; },0)) + '</td>' +
-        '<td class="num">Tk ' + fmt(att.reduce(function(t,r){ return t+Number(r.ot_pay||r.ot_hours||0); },0)) + '</td>' +
-        '<td class="num">Tk ' + fmt(totalAllowance) + '</td>' +
-        '<td class="num">Tk ' + fmt(totalEarned) + '</td>' +
+        '<td class="num">Tk ' + fmtPlain(att.reduce(function(t,r){ var b=r.status==='absent'?0:(r.status==='half'?Number(worker.daily_rate)/2:Number(worker.daily_rate)); return t+b; },0)) + '</td>' +
+        '<td class="num">Tk ' + fmtPlain(att.reduce(function(t,r){ return t+Number(r.ot_pay||r.ot_hours||0); },0)) + '</td>' +
+        '<td class="num">Tk ' + fmtPlain(totalAllowance) + '</td>' +
+        '<td class="num">Tk ' + fmtPlain(totalEarned) + '</td>' +
         '<td></td>' +
       '</tr>';
     }
@@ -5115,12 +5115,12 @@ async function renderHajiraLedgerDetail() {
       payTb.innerHTML = pay.map(function(r) {
         return '<tr>' +
           '<td>' + r.date + '</td>' +
-          '<td class="num" style="color:var(--ok);font-weight:600">Tk ' + fmt(r.amount) + '</td>' +
+          '<td class="num" style="color:var(--ok);font-weight:600">Tk ' + fmtPlain(r.amount) + '</td>' +
           '<td style="font-size:12px;color:var(--text-2)">' + esc(r.note||'') + '</td>' +
           '<td><button class="del-btn" onclick="deleteHajiraPayment(' + r.id + ')" title="Delete"><i class="ti ti-trash"></i></button></td>' +
         '</tr>';
       }).join('') +
-      '<tr style="font-weight:700;border-top:2px solid var(--border)"><td colspan="1">Total</td><td class="num">Tk ' + fmt(totalPaid) + '</td><td colspan="2"></td></tr>';
+      '<tr style="font-weight:700;border-top:2px solid var(--border)"><td colspan="1">Total</td><td class="num">Tk ' + fmtPlain(totalPaid) + '</td><td colspan="2"></td></tr>';
     }
   }
 }
