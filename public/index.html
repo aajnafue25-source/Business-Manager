@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>BizSheba</title>
+<link rel="icon" type="image/png" href="favicon.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -14,7 +15,7 @@
 <!-- Login / Signup Screen -->
 <div id="auth-screen" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:999;align-items:center;justify-content:center;padding:20px">
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 28px;width:100%;max-width:360px;text-align:center">
-    <div style="margin-bottom:8px"><i class="ti ti-building-store" style="font-size:36px;color:var(--accent)"></i></div>
+    <div style="margin-bottom:8px"><img src="favicon.png" alt="BizSheba" style="width:52px;height:52px;object-fit:contain;border-radius:12px"></div>
     <div style="font-size:20px;font-weight:700;margin-bottom:4px">BizSheba</div>
     <div style="font-size:13px;color:var(--text-2);margin-bottom:20px">Sign in to your account</div>
 
@@ -64,7 +65,7 @@
 <div id="app">
 
   <header class="topbar">
-    <div class="brand"><i class="ti ti-building-store"></i> <span>BizSheba</span></div>
+    <div class="brand"><img src="favicon.png" alt="BizSheba" style="width:28px;height:28px;object-fit:contain;border-radius:6px;margin-right:2px;vertical-align:middle"> <span>BizSheba</span></div>
     <div class="topbar-right">
       <span id="topbar-days-left" class="days-badge" style="display:none"></span>
       <button onclick="toggleLang()" id="lang-toggle" class="icon-btn" title="Switch language / ভাষা পরিবর্তন" style="font-size:12px;font-weight:700;letter-spacing:.5px;min-width:36px">বাং</button>
