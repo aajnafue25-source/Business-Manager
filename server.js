@@ -349,7 +349,7 @@ async function handleAdmin(method, pathname, req, res, session) {
 
   if (method === 'DELETE' && pathname.startsWith('/api/admin/users/')) {
     const userId = pathname.split('/').pop();
-    const bizTables = ['sales', 'expenses', 'dues', 'due_paid', 'products', 'customers', 'settings', 'suppliers', 'purchases', 'purchase_items', 'purchase_returns', 'sales_returns', 'supplier_dues', 'supplier_due_paid', 'serial_numbers', 'warranty_claims', 'warranty_exchanges', 'hajira_workers', 'hajira_attendance', 'hajira_payments'];
+    const bizTables = ['sales', 'expenses', 'dues', 'due_paid', 'products', 'customers', 'settings', 'suppliers', 'purchases', 'purchase_items', 'purchase_returns', 'sales_returns', 'supplier_dues', 'supplier_due_paid', 'serial_numbers', 'warranty_claims', 'warranty_exchanges', 'hajira_workers', 'hajira_attendance', 'hajira_payments', 'damage_log'];
     for (const table of bizTables) {
       try { await sb('DELETE', table, { query: `user_id=eq.${userId}` }); } catch (e) {}
     }
@@ -610,7 +610,41 @@ const routes = {
     send(res, 200, { id });
   },
 
-  // ----- Dues (customer) -----
+  // ----- Damage Log -----
+  'GET /api/damage': async (req, res, session) => {
+    send(res, 200, (await sb('GET', 'damage_log', { query: bizQuery(session, 'order=id.desc') })) || []);
+  },
+  'POST /api/damage': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.date || !b.product_name || !b.quantity) return send(res, 400, { error: 'date, product_name and quantity required' });
+    const id = await getNextId();
+    // Deduct from product stock if product_id provided
+    if (b.product_id) {
+      const prods = await sb('GET', 'products', { query: `id=eq.${b.product_id}&user_id=eq.${session.businessId}` });
+      if (prods && prods[0]) {
+        const newQty = Math.max(0, Number(prods[0].quantity) - Number(b.quantity));
+        await sb('PATCH', 'products', { query: `id=eq.${b.product_id}`, body: { quantity: newQty } });
+      }
+    }
+    await sb('POST', 'damage_log', { body: { id, user_id: session.businessId, date: b.date, product_id: b.product_id || null, product_name: b.product_name, quantity: Number(b.quantity), unit: b.unit || 'pcs', reason: b.reason || null, estimated_loss: Number(b.estimated_loss) || 0, note: b.note || null } });
+    await audit(session, 'CREATE', 'damage_log', id, `${b.product_name} x${b.quantity}`);
+    send(res, 200, { id });
+  },
+  'DELETE /api/damage': async (req, res, session) => {
+    const b = await readBody(req);
+    if (!b.id) return send(res, 400, { error: 'id required' });
+    // Restore stock
+    const rows = await sb('GET', 'damage_log', { query: `id=eq.${b.id}&user_id=eq.${session.businessId}` });
+    if (rows && rows[0] && rows[0].product_id) {
+      const prods = await sb('GET', 'products', { query: `id=eq.${rows[0].product_id}&user_id=eq.${session.businessId}` });
+      if (prods && prods[0]) await sb('PATCH', 'products', { query: `id=eq.${rows[0].product_id}`, body: { quantity: Number(prods[0].quantity) + Number(rows[0].quantity) } });
+    }
+    await sb('DELETE', 'damage_log', { query: `id=eq.${b.id}&user_id=eq.${session.businessId}` });
+    await audit(session, 'DELETE', 'damage_log', b.id);
+    send(res, 200, { ok: true });
+  },
+
+
   'GET /api/dues': async (req, res, session) => {
     send(res, 200, (await sb('GET', 'dues', { query: bizQuery(session, 'order=id.desc') })) || []);
   },
