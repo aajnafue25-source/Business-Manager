@@ -1220,15 +1220,11 @@ function renderCart() {
       return '<tr>' +
         '<td style="font-weight:600;font-size:12.5px;padding:5px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(it.desc) + '<div class="product-cost-row" style="font-size:10px;color:var(--text-3);font-weight:400">Cost: ' + fmtPlain(it.cost_price||0) + '</div></td>' +
         '<td style="padding:3px 4px;text-align:center">' +
-          '<div style="display:flex;align-items:center;justify-content:center;gap:2px">' +
-          '<button type="button" style="width:22px;height:26px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);cursor:pointer;font-size:14px;line-height:1;padding:0;flex-shrink:0" onclick="cartStepQty(' + i + ',-1)">−</button>' +
-          '<input type="number" id="cart-qty-' + i + '" ' + qtyInputAttrs(it.unit, it.quantity, stockAvail) + ' style="' + INP + 'width:38px" oninput="cartUpdateQty(' + i + ',this.value)" onchange="cartUpdateQty(' + i + ',this.value)" title="Max stock: ' + stockAvail + '" />' +
-          '<button type="button" style="width:22px;height:26px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);cursor:pointer;font-size:14px;line-height:1;padding:0;flex-shrink:0" onclick="cartStepQty(' + i + ',1)">+</button>' +
-          '</div>' +
+          '<input type="number" id="cart-qty-' + i + '" ' + qtyInputAttrs(it.unit, it.quantity, stockAvail) + ' style="' + INP + 'width:100%;text-align:center" oninput="cartUpdateQty(' + i + ',this.value)" onchange="cartUpdateQty(' + i + ',this.value)" title="Max stock: ' + stockAvail + '" />' +
         '</td>' +
         '<td style="padding:3px 6px;text-align:right"><span style="font-size:12px;color:var(--text-2);white-space:nowrap">Tk ' + fmtPlain(it.unit_price) + '</span></td>' +
         wCell +
-        '<td style="padding:3px 6px;text-align:right"><input type="number" id="cart-amt-' + i + '" value="' + amtVal + '" min="0" step="0.01" style="' + INP + 'width:100%;color:var(--ok);font-weight:700" oninput="cartUpdateAmount(' + i + ',this.value)" onchange="cartUpdateAmount(' + i + ',this.value)" title="Edit total amount" /></td>' +
+        '<td style="padding:3px 6px;text-align:right"><input type="number" id="cart-amt-' + i + '" value="' + amtVal + '" min="0" step="0.01" style="' + INP + 'width:100%;color:var(--ok);font-weight:700;font-size:13px" oninput="cartUpdateAmount(' + i + ',this.value)" onchange="cartUpdateAmount(' + i + ',this.value)" title="Edit total amount" /></td>' +
         '<td style="padding:2px;text-align:center"><button class="cart-row-remove" onclick="removeCartItem(' + i + ')"><i class="ti ti-trash"></i></button></td>' +
       '</tr>';
     }).join('');
