@@ -1192,10 +1192,9 @@ function renderCart() {
   const tb = document.getElementById('cart-tbody');
   var showW = !!(settings && settings.feature_warranty);
   var wHeader = document.getElementById('cart-warranty-header');
-  if (wHeader) {
-    if (showW) { wHeader.style.display=''; wHeader.style.width=''; wHeader.style.padding='6px 4px'; wHeader.style.overflow=''; }
-    else       { wHeader.style.display='none'; wHeader.style.width='0'; wHeader.style.padding='0'; wHeader.style.overflow='hidden'; }
-  }
+  var wCol = document.getElementById('cart-col-warranty');
+  if (wHeader) wHeader.style.display = showW ? '' : 'none';
+  if (wCol) wCol.style.width = showW ? '95px' : '0';
   var INP = 'padding:3px 4px;border:1px solid var(--border);border-radius:5px;background:var(--surface-2);color:var(--text);text-align:center;box-sizing:border-box;font-size:12px;';
   var cols = showW ? 6 : 5;
   if (!cart.length) {
@@ -1208,10 +1207,10 @@ function renderCart() {
       var wVal = it.warranty_months >= 9999 ? 9999 : (it.warranty_months || 0);
       var wUnit = it.warranty_unit || 'months';
       var wCell = showW
-        ? ('<td style="padding:3px 4px;white-space:nowrap">' +
-           '<div style="display:flex;gap:2px;align-items:center">' +
-           '<input type="number" id="cart-w-' + i + '" value="' + wVal + '" min="0" step="1" style="' + INP + 'width:42px" title="Warranty" onchange="cartUpdateWarranty(' + i + ',+this.value,null)" />' +
-           '<select id="cart-wu-' + i + '" style="' + INP + 'width:42px;padding:3px 2px" onchange="cartUpdateWarranty(' + i + ',null,this.value)">' +
+        ? ('<td style="padding:3px 4px;text-align:center">' +
+           '<div style="display:inline-flex;gap:2px;align-items:center">' +
+           '<input type="number" id="cart-w-' + i + '" value="' + wVal + '" min="0" step="1" style="' + INP + 'width:40px" title="Warranty" onchange="cartUpdateWarranty(' + i + ',+this.value,null)" />' +
+           '<select id="cart-wu-' + i + '" style="' + INP + 'width:40px;padding:3px 2px" onchange="cartUpdateWarranty(' + i + ',null,this.value)">' +
            '<option value="months"' + (wUnit==='months'?' selected':'') + '>mo</option>' +
            '<option value="days"' + (wUnit==='days'?' selected':'') + '>day</option>' +
            '<option value="lifetime"' + (wUnit==='lifetime'?' selected':'') + '>Life</option>' +
@@ -1219,18 +1218,18 @@ function renderCart() {
         : '';
       var amtVal = Number(it.amount != null && it.amount !== 0 ? it.amount : (it.unit_price || 0)).toFixed(2);
       return '<tr>' +
-        '<td style="font-weight:600;font-size:12.5px;padding:5px 6px;min-width:90px">' + esc(it.desc) + '<div class="product-cost-row" style="font-size:10px;color:var(--text-3);font-weight:400">Cost: ' + fmtPlain(it.cost_price||0) + '</div></td>' +
-        '<td style="padding:3px 4px;white-space:nowrap;min-width:80px">' +
-          '<div style="display:flex;align-items:center;gap:2px">' +
-          '<button type="button" style="width:20px;height:28px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);cursor:pointer;font-size:14px;line-height:1;padding:0" onclick="cartStepQty(' + i + ',-1)">−</button>' +
-          '<input type="number" id="cart-qty-' + i + '" ' + qtyInputAttrs(it.unit, it.quantity, stockAvail) + ' style="' + INP + 'width:40px" oninput="cartUpdateQty(' + i + ',this.value)" onchange="cartUpdateQty(' + i + ',this.value)" title="Max stock: ' + stockAvail + '" />' +
-          '<button type="button" style="width:20px;height:28px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);cursor:pointer;font-size:14px;line-height:1;padding:0" onclick="cartStepQty(' + i + ',1)">+</button>' +
+        '<td style="font-weight:600;font-size:12.5px;padding:5px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(it.desc) + '<div class="product-cost-row" style="font-size:10px;color:var(--text-3);font-weight:400">Cost: ' + fmtPlain(it.cost_price||0) + '</div></td>' +
+        '<td style="padding:3px 4px;text-align:center">' +
+          '<div style="display:flex;align-items:center;justify-content:center;gap:2px">' +
+          '<button type="button" style="width:22px;height:26px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);cursor:pointer;font-size:14px;line-height:1;padding:0;flex-shrink:0" onclick="cartStepQty(' + i + ',-1)">−</button>' +
+          '<input type="number" id="cart-qty-' + i + '" ' + qtyInputAttrs(it.unit, it.quantity, stockAvail) + ' style="' + INP + 'width:38px" oninput="cartUpdateQty(' + i + ',this.value)" onchange="cartUpdateQty(' + i + ',this.value)" title="Max stock: ' + stockAvail + '" />' +
+          '<button type="button" style="width:22px;height:26px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);color:var(--text);cursor:pointer;font-size:14px;line-height:1;padding:0;flex-shrink:0" onclick="cartStepQty(' + i + ',1)">+</button>' +
           '</div>' +
         '</td>' +
-        '<td style="padding:3px 6px;text-align:right;min-width:68px"><span style="font-size:12px;color:var(--text-2);white-space:nowrap">Tk ' + fmtPlain(it.unit_price) + '</span></td>' +
+        '<td style="padding:3px 6px;text-align:right"><span style="font-size:12px;color:var(--text-2);white-space:nowrap">Tk ' + fmtPlain(it.unit_price) + '</span></td>' +
         wCell +
-        '<td style="padding:3px 4px;min-width:74px"><input type="number" id="cart-amt-' + i + '" value="' + amtVal + '" min="0" step="0.01" style="' + INP + 'width:68px;color:var(--ok);font-weight:700" oninput="cartUpdateAmount(' + i + ',this.value)" onchange="cartUpdateAmount(' + i + ',this.value)" title="Edit total amount" /></td>' +
-        '<td style="width:24px;padding:2px"><button class="cart-row-remove" onclick="removeCartItem(' + i + ')"><i class="ti ti-trash"></i></button></td>' +
+        '<td style="padding:3px 6px;text-align:right"><input type="number" id="cart-amt-' + i + '" value="' + amtVal + '" min="0" step="0.01" style="' + INP + 'width:100%;color:var(--ok);font-weight:700" oninput="cartUpdateAmount(' + i + ',this.value)" onchange="cartUpdateAmount(' + i + ',this.value)" title="Edit total amount" /></td>' +
+        '<td style="padding:2px;text-align:center"><button class="cart-row-remove" onclick="removeCartItem(' + i + ')"><i class="ti ti-trash"></i></button></td>' +
       '</tr>';
     }).join('');
   }
@@ -4443,9 +4442,13 @@ function applyFeatureFlags() {
 
   // Warranty column header in sales cart
   var cartWh = document.getElementById('cart-warranty-header');
-  if (cartWh) {
-    if (hasWarranty) { cartWh.style.display=''; cartWh.style.width=''; cartWh.style.padding='6px 4px'; cartWh.style.overflow=''; }
-    else             { cartWh.style.display='none'; cartWh.style.width='0'; cartWh.style.padding='0'; cartWh.style.overflow='hidden'; }
+  var cartColW = document.getElementById('cart-col-warranty');
+  if (hasWarranty) {
+    if (cartWh) { cartWh.style.display=''; }
+    if (cartColW) cartColW.style.width = '95px';
+  } else {
+    if (cartWh) { cartWh.style.display='none'; }
+    if (cartColW) cartColW.style.width = '0';
   }
 
   // Serial tab on warranty page (show even if only serial is on)
