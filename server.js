@@ -1095,7 +1095,7 @@ function parseDynamic(method, pathname) {
   if (segs.length === 3 && segs[0] === 'api' && segs[2] !== 'search') {
     const resource = segs[1];
     const id = segs[2];
-    const tableMap = { sales: 'sales', expenses: 'expenses', dues: 'dues', 'due-paid': 'due_paid', products: 'products', customers: 'customers', suppliers: 'suppliers', 'supplier-due-paid': 'supplier_due_paid', 'supplier-dues': 'supplier_dues', 'sales-returns': 'sales_returns', 'purchase-returns': 'purchase_returns', purchases: 'purchases', categories: 'categories', brands: 'brands', exchanges: 'exchanges', 'warranty-claims': 'warranty_claims', 'warranty-exchanges': 'warranty_exchanges', 'serial-numbers': 'serial_numbers' };
+    const tableMap = { sales: 'sales', expenses: 'expenses', dues: 'dues', 'due-paid': 'due_paid', products: 'products', customers: 'customers', suppliers: 'suppliers', 'supplier-due-paid': 'supplier_due_paid', 'supplier-dues': 'supplier_dues', 'sales-returns': 'sales_returns', 'purchase-returns': 'purchase_returns', purchases: 'purchases', categories: 'categories', brands: 'brands', exchanges: 'exchanges', 'warranty-claims': 'warranty_claims', 'warranty-exchanges': 'warranty_exchanges', 'serial-numbers': 'serial_numbers', 'damage': 'damage_log' };
     const table = tableMap[resource];
     if (table && method === 'DELETE') return { type: 'delete', table, id };
     if (table && method === 'PUT') return { type: 'put', table, id };

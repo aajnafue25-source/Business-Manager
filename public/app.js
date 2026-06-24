@@ -3082,6 +3082,7 @@ async function renderReportsPage() {
   const customers = results[7];
   const suppliers = results[8];
   const exchanges = (results[9] || []).filter(function (r) { return inRange(r.date); });
+  const damage = (results[10] || []).filter(function (r) { return inRange(r.date); });
 
   const sum = function (arr, key) { return arr.reduce(function (s, r) { return s + Number(r[key] || 0); }, 0); };
   const totalSales = sum(sales, 'amount');
@@ -3127,6 +3128,7 @@ async function renderReportsPage() {
     card('Net profit', fmt(netProfit), netProfit >= 0 ? 'green' : 'red') +
     card('Sales returns', fmt(totalReturns), 'amber') +
     card('Total purchases', fmt(totalPurchases)) +
+    card('Damage loss', fmt(damage.reduce(function(s,r){ return s+Number(r.estimated_loss||0); },0)), damage.length ? 'red' : '') +
     '</div>';
 
   const stockHtml =
@@ -3186,9 +3188,40 @@ async function renderReportsPage() {
       '</div></div>';
   }
 
+  // ── Damage report section ──
+  var totalDamageLoss = damage.reduce(function(s,r){ return s+Number(r.estimated_loss||0); },0);
+  var dmgByReason = {};
+  damage.forEach(function(r){ var k=r.reason||'Unspecified'; if(!dmgByReason[k]) dmgByReason[k]={count:0,qty:0,loss:0}; dmgByReason[k].count++; dmgByReason[k].qty+=Number(r.quantity||0); dmgByReason[k].loss+=Number(r.estimated_loss||0); });
+  var dmgByProduct = {};
+  damage.forEach(function(r){ var k=r.product_name||'Unknown'; if(!dmgByProduct[k]) dmgByProduct[k]={qty:0,loss:0}; dmgByProduct[k].qty+=Number(r.quantity||0); dmgByProduct[k].loss+=Number(r.estimated_loss||0); });
+  var topDamaged = Object.keys(dmgByProduct).map(function(k){ return {name:k,qty:dmgByProduct[k].qty,loss:dmgByProduct[k].loss}; }).sort(function(a,b){ return b.loss-a.loss; }).slice(0,10);
+  var damageHtml = '';
+  if (damage.length) {
+    damageHtml =
+      '<div class="list-header" style="padding:6px 0 12px"><i class="ti ti-alert-triangle" style="color:var(--danger)"></i> Damage Report</div>' +
+      '<div class="metrics-grid" style="margin-bottom:16px">' +
+      card('Total damage records', String(damage.length)) +
+      card('Total qty damaged', damage.reduce(function(s,r){ return s+Number(r.quantity||0); },0).toFixed(1)) +
+      card('Total estimated loss', fmt(totalDamageLoss), 'red') +
+      '</div>' +
+      '<div class="reports-2col" style="margin-bottom:24px">' +
+      '<div class="list-card"><div class="list-header"><i class="ti ti-chart-pie"></i> By reason</div><div class="table-scroll"><table><thead><tr><th>Reason</th><th class="num">Records</th><th class="num">Qty</th><th class="num">Est. loss</th></tr></thead><tbody>' +
+      Object.keys(dmgByReason).sort(function(a,b){ return dmgByReason[b].loss-dmgByReason[a].loss; }).map(function(k){ var r=dmgByReason[k]; return '<tr><td><span style="background:var(--danger-bg);color:var(--danger);padding:2px 7px;border-radius:5px;font-size:11.5px;font-weight:600">' + esc(k) + '</span></td><td class="num">' + r.count + '</td><td class="num">' + r.qty.toFixed(1) + '</td><td class="num" style="color:var(--danger);font-weight:600">' + fmt(r.loss) + '</td></tr>'; }).join('') +
+      '</tbody></table></div></div>' +
+      '<div class="list-card"><div class="list-header"><i class="ti ti-package"></i> Most damaged products</div><div class="table-scroll"><table><thead><tr><th>Product</th><th class="num">Qty lost</th><th class="num">Est. loss</th></tr></thead><tbody>' +
+      (topDamaged.length ? topDamaged.map(function(p){ return '<tr><td style="font-weight:600">' + esc(p.name) + '</td><td class="num">' + p.qty.toFixed(1) + '</td><td class="num" style="color:var(--danger);font-weight:600">' + fmt(p.loss) + '</td></tr>'; }).join('') : '<tr><td colspan="3" class="empty-state">No data.</td></tr>') +
+      '</tbody></table></div></div></div>' +
+      '<div class="list-card" style="margin-bottom:24px"><div class="list-header"><i class="ti ti-list"></i> All damage records (' + damage.length + ')</div><div class="table-scroll"><table><thead><tr><th>Date</th><th>Product</th><th class="num">Qty</th><th>Reason</th><th class="num">Est. loss</th><th>Note</th></tr></thead><tbody>' +
+      damage.sort(function(a,b){ return b.date.localeCompare(a.date); }).map(function(r){ return '<tr><td>' + esc(r.date) + '</td><td style="font-weight:600">' + esc(r.product_name) + '</td><td class="num">' + Number(r.quantity).toFixed(1) + ' ' + esc(r.unit||'pcs') + '</td><td>' + (r.reason?'<span style="background:var(--danger-bg);color:var(--danger);padding:2px 6px;border-radius:4px;font-size:11px">' + esc(r.reason) + '</span>':'—') + '</td><td class="num" style="color:var(--danger);font-weight:600">' + fmt(r.estimated_loss||0) + '</td><td style="font-size:12px;color:var(--text-2)">' + esc(r.note||'') + '</td></tr>'; }).join('') +
+      '<tr style="font-weight:700;border-top:2px solid var(--border)"><td colspan="4">Total</td><td class="num" style="color:var(--danger)">' + fmt(totalDamageLoss) + '</td><td></td></tr>' +
+      '</tbody></table></div></div>';
+    if (currentRole === 'manager') exportHtml = exportHtml.replace('</div></div>', '<button class="btn-secondary" onclick="exportCSV(\'damage\')"><i class="ti ti-alert-triangle"></i> Damage</button></div></div>');
+  }
+
   document.getElementById('reports-content').innerHTML = exportHtml + pnlHtml + stockHtml + lowStockHtml + topHtml +
     topSellersHtml +
-    '<div class="list-header" style="padding:6px 0 12px"><i class="ti ti-book"></i> Ledgers</div>' + ledgerHtml;
+    '<div class="list-header" style="padding:6px 0 12px"><i class="ti ti-book"></i> Ledgers</div>' + ledgerHtml +
+    damageHtml;
 }
 
 // ═══════════════════════════════════════════════════════
