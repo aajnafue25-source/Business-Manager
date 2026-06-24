@@ -493,7 +493,9 @@ const routes = {
         }
       }
       const rowId = await getNextId();
-      const row = { id: rowId, user_id: session.businessId, date: b.date, description: it.desc, amount, product_id: it.product_id || null, quantity: qty, unit_price: unitPrice, cost_price: costPrice, bill_id: billId, bill_no: billNo, customer_id: b.customer_id || null, customer_phone: customerPhone, customer_name: customerName, discount_pct: discountPct, discount_amount: discountAmt, vat_pct: vatPct, vat_amount: 0, salesman_id: b.salesman_id || null, salesman_name: b.salesman_name || null };
+      const wMonths = Number(it.warranty_months) || 0;
+      const wExpires = wMonths > 0 ? (() => { const d = new Date(b.date); d.setMonth(d.getMonth() + wMonths); return d.toISOString().slice(0,10); })() : null;
+      const row = { id: rowId, user_id: session.businessId, date: b.date, description: it.desc, amount, product_id: it.product_id || null, quantity: qty, unit_price: unitPrice, cost_price: costPrice, bill_id: billId, bill_no: billNo, customer_id: b.customer_id || null, customer_phone: customerPhone, customer_name: customerName, discount_pct: discountPct, discount_amount: discountAmt, vat_pct: vatPct, vat_amount: 0, salesman_id: b.salesman_id || null, salesman_name: b.salesman_name || null, warranty_months: wMonths, warranty_expires: wExpires };
       await sb('POST', 'sales', { body: row });
       saleRows.push({ ...row, desc: row.description });
       subtotal += amount;
@@ -919,6 +921,7 @@ const routes = {
           const patch = { quantity: (prods[0].quantity || 0) + qty };
           if (it.updatePurchasePrice) patch.purchase_price = unitCost;
           if (it.sell_price != null && Number(it.sell_price) > 0) patch.sell_price = Number(it.sell_price);
+          if (it.warranty_months != null && Number(it.warranty_months) > 0) patch.warranty_months = Number(it.warranty_months);
           await sb('PATCH', 'products', { query: `id=eq.${productId}`, body: patch });
         }
       }

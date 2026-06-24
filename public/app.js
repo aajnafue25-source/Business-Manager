@@ -1004,7 +1004,8 @@ function addProductDirectlyToCart(p) {
   var costPrice = Number(p.purchase_price) || 0;
   cart.push({
     product_id: p.id, desc: p.name, quantity: 1, unit_price: Number(p.sell_price) || 0,
-    amount: Number(p.sell_price) || 0, cost_price: costPrice, unit: p.unit || 'pcs'
+    amount: Number(p.sell_price) || 0, cost_price: costPrice, unit: p.unit || 'pcs',
+    warranty_months: Number(p.warranty_months) || 0
   });
   // Decrement local stock display
   var local = products.find(function (x) { return x.id === p.id; });
@@ -1093,9 +1094,11 @@ function addCartItem() {
     if (p) { costPrice = Number(p.purchase_price) || 0; }
   }
 
+  var cartWM = 0;
+  if (productId) { var cp2 = products.find(function(x){ return String(x.id)===String(productId); }); if (cp2) cartWM = Number(cp2.warranty_months)||0; }
   cart.push({
     product_id: productId, desc: desc, quantity: qty, unit_price: unitPrice,
-    amount: qty * unitPrice, cost_price: costPrice
+    amount: qty * unitPrice, cost_price: costPrice, warranty_months: cartWM
   });
 
   document.getElementById('cart-product').value = '';
@@ -1128,11 +1131,15 @@ function getCartTotals() {
 
 function renderCart() {
   const tb = document.getElementById('cart-tbody');
+  var showW = !!(settings && settings.feature_warranty);
+  var wHeader = document.getElementById('cart-warranty-header');
+  if (wHeader) wHeader.style.display = showW ? '' : 'none';
   if (!cart.length) {
-    tb.innerHTML = '<tr><td colspan="5" class="empty-state">Click a product card to add it to cart.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="' + (showW?6:5) + '" class="empty-state">Click a product card to add it to cart.</td></tr>';
   } else {
     tb.innerHTML = cart.map(function (it, i) {
-      return '<tr><td>' + esc(it.desc) + '</td><td class="num">' + it.quantity + '</td><td class="num">' + fmtPlain(it.unit_price) + '</td><td class="num" style="font-weight:600">' + fmtPlain(it.amount) + '</td><td><button class="cart-row-remove" onclick="removeCartItem(' + i + ')"><i class="ti ti-trash"></i></button></td></tr>';
+      var wCell = showW ? '<td class="num"><input type="number" value="' + (it.warranty_months||0) + '" min="0" style="width:52px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);text-align:center" onchange="cart[' + i + '].warranty_months=+this.value" title="Warranty months for this item" /></td>' : '';
+      return '<tr><td>' + esc(it.desc) + '</td><td class="num">' + it.quantity + '</td><td class="num">' + fmtPlain(it.unit_price) + '</td>' + wCell + '<td class="num" style="font-weight:600">' + fmtPlain(it.amount) + '</td><td><button class="cart-row-remove" onclick="removeCartItem(' + i + ')"><i class="ti ti-trash"></i></button></td></tr>';
     }).join('');
   }
   renderCartTotals();
@@ -1234,7 +1241,7 @@ async function checkout() {
     discountPct: t.discPct, discountAmt: t.discAmt, vatPct: t.vatPct,
     salesman_id: salesmanId, salesman_name: salesmanName,
     items: cart.map(function (it) {
-      return { product_id: it.product_id, desc: it.desc, quantity: it.quantity, unit_price: it.unit_price, amount: it.amount, cost_price: it.cost_price };
+      return { product_id: it.product_id, desc: it.desc, quantity: it.quantity, unit_price: it.unit_price, amount: it.amount, cost_price: it.cost_price, warranty_months: it.warranty_months || 0 };
     })
   });
 
@@ -2597,8 +2604,11 @@ function renderPurchaseCart() {
   if (!purchaseCart.length) {
     tb.innerHTML = '<tr><td colspan="6" class="empty-state">Search a product above to add it, or fill the form below for a new product.</td></tr>';
   } else {
+    var showPurW = !!(settings && settings.feature_warranty);
+    var purWth = document.getElementById('pur-warranty-th'); if (purWth) purWth.style.display = showPurW ? '' : 'none';
     tb.innerHTML = purchaseCart.map(function (it, i) {
-      return '<tr><td>' + esc(it.desc) + '</td><td class="num">' + it.quantity + '</td><td class="num">' + fmtPlain(it.unit_cost) + '</td><td class="num" style="color:var(--ok)">' + (it.sell_price > 0 ? fmtPlain(it.sell_price) : '—') + '</td><td class="num" style="font-weight:600">' + fmtPlain(it.amount) + '</td><td><button class="cart-row-remove" onclick="removePurchaseItem(' + i + ')"><i class="ti ti-trash"></i></button></td></tr>';
+      var wCell = showPurW ? '<td class="num"><input type="number" value="' + (it.warranty_months||0) + '" min="0" style="width:56px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);text-align:center" onchange="purchaseCart[' + i + '].warranty_months=+this.value" title="Warranty months" /></td>' : '';
+      return '<tr><td>' + esc(it.desc) + '</td><td class="num">' + it.quantity + '</td><td class="num">' + fmtPlain(it.unit_cost) + '</td><td class="num" style="color:var(--ok)">' + (it.sell_price > 0 ? fmtPlain(it.sell_price) : '—') + '</td>' + wCell + '<td class="num" style="font-weight:600">' + fmtPlain(it.amount) + '</td><td><button class="cart-row-remove" onclick="removePurchaseItem(' + i + ')"><i class="ti ti-trash"></i></button></td></tr>';
     }).join('');
   }
   const total = purchaseCart.reduce(function (s, it) { return s + it.amount; }, 0);
@@ -2648,7 +2658,7 @@ async function savePurchase() {
   const res = await apiPost('/purchases', {
     date: date, supplier_id: supplierId, supplierName: selectedPurchaseSupplier ? selectedPurchaseSupplier.name : '',
     amountPaid: amountPaid, items: purchaseCart.map(function (it) {
-      return { product_id: it.product_id, desc: it.desc, quantity: it.quantity, unit_cost: it.unit_cost, sell_price: it.sell_price || 0, amount: it.amount, updatePurchasePrice: it.updatePurchasePrice, category_name: it.category_name || null, brand_name: it.brand_name || null };
+      return { product_id: it.product_id, desc: it.desc, quantity: it.quantity, unit_cost: it.unit_cost, sell_price: it.sell_price || 0, amount: it.amount, updatePurchasePrice: it.updatePurchasePrice, category_name: it.category_name || null, brand_name: it.brand_name || null, warranty_months: it.warranty_months || 0 };
     })
   });
   if (res && res.error) { alert(res.error); return; }
@@ -3207,12 +3217,14 @@ function addPurchaseItem() {
   if (!desc) return alert('Please enter a product name.');
   if (isNaN(qty) || qty <= 0) return alert('Please enter a valid quantity.');
   if (isNaN(unitCost) || unitCost < 0) return alert('Please enter a valid cost price.');
-  purchaseCart.push({ product_id: productId, desc: desc, quantity: qty, unit_cost: unitCost, sell_price: sellPrice, amount: qty * unitCost, category_name: catName, brand_name: brandName, updatePurchasePrice: true });
+  var purWM = parseFloat((document.getElementById('pur-warranty-months') || {}).value) || 0;
+  purchaseCart.push({ product_id: productId, desc: desc, quantity: qty, unit_cost: unitCost, sell_price: sellPrice, amount: qty * unitCost, category_name: catName, brand_name: brandName, warranty_months: purWM, updatePurchasePrice: true });
   document.getElementById('pur-product').value = '';
   document.getElementById('pur-desc').value = '';
   document.getElementById('pur-qty').value = '1';
   document.getElementById('pur-cost').value = '';
   document.getElementById('pur-sell').value = '';
+  var purWel = document.getElementById('pur-warranty-months'); if (purWel) purWel.value = '';
   if (catEl) catEl.value = '';
   if (brandEl) brandEl.value = '';
   renderPurchaseCart();
@@ -4157,10 +4169,15 @@ document.addEventListener('keydown', function (e) {
 function applyFeatureFlags() {
   var hasSerial = !!(settings && settings.feature_serial_numbers);
   var hasWarranty = !!(settings && settings.feature_warranty);
+  var hasHajira = !!(settings && settings.feature_hajira);
 
   // Warranty nav button
   var navW = document.getElementById('nav-warranty');
   if (navW) navW.style.display = (hasSerial || hasWarranty) ? '' : 'none';
+
+  // Hajira nav button
+  var navH = document.getElementById('nav-hajira');
+  if (navH) navH.style.display = hasHajira ? '' : 'none';
 
   // Serial fields on product form
   var sr = document.getElementById('prod-serial-row');
@@ -4169,6 +4186,14 @@ function applyFeatureFlags() {
   // Warranty field on product form
   var wr = document.getElementById('prod-warranty-row');
   if (wr) wr.style.display = hasWarranty ? '' : 'none';
+
+  // Warranty fields on purchase form
+  var purW = document.getElementById('pur-warranty-row');
+  if (purW) purW.style.display = hasWarranty ? '' : 'none';
+
+  // Warranty column header in sales cart
+  var cartWh = document.getElementById('cart-warranty-header');
+  if (cartWh) cartWh.style.display = hasWarranty ? '' : 'none';
 
   // Serial tab on warranty page (show even if only serial is on)
   var stab = document.getElementById('wtab-serials');
