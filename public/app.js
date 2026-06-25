@@ -1181,7 +1181,6 @@ function cartUpdateQty(i, val) {
     if (!el || document.activeElement !== el) renderCart();
   }, 800);
 }
-}
 function cartUpdateAmount(i, val) {
   var amt = parseFloat(val) || 0;
   cart[i].amount = amt;
