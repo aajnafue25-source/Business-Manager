@@ -105,8 +105,7 @@
         <button data-page="sales"><i class="ti ti-shopping-cart"></i>New Sale</button>
         <button data-page="saleslist"><i class="ti ti-list"></i>Sales List</button>
         <button data-page="delivery"><i class="ti ti-truck-delivery"></i>Delivery</button>
-        <button data-page="salesreturns"><i class="ti ti-arrow-back-up"></i>Sales Returns</button>
-        <button data-page="exchanges"><i class="ti ti-switch-3"></i>Exchanges</button>
+        <button data-page="exchanges"><i class="ti ti-switch-3"></i>Return &amp; Exchange</button>
         <button data-page="warranty" id="nav-warranty" style="display:none"><i class="ti ti-shield-check"></i>Warranty</button>
       </div>
     </div>
@@ -250,19 +249,19 @@
 
           <!-- Compact header row: date + customer -->
           <div class="pos-cart-header">
-            <div class="pos-field-group">
+            <div class="pos-field-group" style="flex:0 0 auto;min-width:110px;max-width:140px">
               <label class="pos-label">Date</label>
-              <input type="date" id="cart-date" class="pos-input" />
+              <input type="date" id="cart-date" class="pos-input" style="min-width:0;width:100%" />
             </div>
-            <div class="pos-field-group" style="flex:2">
+            <div class="pos-field-group" style="flex:1;min-width:0">
               <label class="pos-label">Customer</label>
               <div class="search-pick-wrap">
-                <input type="text" id="cart-customer-search" class="search-pick-input pos-input" placeholder="Walk-in — search by name/phone" autocomplete="off" />
+                <input type="text" id="cart-customer-search" class="search-pick-input pos-input" placeholder="Walk-in / search" autocomplete="off" />
                 <input type="hidden" id="cart-customer" value="" />
                 <div id="cart-customer-results" class="search-pick-results"></div>
               </div>
             </div>
-            <button type="button" class="pos-icon-btn" onclick="openQuickAddCustomer()" title="Add new customer"><i class="ti ti-user-plus"></i></button>
+            <button type="button" class="pos-icon-btn" style="flex-shrink:0" onclick="openQuickAddCustomer()" title="Add new customer"><i class="ti ti-user-plus"></i></button>
           </div>
           <!-- Outstanding due notice for selected customer -->
           <div id="cart-customer-due-notice" class="cart-due-notice" style="display:none"></div>
@@ -456,6 +455,24 @@
             <thead><tr><th>Date</th><th>Bill #</th><th>Customer</th><th>Returned</th><th>New item</th><th class="num">Difference</th><th></th></tr></thead>
             <tbody id="exchangelist-tbody"></tbody>
           </table>
+        </div>
+      </div>
+      </div><!-- end rexc-exchange-section -->
+
+      <!-- Return history -->
+      <div id="rexc-return-section" style="display:none">
+        <div class="filter-bar">
+          <input type="text" id="retlist-search" placeholder="Search customer, item..." oninput="renderReturnHistoryList()" style="flex:1;min-width:140px" />
+          <input type="date" id="retlist-from" /><span class="filter-to">to</span><input type="date" id="retlist-to" />
+          <button class="btn-filter" onclick="renderReturnHistoryList()">Filter</button>
+          <button class="btn-clear" onclick="['retlist-search','retlist-from','retlist-to'].forEach(function(id){document.getElementById(id).value=''});renderReturnHistoryList()">Clear</button>
+        </div>
+        <div class="list-card">
+          <div class="list-header"><i class="ti ti-arrow-back-up"></i> Return history</div>
+          <div class="table-scroll"><table>
+            <thead><tr><th>Date</th><th>Bill #</th><th>Customer</th><th>Item returned</th><th class="num">Qty</th><th class="num">Refund</th></tr></thead>
+            <tbody id="retlist-tbody"></tbody>
+          </table></div>
         </div>
       </div>
     </section>
@@ -1032,16 +1049,16 @@
       <!-- Rules Panel (manager only) -->
       <div class="entry-section" id="att-rules-section" style="margin-bottom:14px;background:var(--accent-soft);border:1px solid var(--accent)">
         <h3 style="color:var(--accent)"><i class="ti ti-settings"></i> Attendance Rules</h3>
-        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end">
-          <div class="form-row" style="flex:1;min-width:160px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end;max-width:480px">
+          <div class="form-row" style="margin:0">
             <label>Standard entry time</label>
-            <input type="time" id="att-rule-entry" value="09:00" />
+            <input type="time" id="att-rule-entry" value="09:00" style="width:100%;box-sizing:border-box" />
           </div>
-          <div class="form-row" style="flex:1;min-width:160px">
-            <label>Max lunch duration (minutes)</label>
-            <input type="number" id="att-rule-lunch" min="0" max="240" value="60" placeholder="e.g. 60" />
+          <div class="form-row" style="margin:0">
+            <label>Max lunch (minutes)</label>
+            <input type="number" id="att-rule-lunch" min="0" max="240" value="60" placeholder="60" style="width:100%;box-sizing:border-box" />
           </div>
-          <button class="btn-save" style="max-width:160px;margin-bottom:0" onclick="saveAttRules()"><i class="ti ti-check"></i> Save rules</button>
+          <button class="btn-save" style="grid-column:1/-1;max-width:200px;margin:0" onclick="saveAttRules()"><i class="ti ti-check"></i> Save rules</button>
         </div>
         <div id="att-rules-info" style="font-size:12px;color:var(--text-2);margin-top:8px"></div>
       </div>

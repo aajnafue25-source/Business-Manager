@@ -3353,7 +3353,7 @@ function qtyStepForUnit(unit) {
 function qtyInputAttrs(unit, val, max) {
   var step = qtyStepForUnit(unit);
   var maxAttr = max != null ? ' max="' + max + '"' : '';
-  return 'type="number" value="' + (val||1) + '" min="0.01" step="' + step + '"' + maxAttr;
+    return 'type="number" value="' + (val||1) + '" min="0.01" step="' + step + '" inputmode="numeric"' + maxAttr;
 }
 
 function getWarrantyInputs(numId, unitId) {
@@ -3637,7 +3637,7 @@ function renderPendingExchanges() {
       '<td style="font-size:12.5px">' + esc(p.origDesc) + '</td>' +
       '<td class="num">' + p.origQty + '</td>' +
       '<td class="num">' + fmt(p.origPrice) + '</td>' +
-      '<td><div class="search-pick-wrap" style="min-width:160px">' +
+      '<td><div style="font-size:10px;color:var(--text-3);margin-bottom:2px">Leave blank = return &amp; refund</div><div class="search-pick-wrap" style="min-width:140px">' +
         '<input type="text" class="search-pick-input" id="exc-new-search-' + i + '" placeholder="Search replacement..." autocomplete="off" oninput="searchExchangeNewProduct(' + i + ',this.value)" />' +
         '<div id="exc-new-results-' + i + '" class="search-pick-results"></div>' +
       '</div>' +
@@ -5222,6 +5222,44 @@ async function deleteHajiraPayment(id) {
   if (res && res.error) return alert(res.error);
   toast('Payment deleted', 'ok');
   renderHajiraLedgerDetail();
+}
+
+// ── Return/Exchange tab switcher ──
+function switchRExcTab(tab) {
+  var excS = document.getElementById('rexc-exchange-section');
+  var retS = document.getElementById('rexc-return-section');
+  var excT = document.getElementById('rexc-tab-exchange');
+  var retT = document.getElementById('rexc-tab-return');
+  if (tab === 'exchange') {
+    if (excS) excS.style.display = '';
+    if (retS) retS.style.display = 'none';
+    if (excT) excT.classList.add('active');
+    if (retT) retT.classList.remove('active');
+    renderExchangeList();
+  } else {
+    if (excS) excS.style.display = 'none';
+    if (retS) retS.style.display = '';
+    if (excT) excT.classList.remove('active');
+    if (retT) retT.classList.add('active');
+    renderReturnHistoryList();
+  }
+}
+
+async function renderReturnHistoryList() {
+  var search = (document.getElementById('retlist-search')||{}).value || '';
+  var from   = (document.getElementById('retlist-from')||{}).value || '';
+  var to     = (document.getElementById('retlist-to')||{}).value || '';
+  var rows = await apiGet('/sales-returns') || [];
+  if (search) rows = rows.filter(function(r){ return (r.desc||r.description||'').toLowerCase().includes(search.toLowerCase()) || (r.customer_name||'').toLowerCase().includes(search.toLowerCase()); });
+  if (from) rows = rows.filter(function(r){ return r.date >= from; });
+  if (to)   rows = rows.filter(function(r){ return r.date <= to; });
+  var tb = document.getElementById('retlist-tbody');
+  if (!tb) return;
+  if (!rows.length) { tb.innerHTML = '<tr><td colspan="6" class="empty-state">No returns yet.</td></tr>'; return; }
+  tb.innerHTML = rows.map(function(r){
+    var billNo = r.bill_no ? '#' + String(r.bill_no).padStart(5,'0') : '—';
+    return '<tr><td>' + esc(r.date) + '</td><td style="font-weight:600">' + billNo + '</td><td>' + esc(r.customer_name||'Walk-in') + '</td><td>' + esc(r.desc||r.description||'—') + '</td><td class="num">' + (r.quantity||1) + '</td><td class="num" style="color:var(--danger);font-weight:600">' + fmt(r.amount||0) + '</td></tr>';
+  }).join('');
 }
 
 // ═══════════════════════════════════════════════════════════════════════
