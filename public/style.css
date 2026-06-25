@@ -929,3 +929,78 @@ input[type=number] { -moz-appearance: textfield; }
   /* Attendance rules */
   #att-rules-section .form-row input { width: 100%; box-sizing: border-box; }
 }
+
+/* ── Attendance Rules fixed layout ── */
+.att-rules-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+.att-rule-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1 1 140px;
+  min-width: 120px;
+  max-width: 220px;
+}
+.att-rule-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.att-rule-input {
+  padding: 9px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  width: 100%;
+  box-sizing: border-box;
+  height: 40px;
+}
+.att-rule-btn {
+  flex: 0 0 auto;
+  max-width: 160px !important;
+  height: 40px;
+  margin: 0 !important;
+}
+
+/* ── Search results - cap height on mobile ── */
+@media (max-width: 768px) {
+  .search-pick-results { max-height: 33vh !important; }
+  .exc-bill-results    { max-height: 40vh !important; }
+  /* Exchange pending table - make search results appear ABOVE table on mobile */
+  #exc-pending-tbody .search-pick-results {
+    position: fixed !important;
+    left: 8px !important;
+    right: 8px !important;
+    top: auto !important;
+    bottom: 60px !important;
+    width: auto !important;
+    z-index: 9999 !important;
+    max-height: 40vh !important;
+  }
+  /* Customer + date bar - prevent overlap */
+  .pos-cart-header {
+    flex-wrap: nowrap !important;
+    align-items: flex-end;
+  }
+  .pos-cart-header .pos-field-group:first-child {
+    flex: 0 0 auto !important;
+    width: 100px !important;
+    min-width: 0 !important;
+    max-width: 100px !important;
+  }
+  .pos-cart-header .pos-field-group:first-child .pos-input {
+    font-size: 11px;
+    padding: 6px 4px;
+  }
+  .pos-cart-header .pos-icon-btn {
+    flex-shrink: 0;
+    width: 36px;
+    padding: 0;
+  }
+}

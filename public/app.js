@@ -1159,7 +1159,8 @@ function cartStepQty(i, delta) {
 
 function cartUpdateQty(i, val) {
   var it = cart[i]; if (!it) return;
-  var raw = parseFloat(val) || 1;
+  var raw = parseFloat(val);
+  if (isNaN(raw)) return; // still typing e.g. empty or minus
   var isInt = qtyStepForUnit(it.unit) === '1';
   var qty = isInt ? Math.round(raw) : raw;
   var prod = products.find(function(p){ return p.id === it.product_id; });
@@ -1167,12 +1168,19 @@ function cartUpdateQty(i, val) {
   var stockAvail = prod ? (Number(prod.quantity) + origQty) : Infinity;
   if (qty > stockAvail) { qty = isInt ? Math.floor(stockAvail) : stockAvail; toast('Max stock: ' + stockAvail, 'warn'); }
   qty = Math.max(isInt ? 1 : 0.01, qty);
-  var el = document.getElementById('cart-qty-' + i); if (el) el.value = qty;
   cart[i].quantity = qty;
-  // Recalculate amount from qty × unit_price when qty changes
   cart[i].amount = Math.round((qty * cart[i].unit_price) * 100) / 100;
-  var amtEl = document.getElementById('cart-amt-' + i); if (amtEl) amtEl.value = cart[i].amount;
+  // Update amount directly without re-rendering cart (re-render destroys the focused input)
+  var amtEl = document.getElementById('cart-amt-' + i);
+  if (amtEl) amtEl.value = cart[i].amount.toFixed(2);
   renderCartTotals(); updatePayPreview();
+  // Re-render only after user stops typing AND leaves the field
+  clearTimeout(it.__qtyTimer);
+  it.__qtyTimer = setTimeout(function() {
+    var el = document.getElementById('cart-qty-' + i);
+    if (!el || document.activeElement !== el) renderCart();
+  }, 800);
+}
 }
 function cartUpdateAmount(i, val) {
   var amt = parseFloat(val) || 0;
