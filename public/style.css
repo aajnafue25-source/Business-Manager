@@ -514,7 +514,7 @@ body.hide-purchase-price .product-cost-row { display: none !important; }
 .pos-prod-stock { font-size: 10.5px; color: var(--text-3); }
 .pos-prod-stock.low { color: var(--danger); font-weight: 600; }
 .pos-prod-out { opacity: 0.45; pointer-events: none; }
-.pos-cart-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px; box-shadow: var(--shadow-card); display: flex; flex-direction: column; gap: 8px; position: sticky; top: 72px; }
+.pos-cart-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px; box-shadow: var(--shadow-card); display: flex; flex-direction: column; gap: 8px; }
 .pos-cart-header { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
 .pos-field-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
 .pos-label { font-size: 11px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; }
@@ -941,9 +941,8 @@ input[type=number] { -moz-appearance: textfield; }
   display: flex;
   flex-direction: column;
   gap: 5px;
-  flex: 1 1 140px;
-  min-width: 120px;
-  max-width: 220px;
+  flex: 1 1 120px;
+  min-width: 100px;
 }
 .att-rule-label {
   font-size: 12px;
@@ -1003,4 +1002,26 @@ input[type=number] { -moz-appearance: textfield; }
     width: 36px;
     padding: 0;
   }
+}
+
+@media (max-width: 600px) {
+  .att-rule-btn { max-width: 100% !important; width: 100%; }
+  .att-rule-field { flex: 1 1 100%; }
+}
+
+/* Fix blank space at top of pages */
+.page { padding-top: 0 !important; margin-top: 0 !important; }
+.page > .list-card:first-child,
+.page > .entry-section:first-child,
+.page > .filter-bar:first-child { margin-top: 0 !important; }
+.page-title { margin-top: 0 !important; margin-bottom: 16px; }
+
+/* Attendance rules - equal box sizes on all screens */
+.att-rules-grid { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.att-rule-field { flex: 1 1 120px; display: flex; flex-direction: column; gap: 4px; }
+.att-rule-input { height: 42px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-2); color: var(--text); font-size: 13px; width: 100%; box-sizing: border-box; }
+.att-rule-btn { height: 42px !important; flex: 0 0 auto; min-width: 140px; margin: 0 !important; }
+@media (max-width: 480px) {
+  .att-rule-field { flex: 1 1 100%; }
+  .att-rule-btn { width: 100%; max-width: 100% !important; }
 }
