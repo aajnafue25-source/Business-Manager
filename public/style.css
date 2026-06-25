@@ -324,7 +324,7 @@ nav#nav button.active i { color: #fff; }
 
 main { flex: 1; }
 
-.page { display: none; animation: fadeIn .2s ease; }
+.page { display: none; animation: fadeIn .2s ease; padding-top: 0; margin-top: 0; }
 .page.active { display: block; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -1009,12 +1009,11 @@ input[type=number] { -moz-appearance: textfield; }
   .att-rule-field { flex: 1 1 100%; }
 }
 
-/* Fix blank space at top of pages */
-.page { padding-top: 0 !important; margin-top: 0 !important; }
+/* Page first-child margins */
 .page > .list-card:first-child,
 .page > .entry-section:first-child,
-.page > .filter-bar:first-child { margin-top: 0 !important; }
-.page-title { margin-top: 0 !important; margin-bottom: 16px; }
+.page > .filter-bar:first-child { margin-top: 0; }
+.page-title { margin-top: 0; margin-bottom: 16px; }
 
 /* Attendance rules - equal box sizes on all screens */
 .att-rules-grid { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }

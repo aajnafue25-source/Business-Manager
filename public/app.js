@@ -300,6 +300,7 @@ function navigateTo(page) {
     }
   });
   document.getElementById('nav').classList.remove('open');
+  window.scrollTo({ top: 0, behavior: 'instant' });
   if (PAGE_RENDERERS[page]) PAGE_RENDERERS[page]();
   applyLang();
 }
