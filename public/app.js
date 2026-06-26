@@ -647,14 +647,25 @@ async function renderSaleDetailPage() {
   // Store items globally for return/exchange access
   window.__currentBillItems = billItems;
   window.__currentBillData = { billId: r.bill_id, billNo: r.bill_no, customerId: r.customer_id, customerName: r.customer_name };
+  // Load existing returns for this bill to show already-returned status
+  window.__currentBillReturns = [];
+  if (r.bill_id) {
+    var existingRets = await apiGet('/sales-returns');
+    window.__currentBillReturns = (existingRets || []).filter(function(ret){ return ret.bill_id == r.bill_id; });
+  }
 
   var itemsHtml = billItems.map(function (it, idx) {
+    var alreadyReturned = (window.__currentBillReturns || []).filter(function(r){ return r.sale_id === it.id; }).reduce(function(s,r){ return s+Number(r.quantity||0); },0);
+    var remaining = (Number(it.quantity)||1) - alreadyReturned;
+    var returnBtn = remaining <= 0
+      ? '<button class="btn-secondary" style="font-size:11.5px;padding:5px 10px;color:var(--text-3);border-color:var(--border)" disabled title="Already fully returned"><i class="ti ti-check"></i> Returned</button>'
+      : '<button class="btn-secondary" style="font-size:11.5px;padding:5px 10px;color:var(--warn);border-color:var(--warn)" onclick="addItemToReturn(' + idx + ')"><i class="ti ti-arrow-back-up"></i> Return' + (alreadyReturned > 0 ? ' (' + remaining + ' left)' : '') + '</button>';
     return '<tr>' +
       '<td>' + esc(it.desc || it.description || '') + '</td>' +
       '<td class="num">' + (it.quantity != null ? it.quantity : '\u2014') + '</td>' +
       '<td class="num">' + (it.unit_price != null ? fmt(it.unit_price) : '\u2014') + '</td>' +
       '<td class="num" style="font-weight:700;color:var(--ok)">' + fmt(it.amount) + '</td>' +
-      '<td style="white-space:nowrap"><button class="btn-secondary" style="font-size:11.5px;padding:5px 10px;color:var(--warn);border-color:var(--warn)" onclick="addItemToReturn(' + idx + ')"><i class="ti ti-arrow-back-up"></i> Return</button></td>' +
+      '<td style="white-space:nowrap">' + returnBtn + '</td>' +
       '</tr>';
   }).join('');
 
@@ -716,7 +727,7 @@ function addItemToReturn(itemIdx) {
   var already = __pendingReturns.find(function (p) { return p.itemIdx === itemIdx; });
   if (already) { toast('Item already in return list'); return; }
   var unitPrice = item.unit_price != null ? Number(item.unit_price) : Number(item.amount) / (Number(item.quantity) || 1);
-  __pendingReturns.push({ itemIdx: itemIdx, desc: item.desc || item.description, quantity: Number(item.quantity) || 1, maxQty: Number(item.quantity) || 1, unitPrice: unitPrice, productId: item.product_id || null, amount: Number(item.amount) || 0 });
+  __pendingReturns.push({ itemIdx: itemIdx, saleId: item.id || null, desc: item.desc || item.description, quantity: Number(item.quantity) || 1, maxQty: Number(item.quantity) || 1, unitPrice: unitPrice, productId: item.product_id || null, amount: Number(item.amount) || 0 });
   renderPendingReturns();
   document.getElementById('pending-returns-section').style.display = 'block';
 }
@@ -760,10 +771,11 @@ async function saveInlineReturns() {
   for (var i = 0; i < __pendingReturns.length; i++) {
     var p = __pendingReturns[i];
     var res = await apiPost('/sales-returns', {
-      date: date, product_id: p.productId, desc: p.desc, quantity: p.quantity,
+      date: date, sale_id: p.saleId || null, product_id: p.productId, desc: p.desc, quantity: p.quantity,
       unit_price: p.unitPrice, amount: p.quantity * p.unitPrice,
       bill_no: billData.billNo || null, bill_id: billData.billId || null,
-      customer_id: billData.customerId || null, note: note || 'Return from Bill #' + (billData.billNo || '')
+      customer_id: billData.customerId || null, customer_name: billData.customerName || null,
+      note: note || 'Return from Bill #' + (billData.billNo || '')
     });
     if (res && res.error) errors.push(p.desc + ': ' + res.error);
   }
@@ -2516,12 +2528,10 @@ async function renderDashboard() {
   const totalPurchases = purchases.reduce(function (s, r) { return s + Number(r.total || 0); }, 0);
 
   // ── Cash Flow ──
-  // Cash collected = net revenue − still-outstanding dues
-  // Outstanding dues are ALL-TIME (not period), so adjust:
   const periodGrossDues = allDues.filter(function (r) { return inRange(r.date); }).reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
   const periodDuePaidCollected = duePaid.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
-  const cashFromSales = netRevenue - periodGrossDues; // collected immediately from sales
-  const cashCollected = cashFromSales + periodDuePaidCollected; // + due payments received this period
+  const cashFromSales = grossSales - periodGrossDues; // cash collected at point of sale (before returns)
+  const cashCollected = cashFromSales + periodDuePaidCollected;
   const refunds = totalReturns + Math.max(0, -totalExchangeDiff); // cash given back
   const cashOut = totalExp + refunds;
   const netCash = cashCollected - cashOut;

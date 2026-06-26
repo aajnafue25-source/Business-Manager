@@ -546,8 +546,24 @@ const routes = {
     if (!canEdit(session)) return send(res, 403, { error: 'Manager only' });
     const b = await readBody(req);
     if (!b.date || !b.desc || !b.quantity || !b.amount) return send(res, 400, { error: 'date, desc, quantity, amount required' });
+
+    // ── Guard: check quantity already returned for this sale row ──
+    if (b.sale_id) {
+      const originalRows = await sb('GET', 'sales', { query: `id=eq.${b.sale_id}&user_id=eq.${session.businessId}` });
+      const originalQty = originalRows && originalRows[0] ? Number(originalRows[0].quantity) || 1 : 1;
+      const existingReturns = await sb('GET', 'sales_returns', { query: `sale_id=eq.${b.sale_id}&user_id=eq.${session.businessId}` });
+      const alreadyReturned = (existingReturns || []).reduce((s, r) => s + Number(r.quantity || 0), 0);
+      const remaining = originalQty - alreadyReturned;
+      if (Number(b.quantity) > remaining) {
+        return send(res, 400, { error: `Only ${remaining} of ${originalQty} can be returned (${alreadyReturned} already returned).` });
+      }
+      if (remaining <= 0) {
+        return send(res, 400, { error: 'This item has already been fully returned.' });
+      }
+    }
+
     const id = await getNextId();
-    const row = { id, user_id: session.businessId, sale_id: b.sale_id || null, bill_id: b.bill_id || null, bill_no: b.bill_no || null, product_id: b.product_id || null, customer_id: b.customer_id || null, description: b.desc, date: b.date, quantity: Number(b.quantity), unit_price: b.unit_price != null ? Number(b.unit_price) : null, amount: Number(b.amount), note: b.note || '' };
+    const row = { id, user_id: session.businessId, sale_id: b.sale_id || null, bill_id: b.bill_id || null, bill_no: b.bill_no || null, product_id: b.product_id || null, customer_id: b.customer_id || null, customer_name: b.customer_name || null, customer_phone: b.customer_phone || null, description: b.desc, date: b.date, quantity: Number(b.quantity), unit_price: b.unit_price != null ? Number(b.unit_price) : null, amount: Number(b.amount), note: b.note || '' };
     await sb('POST', 'sales_returns', { body: row });
     if (b.product_id) {
       const prods = await sb('GET', 'products', { query: `id=eq.${b.product_id}&user_id=eq.${session.businessId}` });
