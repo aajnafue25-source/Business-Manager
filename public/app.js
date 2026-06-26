@@ -308,56 +308,29 @@ function navigateTo(page) {
 document.getElementById('nav').addEventListener('click', function (e) {
   const btn = e.target.closest('button');
   if (!btn) return;
-
-  // Group header (Sales, Purchases, Inventory...)
+  // Group header: toggle the accordion open/close ONLY — navigation via sub-items
   if (btn.classList.contains('nav-group-btn')) {
-
-    e.preventDefault();
     e.stopPropagation();
-
-    const group = btn.closest('.nav-group');
-
-    // Mobile: always expand/collapse
-    if (window.innerWidth <= 768) {
-      const wasOpen = group.classList.contains('open');
-
-      document.querySelectorAll('.nav-group.open').forEach(function (g) {
-        if (g !== group) g.classList.remove('open');
-      });
-
-      group.classList.toggle('open', !wasOpen);
-      return;
-    }
-
-    // Desktop collapsed sidebar
-    const isCollapsed = document.getElementById('app').classList.contains('nav-collapsed');
-
+    var isCollapsed = document.getElementById('app').classList.contains('nav-collapsed');
     if (isCollapsed) {
-      const defaultPage = btn.dataset.default || btn.dataset.page;
+      // In collapsed mode: icon click navigates to the group's default page
+      var defaultPage = btn.dataset.default || btn.dataset.page;
       if (defaultPage) navigateTo(defaultPage);
       return;
     }
-
-    // Desktop expanded sidebar
+    const group = btn.closest('.nav-group');
     const wasOpen = group.classList.contains('open');
-
-    document.querySelectorAll('.nav-group.open').forEach(function (g) {
-      if (g !== group) g.classList.remove('open');
-    });
-
+    document.querySelectorAll('.nav-group.open').forEach(function (g) { if (g !== group) g.classList.remove('open'); });
     group.classList.toggle('open', !wasOpen);
     return;
   }
-
-  if (btn.dataset.page) {
-    navigateTo(btn.dataset.page);
-
-    // Close menu only after clicking submenu on mobile
-    if (window.innerWidth <= 768) {
-      document.getElementById('nav').classList.remove('open');
-    }
-  }
+  if (btn.dataset.page) navigateTo(btn.dataset.page);
 });
+
+document.getElementById('menuToggle').addEventListener('click', () => {
+  document.getElementById('nav').classList.toggle('open');
+});
+
 // Mobile: clicking outside the nav closes it automatically
 document.addEventListener('click', function (e) {
   var nav = document.getElementById('nav');
