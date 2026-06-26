@@ -396,55 +396,58 @@
     <!-- EXCHANGES -->
     <section id="page-exchanges" class="page">
       <h1 class="page-title"><i class="ti ti-switch-3"></i> Return &amp; Exchange</h1>
+
+      <!-- Tab buttons -->
       <div class="tab-row" style="margin-bottom:16px">
         <button class="tab-btn active" id="rexc-tab-exchange" onclick="switchRExcTab('exchange')"><i class="ti ti-switch-3"></i> Exchange</button>
         <button class="tab-btn" id="rexc-tab-return" onclick="switchRExcTab('return')"><i class="ti ti-arrow-back-up"></i> Returns</button>
       </div>
+
+      <!-- ═══ EXCHANGE SECTION ═══ -->
       <div id="rexc-exchange-section">
-
-      <!-- Bill search -->
-      <div class="entry-section" style="margin-bottom:18px">
-        <h3><i class="ti ti-receipt" style="color:var(--accent)"></i> Find bill to exchange from</h3>
-        <div class="form-row">
-          <label>Search by bill number or customer name</label>
-          <input type="text" id="exc-bill-search" placeholder="e.g. #10 or customer name..." oninput="searchExchangeBill()" />
-        </div>
-        <div id="exc-bill-results" class="exc-bill-results"></div>
-      </div>
-
-      <!-- Selected bill items + exchange form -->
-      <div id="exc-bill-panel" style="display:none">
-        <div class="list-card" style="margin-bottom:18px">
-          <div class="list-header" id="exc-bill-header"><i class="ti ti-list"></i> Items on this bill</div>
-          <div class="table-scroll">
-            <table>
-              <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Total</th><th style="width:100px"></th></tr></thead>
-              <tbody id="exc-bill-items"></tbody>
-            </table>
+        <!-- Bill search -->
+        <div class="entry-section" style="margin-bottom:18px">
+          <h3><i class="ti ti-receipt" style="color:var(--accent)"></i> Find bill to exchange from</h3>
+          <div class="form-row">
+            <label>Search by bill number or customer name</label>
+            <input type="text" id="exc-bill-search" placeholder="e.g. #10 or customer name..." oninput="searchExchangeBill()" />
           </div>
+          <div id="exc-bill-results" class="exc-bill-results"></div>
         </div>
 
-        <!-- Pending exchanges list (inline, no popup) -->
-        <div id="exc-pending-section" style="display:none;margin-bottom:18px">
-          <div class="list-card">
-            <div class="list-header"><i class="ti ti-switch-3" style="color:var(--accent)"></i> Pending exchanges</div>
+        <!-- Selected bill items + exchange form -->
+        <div id="exc-bill-panel" style="display:none">
+          <div class="list-card" style="margin-bottom:18px">
+            <div class="list-header" id="exc-bill-header"><i class="ti ti-list"></i> Items on this bill</div>
             <div class="table-scroll">
               <table>
-                <thead><tr><th>Return</th><th class="num">Qty</th><th class="num">Price</th><th>Replace with</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Difference</th><th></th></tr></thead>
-                <tbody id="exc-pending-tbody"></tbody>
+                <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Total</th><th style="width:100px"></th></tr></thead>
+                <tbody id="exc-bill-items"></tbody>
               </table>
             </div>
-            <div class="total-row" id="exc-net-diff-row">
-              <span>Net difference</span><span id="exc-net-diff-val">Tk 0.00</span>
-            </div>
           </div>
-          <div class="form-row" style="margin-top:12px"><label>Date</label><input type="date" id="exc-date" /></div>
-          <div class="form-row"><label>Note (optional)</label><input type="text" id="exc-note" placeholder="Reason for exchange" /></div>
-          <button class="btn-save" onclick="saveExchanges()"><i class="ti ti-switch-3"></i> Save exchanges &amp; generate bill</button>
-        </div><!-- end exc-bill-panel -->
+
+          <div id="exc-pending-section" style="display:none;margin-bottom:18px">
+            <div class="list-card">
+              <div class="list-header"><i class="ti ti-switch-3" style="color:var(--accent)"></i> Pending exchanges</div>
+              <div class="table-scroll">
+                <table>
+                  <thead><tr><th>Return</th><th class="num">Qty</th><th class="num">Price</th><th>Replace with</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Difference</th><th></th></tr></thead>
+                  <tbody id="exc-pending-tbody"></tbody>
+                </table>
+              </div>
+              <div class="total-row" id="exc-net-diff-row">
+                <span>Net difference</span><span id="exc-net-diff-val">Tk 0.00</span>
+              </div>
+            </div>
+            <div class="form-row" style="margin-top:12px"><label>Date</label><input type="date" id="exc-date" /></div>
+            <div class="form-row"><label>Note (optional)</label><input type="text" id="exc-note" placeholder="Reason for exchange" /></div>
+            <button class="btn-save" onclick="saveExchanges()"><i class="ti ti-switch-3"></i> Save exchanges &amp; generate bill</button>
+          </div>
+        </div>
       </div><!-- end rexc-exchange-section -->
 
-      <!-- Return History Section -->
+      <!-- ═══ RETURN SECTION ═══ -->
       <div id="rexc-return-section" style="display:none">
         <!-- Bill search for returns -->
         <div class="entry-section" style="margin-bottom:14px">
@@ -454,7 +457,7 @@
           </div>
           <div id="ret-bill-results" class="exc-bill-results"></div>
         </div>
-        <!-- Return history list -->
+        <!-- Return history -->
         <div class="filter-bar">
           <input type="text" id="retlist-search" placeholder="Search customer, item..." oninput="renderReturnHistoryList()" style="flex:1;min-width:120px" />
           <input type="date" id="retlist-from" /><span class="filter-to">to</span><input type="date" id="retlist-to" />
@@ -468,11 +471,12 @@
             <tbody id="retlist-tbody"></tbody>
           </table></div>
         </div>
-      </div>
-      <!-- Exchange List (only shows in exchange tab) -->
+      </div><!-- end rexc-return-section -->
+
+      <!-- ═══ EXCHANGE HISTORY (exchange tab only) ═══ -->
       <div id="rexc-exchange-list-section">
         <div class="filter-bar">
-          <input type="text" id="exchlist-search" placeholder="🔍 Search customer, bill..." oninput="renderExchangeList()" style="flex:1;min-width:140px" />
+          <input type="text" id="exchlist-search" placeholder="Search customer, bill..." oninput="renderExchangeList()" style="flex:1;min-width:140px" />
           <input type="date" id="exchlist-from" />
           <span class="filter-to">to</span>
           <input type="date" id="exchlist-to" />
@@ -489,7 +493,7 @@
           </div>
         </div>
       </div><!-- end rexc-exchange-list-section -->
-    </div><!-- balance -->
+
     </section>
 
     <!-- NEW PURCHASE -->
