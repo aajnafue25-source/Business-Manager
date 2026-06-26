@@ -105,7 +105,7 @@
         <button data-page="sales"><i class="ti ti-shopping-cart"></i>New Sale</button>
         <button data-page="saleslist"><i class="ti ti-list"></i>Sales List</button>
         <button data-page="delivery"><i class="ti ti-truck-delivery"></i>Delivery</button>
-        <button data-page="exchanges"><i class="ti ti-switch-3"></i>Return &amp; Exchange</button>
+        <button data-page="exchanges"><i class="ti ti-switch-3"></i>Exchange/Return</button>
         <button data-page="warranty" id="nav-warranty" style="display:none"><i class="ti ti-shield-check"></i>Warranty</button>
       </div>
     </div>
@@ -444,9 +444,17 @@
         </div>
       </div>
 
-      </div><!-- exchange section content -->
       <!-- Return History Section -->
       <div id="rexc-return-section" style="display:none">
+        <!-- Bill search for returns -->
+        <div class="entry-section" style="margin-bottom:14px">
+          <h3><i class="ti ti-receipt" style="color:var(--accent)"></i> Find bill to process return</h3>
+          <div class="form-row">
+            <input type="text" id="ret-bill-search" placeholder="Search by bill # or customer name / phone..." oninput="searchReturnBill()" />
+          </div>
+          <div id="ret-bill-results" class="exc-bill-results"></div>
+        </div>
+        <!-- Return history list -->
         <div class="filter-bar">
           <input type="text" id="retlist-search" placeholder="Search customer, item..." oninput="renderReturnHistoryList()" style="flex:1;min-width:120px" />
           <input type="date" id="retlist-from" /><span class="filter-to">to</span><input type="date" id="retlist-to" />
@@ -461,24 +469,26 @@
           </table></div>
         </div>
       </div>
-      <!-- Exchange List (inside exchange section) -->
-      <div class="filter-bar">
-        <input type="text" id="exchlist-search" placeholder="🔍 Search customer, bill..." oninput="renderExchangeList()" style="flex:1;min-width:140px" />
-        <input type="date" id="exchlist-from" />
-        <span class="filter-to">to</span>
-        <input type="date" id="exchlist-to" />
-        <button class="btn-filter" onclick="renderExchangeList()">Filter</button>
-        <button class="btn-clear" onclick="clearExchFilter()">Clear</button>
-      </div>
-      <div class="list-card">
-        <div class="list-header"><i class="ti ti-switch-3"></i> Exchange history</div>
-        <div class="table-scroll">
-          <table>
-            <thead><tr><th>Date</th><th>Bill #</th><th>Customer</th><th>Returned</th><th>New item</th><th class="num">Difference</th><th></th></tr></thead>
-            <tbody id="exchangelist-tbody"></tbody>
-          </table>
+      <!-- Exchange List (only shows in exchange tab) -->
+      <div id="rexc-exchange-list-section">
+        <div class="filter-bar">
+          <input type="text" id="exchlist-search" placeholder="🔍 Search customer, bill..." oninput="renderExchangeList()" style="flex:1;min-width:140px" />
+          <input type="date" id="exchlist-from" />
+          <span class="filter-to">to</span>
+          <input type="date" id="exchlist-to" />
+          <button class="btn-filter" onclick="renderExchangeList()">Filter</button>
+          <button class="btn-clear" onclick="clearExchFilter()">Clear</button>
         </div>
-      </div><!-- end rexc-exchange-section -->
+        <div class="list-card">
+          <div class="list-header"><i class="ti ti-switch-3"></i> Exchange history</div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Date</th><th>Bill #</th><th>Customer</th><th>Returned</th><th>New item</th><th class="num">Difference</th><th></th></tr></thead>
+              <tbody id="exchangelist-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- NEW PURCHASE -->

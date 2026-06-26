@@ -5234,23 +5234,110 @@ async function deleteHajiraPayment(id) {
 
 // ── Return/Exchange tab switcher ──
 function switchRExcTab(tab) {
-  var excS = document.getElementById('rexc-exchange-section');
-  var retS = document.getElementById('rexc-return-section');
-  var excT = document.getElementById('rexc-tab-exchange');
-  var retT = document.getElementById('rexc-tab-return');
+  var excS  = document.getElementById('rexc-exchange-section');
+  var excLS = document.getElementById('rexc-exchange-list-section');
+  var retS  = document.getElementById('rexc-return-section');
+  var excT  = document.getElementById('rexc-tab-exchange');
+  var retT  = document.getElementById('rexc-tab-return');
   if (tab === 'exchange') {
-    if (excS) excS.style.display = '';
-    if (retS) retS.style.display = 'none';
-    if (excT) excT.classList.add('active');
-    if (retT) retT.classList.remove('active');
+    if (excS)  excS.style.display  = '';
+    if (excLS) excLS.style.display = '';
+    if (retS)  retS.style.display  = 'none';
+    if (excT)  excT.classList.add('active');
+    if (retT)  retT.classList.remove('active');
     renderExchangeList();
   } else {
-    if (excS) excS.style.display = 'none';
-    if (retS) retS.style.display = '';
-    if (excT) excT.classList.remove('active');
-    if (retT) retT.classList.add('active');
+    if (excS)  excS.style.display  = 'none';
+    if (excLS) excLS.style.display = 'none';
+    if (retS)  retS.style.display  = '';
+    if (excT)  excT.classList.remove('active');
+    if (retT)  retT.classList.add('active');
     renderReturnHistoryList();
   }
+}
+
+async function searchReturnBill() {
+  var query = (document.getElementById('ret-bill-search').value || '').toLowerCase().trim();
+  var resultsEl = document.getElementById('ret-bill-results');
+  if (!resultsEl) return;
+  if (query.length < 1) { resultsEl.innerHTML = ''; return; }
+  var rows = await apiGet('/sales');
+  var bills = groupSalesIntoBills(rows);
+  var matches = bills.filter(function(b) {
+    return (b.bill_no ? String(b.bill_no) : '').includes(query) ||
+      (b.customer_name || '').toLowerCase().includes(query) ||
+      (b.customer_phone || '').toLowerCase().includes(query);
+  }).slice(0, 8);
+  if (!matches.length) { resultsEl.innerHTML = '<div class="empty-state" style="padding:12px">No bills found.</div>'; return; }
+  resultsEl.innerHTML = matches.map(function(b) {
+    var safeItems = JSON.stringify(b.items).replace(/"/g,'&quot;');
+    var safeBill  = JSON.stringify({ billId: b.bill_id, billNo: b.bill_no, customerId: b.customer_id, customerName: b.customer_name, customerPhone: b.customer_phone, date: b.date }).replace(/"/g,'&quot;');
+    return '<div class="exc-bill-result-item" onclick="loadBillForReturn(' + safeBill + ',' + safeItems + ')">' +
+      '<strong>Bill #' + (b.bill_no ? String(b.bill_no).padStart(5,'0') : '—') + '</strong> · ' + esc(b.date) +
+      (b.customer_name ? ' · <strong>' + esc(b.customer_name) + '</strong>' : ' · Walk-in') +
+      (b.customer_phone ? ' · ' + esc(b.customer_phone) : '') +
+      ' · ' + fmt(b.total) + ' (' + b.items.length + ' item' + (b.items.length > 1 ? 's' : '') + ')' +
+      '</div>';
+  }).join('');
+}
+
+function loadBillForReturn(billData, items) {
+  // Show items from this bill as returnable
+  var resultsEl = document.getElementById('ret-bill-results');
+  var searchEl  = document.getElementById('ret-bill-search');
+  if (searchEl) searchEl.value = 'Bill #' + (billData.billNo ? String(billData.billNo).padStart(5,'0') : '—') + (billData.customerName ? ' · ' + billData.customerName : '');
+  if (resultsEl) resultsEl.innerHTML = '';
+
+  // Build item return rows
+  var rowsHtml = (items || []).map(function(it, idx) {
+    var sp = it.unit_price || (it.amount / (it.quantity || 1));
+    return '<tr>' +
+      '<td style="font-weight:600">' + esc(it.desc || it.description || '') + '</td>' +
+      '<td class="num">' + (it.quantity || 1) + '</td>' +
+      '<td class="num">' + fmt(sp) + '</td>' +
+      '<td class="num" style="color:var(--danger)">' + fmt(it.amount) + '</td>' +
+      '<td><button class="btn-secondary" style="font-size:11px;padding:4px 10px;color:var(--danger);border-color:var(--danger)" onclick="processReturn(' + JSON.stringify(it).replace(/"/g,'&quot;') + ',' + JSON.stringify(billData).replace(/"/g,'&quot;') + ')"><i class="ti ti-arrow-back-up"></i> Return</button></td>' +
+    '</tr>';
+  }).join('');
+
+  // Insert above the return history list
+  var filterBar = document.querySelector('#rexc-return-section .filter-bar');
+  var existing = document.getElementById('ret-bill-items-card');
+  if (existing) existing.remove();
+  var card = document.createElement('div');
+  card.id = 'ret-bill-items-card';
+  card.className = 'list-card';
+  card.style.marginBottom = '14px';
+  card.innerHTML = '<div class="list-header"><i class="ti ti-receipt"></i> Bill #' + (billData.billNo ? String(billData.billNo).padStart(5,'0') : '—') + (billData.customerName ? ' · ' + esc(billData.customerName) : '') + ' — select item to return</div>' +
+    '<div class="table-scroll"><table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Amount</th><th></th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
+  if (filterBar) filterBar.parentNode.insertBefore(card, filterBar);
+}
+
+async function processReturn(item, billData) {
+  var qty = parseInt(prompt('Return quantity (max ' + (item.quantity || 1) + '):', '1')) || 0;
+  if (!qty || qty <= 0 || qty > (item.quantity || 1)) return alert('Invalid quantity.');
+  var refund = (item.unit_price || (item.amount / (item.quantity || 1))) * qty;
+  if (!confirm('Return ' + qty + ' × ' + (item.desc || item.description) + ' for refund of ' + fmt(refund) + '?')) return;
+  var res = await apiPost('/sales-returns', {
+    date: new Date().toISOString().slice(0,10),
+    sale_id: item.id,
+    bill_id: billData.billId,
+    bill_no: billData.billNo,
+    product_id: item.product_id || null,
+    desc: item.desc || item.description,
+    quantity: qty,
+    unit_price: item.unit_price || (item.amount / (item.quantity || 1)),
+    amount: refund,
+    customer_id: billData.customerId || null,
+    customer_name: billData.customerName || null,
+    customer_phone: billData.customerPhone || null,
+  });
+  if (res && res.error) return alert(res.error);
+  toast('Return processed — refund Tk ' + fmt(refund), 'ok');
+  var card = document.getElementById('ret-bill-items-card');
+  if (card) card.remove();
+  document.getElementById('ret-bill-search').value = '';
+  renderReturnHistoryList();
 }
 
 async function renderReturnHistoryList() {
@@ -5258,7 +5345,7 @@ async function renderReturnHistoryList() {
   var from   = (document.getElementById('retlist-from')||{}).value || '';
   var to     = (document.getElementById('retlist-to')||{}).value || '';
   var rows = await apiGet('/sales-returns') || [];
-  if (search) rows = rows.filter(function(r){ return (r.desc||r.description||'').toLowerCase().includes(search.toLowerCase()) || (r.customer_name||'').toLowerCase().includes(search.toLowerCase()); });
+  if (search) rows = rows.filter(function(r){ return (r.desc||r.description||'').toLowerCase().includes(search.toLowerCase()) || (r.customer_name||'').toLowerCase().includes(search.toLowerCase()) || (r.customer_phone||'').toLowerCase().includes(search.toLowerCase()) || (r.bill_no ? String(r.bill_no) : '').includes(search); });
   if (from) rows = rows.filter(function(r){ return r.date >= from; });
   if (to)   rows = rows.filter(function(r){ return r.date <= to; });
   var tb = document.getElementById('retlist-tbody');
