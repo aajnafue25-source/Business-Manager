@@ -3537,8 +3537,8 @@ var __exchangeBillData = null;
 async function renderExchangesPage() {
   var excDateEl = document.getElementById('exc-date');
   if (excDateEl && !excDateEl.value) excDateEl.value = new Date().toISOString().slice(0, 10);
-
-  // If arriving from sale detail "Exchange" button, pre-load that bill
+  // Always start on exchange tab and ensure sections are visible correctly
+  switchRExcTab('exchange');
   if (window.__exchangeSourceBill && window.__exchangeSourceBillItems) {
     loadBillIntoExchangePage(window.__exchangeSourceBill, window.__exchangeSourceBillItems);
     window.__exchangeSourceBill = null;
