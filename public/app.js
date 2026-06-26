@@ -5240,8 +5240,8 @@ function switchRExcTab(tab) {
   var excT  = document.getElementById('rexc-tab-exchange');
   var retT  = document.getElementById('rexc-tab-return');
   if (tab === 'exchange') {
-    if (excS)  excS.style.display  = '';
-    if (excLS) excLS.style.display = '';
+    if (excS)  excS.style.display  = 'block';
+    if (excLS) excLS.style.display = 'block';
     if (retS)  retS.style.display  = 'none';
     if (excT)  excT.classList.add('active');
     if (retT)  retT.classList.remove('active');
@@ -5249,7 +5249,7 @@ function switchRExcTab(tab) {
   } else {
     if (excS)  excS.style.display  = 'none';
     if (excLS) excLS.style.display = 'none';
-    if (retS)  retS.style.display  = '';
+    if (retS)  retS.style.display  = 'block';
     if (excT)  excT.classList.remove('active');
     if (retT)  retT.classList.add('active');
     renderReturnHistoryList();
