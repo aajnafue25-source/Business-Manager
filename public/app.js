@@ -3839,13 +3839,14 @@ async function renderCashFlowPage() {
 
   // ── Cash In ──
   var duesCreated    = periodDues.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
-  var directCash     = netRevenue - duesCreated; // collected at point of sale
+  var directCash     = grossSales - duesCreated; // cash collected at point of sale (before returns)
   var dueCollected   = duePaid.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
-  var totalCashIn    = directCash + dueCollected;
+  var exchangeCashIn = Math.max(0, exchangeDiff); // extra cash received when new item costs more
+  var totalCashIn    = directCash + dueCollected + exchangeCashIn;
 
   // ── Cash Out ──
   var totalExpenses  = expenses.reduce(function (s, r) { return s + Number(r.amount || 0); }, 0);
-  var refundsGiven   = totalReturns + Math.max(0, -exchangeDiff); // cash given back
+  var refundsGiven   = totalReturns + Math.max(0, -exchangeDiff); // cash paid back to customer
   var totalCashOut   = totalExpenses + refundsGiven;
 
   // ── Net Position ──
