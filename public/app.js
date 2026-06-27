@@ -311,9 +311,10 @@ document.getElementById('nav').addEventListener('click', function (e) {
   // Group header: toggle the accordion open/close ONLY — navigation via sub-items
   if (btn.classList.contains('nav-group-btn')) {
     e.stopPropagation();
-    var isCollapsed = document.getElementById('app').classList.contains('nav-collapsed');
+    var isMobile = window.innerWidth <= 760;
+    var isCollapsed = !isMobile && document.getElementById('app').classList.contains('nav-collapsed');
     if (isCollapsed) {
-      // In collapsed mode: icon click navigates to the group's default page
+      // In collapsed mode (desktop only): icon click navigates to the group's default page
       var defaultPage = btn.dataset.default || btn.dataset.page;
       if (defaultPage) navigateTo(defaultPage);
       return;

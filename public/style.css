@@ -805,8 +805,12 @@ tr.clickable-row:hover { background: var(--surface-2); }
   #app.nav-collapsed nav#nav { width: 250px; }
   #app.nav-collapsed nav#nav button { justify-content: flex-start !important; padding: 11px 14px; gap: 12px; }
   #app.nav-collapsed nav#nav button span { display: flex !important; }
-  #app.nav-collapsed nav#nav button i { font-size: 19px !important; }
+  #app.nav-collapsed nav#nav button i { font-size: 19px !important; width: auto !important; }
   #app.nav-collapsed nav#nav .nav-caret { display: inline !important; }
+  /* On mobile, nav-collapsed must NOT hide sub-menus — drawer still needs accordion */
+  #app.nav-collapsed nav#nav .nav-dropdown { display: none; }
+  #app.nav-collapsed nav#nav .nav-group.open .nav-dropdown { display: flex !important; }
+  #app.nav-collapsed nav#nav .nav-spacer { display: flex !important; }
 }
 
 @media (max-width: 640px) {
